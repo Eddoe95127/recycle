@@ -65,6 +65,7 @@
   .row-actions select { flex: 1; min-width: 160px; }
   .alert { background: #fff4e5; color: #8a5300; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
   .gate { max-width: 460px; margin: 80px auto; }
+  .id-thumb { width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; background: #eceef1; min-height: 60px; display: block; }
   /* 檢測報告編輯器 */
   .rep-ed { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: none; flex-direction: column; }
   .rep-ed.show { display: flex; }
@@ -260,7 +261,7 @@ function openDrawer(id) {
         <button class="btn ${o.report || !['已取件', '檢測中'].includes(o.status) ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${o.report ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>
       </div>
 
-      ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請匯款後按「改為已付款」。</div>` : ''}
+      ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請先核對下方「身分證照片」與「匯款戶名」，匯款後按「改為已付款」。</div>` : ''}
       ${o.status === '客戶不同意' ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
 
       <div class="card">
@@ -281,7 +282,8 @@ function openDrawer(id) {
           <dt>姓名</dt><dd>${esc(o.name)}　<span class="muted small">LINE：${esc(o.lineName)}</span></dd>
           <dt>手機</dt><dd><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><button class="copy" data-copy="${esc(o.phone)}">複製</button></dd>
           <dt>Email</dt><dd><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></dd>
-          <dt>身分證</dt><dd class="num">${esc(o.idNo)}</dd>
+          <dt>身分證</dt><dd class="num">${o.idNo ? esc(o.idNo) : '<span class="muted small">客戶同意報價時提供</span>'}</dd>
+          ${o.idPhoto ? `<dt>身分證照片</dt><dd><img class="id-thumb" data-photo="${esc(o.idPhoto)}" alt="身分證正面"></dd>` : ''}
           <dt>地址</dt><dd>${esc(o.city)}${esc(o.address)}<button class="copy" data-copy="${esc(o.city + o.address)}">複製</button></dd>
           <dt>收件時段</dt><dd>${esc(o.slot)}</dd>
           ${o.note ? `<dt>客戶備註</dt><dd>${esc(o.note)}</dd>` : ''}
@@ -307,6 +309,7 @@ function openDrawer(id) {
   d.classList.add('show'); $('#scrim').classList.add('show');
   $('.d-close', d).onclick = closeDrawer;
   $$('[data-copy]', d).forEach(b => b.onclick = () => navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}));
+  loadPhotos(d);
   $('#save').onclick = () => save(o, $('#stSel').value);
   $('#repBtn').onclick = () => openReport(o);
   if ($('#repNext')) $('#repNext').onclick = () => openReport(o);

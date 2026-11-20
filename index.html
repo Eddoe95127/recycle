@@ -193,7 +193,7 @@ function renderHome() {
       <details><summary>多久可以知道價格？</summary><p>收到商品後 3 個工作天內完成檢測並通知報價。收購價格隨市場浮動，以宅配公司收件當日報價為準。</p></details>
       <details><summary>不滿意報價怎麼辦？</summary><p>您可以在網站上選擇「不同意」，我們會將商品寄回給您，退回運費由使用者負擔。</p></details>
       <details><summary>多久會收到款項？</summary><p>在網站上同意報價後，2 個工作天內匯入您指定的帳戶（帳戶戶名需與回收者相同）。</p></details>
-      <details><summary>為什麼需要身分證字號？</summary><p>依規定需確認設備來源合法，資料僅用於本次交易驗證，不會提供給第三方。</p></details>
+      <details><summary>為什麼需要身分證？什麼時候提供？</summary><p>預約時不需要。等您看過檢測報告、<b>同意報價後</b>，才需要填寫身分證字號並上傳身分證正面照片，用來確認設備來源合法。照片會自動加上「僅限收購使用」浮水印，只用於本次交易驗證，不會提供給第三方。</p></details>
     </section>
 
     <section class="band rise">
@@ -298,7 +298,6 @@ function validateStep(step) {
     if (!c.name) return '請填寫姓名';
     if (!/^09\d{8}$/.test((c.phone || '').replace(/[\s-]/g, ''))) return '請填寫正確的手機號碼（09 開頭 10 碼）';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || '')) return '請填寫正確的 Email';
-    if (!/^[A-Z][12890ABCD]\d{8}$/.test((c.idNo || '').toUpperCase())) return '請填寫正確的身分證字號';
     if (!c.city) return '請選擇縣市';
     if ((c.address || '').length < 5) return '請填寫完整收件地址';
   }
@@ -336,7 +335,6 @@ function renderBook() {
         <label class="field"><span>手機號碼<em>*</em></span><input class="input" name="phone" value="${esc(c.phone)}" inputmode="tel" autocomplete="tel" placeholder="09xxxxxxxx" maxlength="12"></label>
       </div>
       <label class="field"><span>Email<em>*</em></span><input class="input" type="email" name="email" value="${esc(c.email)}" autocomplete="email" placeholder="進度通知會寄到這裡" maxlength="100"></label>
-      <label class="field"><span>身分證字號<em>*</em></span><input class="input" name="idNo" value="${esc(c.idNo)}" maxlength="10" style="text-transform:uppercase" autocomplete="off"><small>依規定需驗證設備來源合法性，僅用於本次交易，不會提供給第三方。</small></label>
       <div class="grid3">
         <label class="field"><span>縣市<em>*</em></span><select class="input" name="city">${opts(CITIES, c.city, '請選擇')}</select></label>
         <label class="field"><span>收件地址<em>*</em></span><input class="input" name="address" value="${esc(c.address)}" autocomplete="street-address" placeholder="區、路、門牌、樓層" maxlength="150"></label>
@@ -413,7 +411,7 @@ function renderBook() {
     try {
       const c = draft.contact;
       const { order } = await api('createOrder', { order: {
-        ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: c.idNo.toUpperCase(), slot: c.slot || '不指定',
+        ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: undefined, slot: c.slot || '不指定',
         items: draft.items, bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
       store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
       renderSuccess(order);
@@ -501,6 +499,17 @@ function drawDetail(o) {
       ${o.report ? `<p style="margin:0 0 16px"><a href="#report" onclick="document.getElementById('report').scrollIntoView({behavior:'smooth'});return false">查看完整檢測估價報告（含照片）↓</a></p>`
         : o.quoteNote ? `<p style="margin:0 0 16px;white-space:pre-line">${esc(o.quoteNote)}</p>` : ''}
       ${o.hasBank ? `<div class="note" style="margin-bottom:16px">款項將匯入：${esc(o.bank.bankName)} ${esc(o.bank.bankBranch)}　${esc(o.bank.bankHolder)}　${esc(o.bank.bankAccount)}</div>` : `<p class="small muted" style="margin:0 0 12px">請填寫匯款帳戶，同意後 2 個工作天內匯款</p>${bankForm}`}
+      <div class="id-box">
+        <div class="id-title">身分驗證 <small>依規定確認設備來源合法，同意報價時才需提供</small></div>
+        <label class="field"><span>身分證字號<em>*</em></span><input class="input" id="idNo" maxlength="10" style="text-transform:uppercase" autocomplete="off" placeholder="例：A123456789"></label>
+        <div class="field" style="margin-bottom:0"><span>身分證正面照片<em>*</em></span>
+          <label class="id-drop" id="idDrop"><input type="file" accept="image/*" id="idFile" hidden>
+            <span class="id-empty">📷 拍照或選擇身分證正面</span>
+            <img id="idPrev" alt="" hidden>
+          </label>
+          <small>照片會自動加上「僅限 ${esc(CFG.SHOP_NAME)} 收購使用」浮水印，只用於本次交易驗證，不會提供給第三方。</small>
+        </div>
+      </div>
       <div class="err" id="qerr"></div>
       <button class="btn btn-dark btn-block" id="accept">同意報價，請匯款</button>
       <button class="btn btn-ghost btn-block" id="reject" style="margin-top:10px">不同意，請寄回商品</button>
@@ -546,14 +555,27 @@ function drawDetail(o) {
   loadPhotos(app);
   const run = async (btn, fn) => { btn.disabled = true; try { await fn(); } catch (e) { toast(e.message); btn.disabled = false; } };
   if ($('#accept')) {
+    let idPhoto = null;
+    $('#idFile').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      $('#qerr').textContent = '';
+      try {
+        idPhoto = await watermarkImage(f);
+        $('#idPrev').src = idPhoto; $('#idPrev').hidden = false; $('.id-empty').textContent = '重新選擇照片';
+        $('#idDrop').classList.add('has');
+      } catch (err) { $('#qerr').textContent = err.message; }
+    };
     $('#accept').onclick = () => {
       let bank = null;
       if (!o.hasBank) {
         bank = { bankName: $('#bName').value.trim(), bankBranch: $('#bBranch').value.trim(), bankHolder: $('#bHolder').value.trim(), bankAccount: $('#bAcc').value.trim() };
         if (!bank.bankName || !bank.bankHolder || !/^\d[\d-]{5,}$/.test(bank.bankAccount)) { $('#qerr').textContent = '請完整填寫銀行、戶名、帳號'; return; }
       }
+      const idNo = $('#idNo').value.trim().toUpperCase();
+      if (!/^[A-Z][12890ABCD]\d{8}$/.test(idNo)) { $('#qerr').textContent = '請填寫正確的身分證字號'; $('#idNo').focus(); return; }
+      if (!idPhoto) { $('#qerr').textContent = '請上傳身分證正面照片'; return; }
       if (!confirm(`確定同意以 NT$ ${money(o.quote)} 回收？`)) return;
-      run($('#accept'), async () => { const r = await api('respondQuote', { id: o.id, accept: true, bank }); toast('已確認，我們會盡快匯款'); drawDetail(r.order); window.scrollTo(0, 0); });
+      run($('#accept'), async () => { const r = await api('respondQuote', { id: o.id, accept: true, bank, idNo, idPhoto }); toast('已確認，我們會盡快匯款'); drawDetail(r.order); window.scrollTo(0, 0); });
     };
     $('#reject').onclick = () => {
       if (!confirm('確定不同意報價？我們會將商品寄回（退回運費由使用者負擔）。')) return;

@@ -143,6 +143,16 @@ textarea.input { min-height: 84px; resize: vertical; }
   .rep-item, .rep-photos figure { break-inside: avoid; }
 }
 
+/* ---------- 身分驗證（同意報價時） ---------- */
+.id-box { border-top: 1px solid #f3dcb0; margin: 6px 0 4px; padding-top: 16px; }
+.id-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+.id-title small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.id-drop { display: grid; place-items: center; gap: 8px; min-height: 110px; border: 2px dashed var(--line-2); border-radius: 12px; background: #fff; cursor: pointer; padding: 10px; text-align: center; color: var(--ink-2); font-weight: 600; font-size: 15px; }
+.id-drop:hover { border-color: var(--ink); }
+.id-drop.has { border-style: solid; }
+.id-drop.has .id-empty { order: 2; font-size: 13px; color: var(--accent); }
+.id-drop img { width: 100%; max-width: 420px; border-radius: 8px; display: block; }
+
 /* ---------- misc ---------- */
 .center { text-align: center; }
 .muted { color: var(--muted); }

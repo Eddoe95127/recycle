@@ -158,6 +158,42 @@ function resizeImage(file, max = 1600, q = 0.82) {
   });
 }
 
+/** 身分證照片：壓縮並加上斜向重複浮水印「僅限 iPhone收購中心 收購使用」 */
+function watermarkImage(file, max = 1600) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * s), h = Math.round(img.height * s);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const d = new Date(), date = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+      const text = `僅限 ${CFG.SHOP_NAME} 收購使用　${date}`;
+      const fs = Math.max(18, Math.round(Math.min(w, h) / 16));
+      g.save();
+      g.translate(w / 2, h / 2);
+      g.rotate(-Math.PI / 7);
+      g.font = `bold ${fs}px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      const step = fs * 3.2, span = Math.hypot(w, h);
+      for (let y = -span; y <= span; y += step) {
+        const shift = (Math.round(y / step) % 2) * fs * 6;
+        for (let x = -span; x <= span; x += g.measureText(text).width + fs * 3) {
+          g.lineWidth = Math.max(2, fs / 9);
+          g.strokeStyle = 'rgba(255,255,255,.45)'; g.strokeText(text, x + shift, y);
+          g.fillStyle = 'rgba(220,30,30,.42)'; g.fillText(text, x + shift, y);
+        }
+      }
+      g.restore();
+      res(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('無法讀取這張照片（HEIC 請改用 JPG）')); };
+    img.src = url;
+  });
+}
+
 /* ---------- 使用者條款（沿用原表單） ---------- */
 const TERMS = `1. 特別說明
 1.1 本回收交易使用條款（下稱：本使用條款），是本網站「使用者協議」組成的有效部分。您在使用本服務前，請確認您已完整閱讀、充分理解，並接受本使用條款的全部內容。一旦您選擇「同意」或以其他方式選擇接受本使用條款並使用本服務，即表示您同意遵守本使用條款的所有內容。
@@ -417,7 +453,7 @@ async function mockApiInner(action, d) {
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
   const find = id => { const o = mockDB.find(x => x.id === id); if (!o) throw new Error('找不到此訂單'); return o; };
   const setStatus = (o, s) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s }); } };
-  const pub = o => ({ ...o, idNo: o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3), hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history] });
+  const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history] });
   switch (action) {
     case 'loginGoogle': return { ok: true, session: 'mock', user: { name: 'Google 用戶', email: 'ming@gmail.com', via: 'Google' } };
     case 'emailStart': return { ok: true };
@@ -430,7 +466,7 @@ async function mockApiInner(action, d) {
         itemsText: d.order.items.map((it, i) => `${i + 1}. 【${it.category}】${itemSummary(it)}`).join('\n') };
       mockDB.push(o); return { ok: true, order: pub(o) };
     }
-    case 'respondQuote': { const o = find(d.id); if (d.bank) Object.assign(o, d.bank); o.replyAt = now(); setStatus(o, d.accept ? '客戶同意' : '客戶不同意'); return { ok: true, order: pub(o) }; }
+    case 'respondQuote': { const o = find(d.id); if (d.accept) { if (!d.idNo || !d.idPhoto) throw new Error('請填寫身分證字號並上傳照片'); const pid = 'id' + Date.now(); mockPhotos[pid] = d.idPhoto; o.idNo = d.idNo; o.idPhoto = pid; } if (d.bank) Object.assign(o, d.bank); o.replyAt = now(); setStatus(o, d.accept ? '客戶同意' : '客戶不同意'); return { ok: true, order: pub(o) }; }
     case 'cancelOrder': { const o = find(d.id); setStatus(o, '已取消'); return { ok: true, order: pub(o) }; }
     case 'adminWhoami': return { ok: true, isAdmin: true, userId: 'Umock', name: '店長' };
     case 'adminList': return { ok: true, orders: [...mockDB].reverse().map(o => ({ ...o, history: [...o.history] })), statuses: STATUS_LIST };
