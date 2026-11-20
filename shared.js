@@ -393,7 +393,26 @@ mockDB.find(o => o.id === 'AR261115002').report = {
   }], total: 12500,
 };
 
+// 預覽模式：前台與後台共用同一份假資料（存在這台電腦的瀏覽器裡，網址加 &reset=1 可重置）
+if (MOCK) {
+  try {
+    if (new URLSearchParams(location.search).has('reset')) { localStorage.removeItem('mockDB'); localStorage.removeItem('mockPhotos'); }
+    const db = JSON.parse(localStorage.getItem('mockDB') || 'null');
+    if (db) mockDB.splice(0, mockDB.length, ...db);
+    Object.assign(mockPhotos, JSON.parse(localStorage.getItem('mockPhotos') || '{}'));
+  } catch (e) {}
+}
+function mockPersist() {
+  try {
+    localStorage.setItem('mockDB', JSON.stringify(mockDB));
+    localStorage.setItem('mockPhotos', JSON.stringify(Object.fromEntries(Object.entries(mockPhotos).filter(([k]) => !k.startsWith('demo')))));
+  } catch (e) {}
+}
+
 async function mockApi(action, d) {
+  try { return await mockApiInner(action, d); } finally { mockPersist(); }
+}
+async function mockApiInner(action, d) {
   await new Promise(r => setTimeout(r, 350));
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
   const find = id => { const o = mockDB.find(x => x.id === id); if (!o) throw new Error('找不到此訂單'); return o; };

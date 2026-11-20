@@ -11,7 +11,9 @@
   body { background: #f2f2f4; }
   .wrap { max-width: 1280px; }
   .nav .tag { font-size: 12px; font-weight: 600; background: var(--ink); color: #fff; padding: 2px 8px; border-radius: 6px; margin-left: 4px; }
-  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+  .nav .logo { white-space: nowrap; }
+  @media (max-width: 560px) { #who, .nav .logo #shopName { display: none; } }
   .stats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin: 22px 0 18px; }
   @media (max-width: 1100px) { .stats { grid-template-columns: repeat(4, 1fr); } }
   @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
@@ -242,7 +244,9 @@ function openDrawer(id) {
     <div class="d-body">
       <div class="card">
         ${stepperHTML(o.status)}
-        ${next ? `<button class="next-btn" id="nextBtn" style="--c:${statusColor(next)};margin-top:18px"><span>改為「${esc(next)}」</span><small>並通知客戶 →</small></button>` : ''}
+        ${next === '已報價'
+          ? `<button class="next-btn" id="repNext" style="--c:${statusColor(next)};margin-top:18px"><span>填寫檢測報告並報價</span><small>${o.report ? '繼續編輯' : '開始'} →</small></button>`
+          : next ? `<button class="next-btn" id="nextBtn" style="--c:${statusColor(next)};margin-top:18px"><span>改為「${esc(next)}」</span><small>並通知客戶 →</small></button>` : ''}
         <div class="row-actions">
           <select class="input" id="stSel">${STATUS_LIST.map(s => `<option ${s === o.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
           <label class="check small"><input type="checkbox" id="notify" checked> 改狀態時通知客戶</label>
@@ -253,7 +257,7 @@ function openDrawer(id) {
       <div class="card">
         <h3>檢測估價報告 ${o.report ? `<span class="small" style="font-weight:500">NT$ ${money(o.report.total)}・${o.report.items.reduce((s, it) => s + it.photos.length, 0)} 張照片・${esc(o.report.updatedAt || '')}</span>` : ''}</h3>
         ${['已取件', '檢測中'].includes(o.status) && !o.report ? '<p class="small muted" style="margin:0 0 10px">檢測完成後在這裡填寫報告、上傳照片，送出後客戶會收到含照片的完整報價</p>' : ''}
-        <button class="btn ${o.report ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${o.report ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>
+        <button class="btn ${o.report || !['已取件', '檢測中'].includes(o.status) ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${o.report ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>
       </div>
 
       ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請匯款後按「改為已付款」。</div>` : ''}
@@ -305,6 +309,7 @@ function openDrawer(id) {
   $$('[data-copy]', d).forEach(b => b.onclick = () => navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}));
   $('#save').onclick = () => save(o, $('#stSel').value);
   $('#repBtn').onclick = () => openReport(o);
+  if ($('#repNext')) $('#repNext').onclick = () => openReport(o);
   if ($('#nextBtn')) $('#nextBtn').onclick = () => save(o, next);
 }
 
