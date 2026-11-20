@@ -498,7 +498,8 @@ function drawDetail(o) {
     ${o.status === '已報價' ? `<div class="card quote-card">
       <div class="muted small" style="font-weight:600">檢測後回收價</div>
       <div class="price"><small>NT$</small>${money(o.quote)}</div>
-      ${o.quoteNote ? `<p style="margin:0 0 16px;white-space:pre-line">${esc(o.quoteNote)}</p>` : ''}
+      ${o.report ? `<p style="margin:0 0 16px"><a href="#report" onclick="document.getElementById('report').scrollIntoView({behavior:'smooth'});return false">查看完整檢測估價報告（含照片）↓</a></p>`
+        : o.quoteNote ? `<p style="margin:0 0 16px;white-space:pre-line">${esc(o.quoteNote)}</p>` : ''}
       ${o.hasBank ? `<div class="note" style="margin-bottom:16px">款項將匯入：${esc(o.bank.bankName)} ${esc(o.bank.bankBranch)}　${esc(o.bank.bankHolder)}　${esc(o.bank.bankAccount)}</div>` : `<p class="small muted" style="margin:0 0 12px">請填寫匯款帳戶，同意後 2 個工作天內匯款</p>${bankForm}`}
       <div class="err" id="qerr"></div>
       <button class="btn btn-dark btn-block" id="accept">同意報價，請匯款</button>
@@ -507,6 +508,8 @@ function drawDetail(o) {
     </div>` : ''}
 
     ${['客戶同意', '已付款'].includes(o.status) && o.quote ? `<div class="card"><div class="muted small" style="font-weight:600">回收金額</div><div class="price" style="font-size:34px"><small>NT$</small>${money(o.quote)}</div>${o.bank ? `<div class="small muted">匯入 ${esc(o.bank.bankName)}　${esc(o.bank.bankAccount)}</div>` : ''}</div>` : ''}
+
+    ${reportHTML(o.report)}
 
     ${o.tracking ? `<div class="card"><h2 class="card-title" style="font-size:16px">物流資訊</h2><dl class="kv" style="margin-top:12px"><dt>物流公司</dt><dd>${esc(o.carrier || '黑貓宅急便')}</dd><dt>託運單號</dt><dd>${esc(o.tracking)}<button class="copy" data-copy="${esc(o.tracking)}">複製</button></dd></dl></div>` : ''}
 
@@ -540,6 +543,7 @@ function drawDetail(o) {
   </div>`;
 
   $$('[data-copy]').forEach(b => b.onclick = () => { navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}); });
+  loadPhotos(app);
   const run = async (btn, fn) => { btn.disabled = true; try { await fn(); } catch (e) { toast(e.message); btn.disabled = false; } };
   if ($('#accept')) {
     $('#accept').onclick = () => {

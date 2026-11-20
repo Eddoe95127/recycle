@@ -66,6 +66,98 @@ function itemSummary(it) {
 }
 const itemTitle = it => it.category === '其他' ? (it.name || '其他商品').split(/[，,\s]/)[0] : (it.category === 'Mac' ? [it.year, it.model].filter(Boolean).join(' ') : [it.model, it.capacity].filter(Boolean).join(' ')) || it.category;
 
+/* ---------- 檢測報告 ---------- */
+const CHECK_ITEMS = [
+  { k: 'screen', label: '螢幕外觀' }, { k: 'body', label: '機身／邊框外觀' }, { k: 'back', label: '背蓋外觀' },
+  { k: 'display', label: '螢幕顯示（亮點、烙印、色偏）' }, { k: 'touch', label: '觸控功能' }, { k: 'faceid', label: 'Face ID／Touch ID' },
+  { k: 'camera', label: '相機（前、後鏡頭）' }, { k: 'audio', label: '喇叭／麥克風' }, { k: 'buttons', label: '按鍵' },
+  { k: 'charge', label: '充電／連接埠' }, { k: 'signal', label: '網路／訊號' }, { k: 'water', label: '泡水檢查' },
+  { k: 'repair', label: '維修紀錄／非原廠零件' }, { k: 'lock', label: '帳號鎖／尋找已關閉' },
+];
+const GRADE_TEXT = { A: '近全新', B: '輕微使用痕跡', C: '明顯刮傷', D: '嚴重損傷' };
+const RES = { ok: ['正常', '#1f9d55', '✓'], bad: ['異常', '#e5484d', '✕'], na: ['未檢測', '#8e8e93', '—'] };
+const DEDUCT_SUGGEST = ['螢幕刮傷', '螢幕破裂', '邊框刮傷／掉漆', '機身凹傷', '背蓋破裂', '電池健康度偏低', '泡水痕跡', '相機異常', 'Face ID 失效',
+  '非原廠螢幕', '非原廠電池', '維修過', '按鍵異常', '無法開機', '缺配件'];
+const numv = v => Math.max(0, Math.round(Number(String(v ?? '').replace(/[^\d.]/g, '')) || 0));
+function computeReport(rep) {
+  rep.items.forEach(it => { it.subtotal = Math.max(0, numv(it.base) - (it.deductions || []).reduce((s, d) => s + numv(d.amount), 0)); });
+  rep.total = rep.items.reduce((s, it) => s + it.subtotal, 0);
+  return rep;
+}
+
+/** 客戶看的檢測報告（網站與後台預覽共用） */
+function reportHTML(rep) {
+  if (!rep || !rep.items || !rep.items.length) return '';
+  return `<div class="card report" id="report">
+    <div class="rep-head"><div><h2 class="card-title">檢測估價報告</h2><p class="small muted" style="margin:2px 0 0">檢測日期 ${esc(rep.updatedAt || '')}</p></div>
+      <button class="btn btn-ghost btn-sm no-print" onclick="printReport()">列印／存 PDF</button></div>
+    ${rep.items.map((it, i) => {
+      const bad = it.checks.filter(c => c.r === 'bad').length;
+      return `<div class="rep-item">
+        <div class="rep-title">${rep.items.length > 1 ? (i + 1) + '. ' : ''}${esc(it.title)}</div>
+        <div class="rep-tags">
+          ${it.grade ? `<span class="tag">外觀 ${esc(it.grade)}・${esc(GRADE_TEXT[it.grade] || '')}</span>` : ''}
+          ${it.battery ? `<span class="tag">電池 ${esc(it.battery)}%</span>` : ''}
+          <span class="tag ${bad ? 'bad' : 'ok'}">${bad ? bad + ' 項異常' : '功能檢測皆正常'}</span>
+        </div>
+        ${it.photos.length ? `<div class="rep-photos">${it.photos.map(p => `<figure><img data-photo="${esc(p.id)}" alt="${esc(p.caption)}"><figcaption>${esc(p.caption)}</figcaption></figure>`).join('')}</div>` : ''}
+        <div class="rep-checks">${it.checks.map(c => `<div class="chk ${c.r}"><span class="ico">${RES[c.r][2]}</span><span class="lbl">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ''}</span><span class="res">${RES[c.r][0]}</span></div>`).join('')}</div>
+        <table class="rep-price">
+          <tr><td>基本收購價</td><td>NT$ ${numv(it.base).toLocaleString('en-US')}</td></tr>
+          ${(it.deductions || []).map(d => `<tr class="minus"><td>${esc(d.reason)}</td><td>− NT$ ${numv(d.amount).toLocaleString('en-US')}</td></tr>`).join('')}
+          <tr class="sub"><td>小計</td><td>NT$ ${numv(it.subtotal).toLocaleString('en-US')}</td></tr>
+        </table>
+      </div>`;
+    }).join('')}
+    ${rep.summary ? `<div class="note" style="margin-top:14px"><b>檢測說明</b><br><span style="white-space:pre-line">${esc(rep.summary)}</span></div>` : ''}
+    <div class="rep-total"><span>檢測後回收價</span><b>NT$ ${numv(rep.total).toLocaleString('en-US')}</b></div>
+  </div>`;
+}
+
+/* 照片：透過 API 取得（客戶只能看自己的），快取在記憶體 */
+const photoCache = {};
+async function loadPhotos(root) {
+  const imgs = $$('img[data-photo]', root || document).filter(img => !img.src);
+  await Promise.all([0, 1, 2].map(async w => {
+    for (let i = w; i < imgs.length; i += 3) {
+      const img = imgs[i], id = img.dataset.photo;
+      try {
+        if (!photoCache[id]) photoCache[id] = (await api('photo', { fileId: id })).dataUrl;
+        img.src = photoCache[id];
+        img.onclick = () => lightbox(img.src, img.alt);
+      } catch (e) { img.alt = '照片載入失敗'; img.classList.add('broken'); }
+    }
+  }));
+}
+function lightbox(src, cap) {
+  const d = document.createElement('div');
+  d.className = 'lightbox';
+  d.innerHTML = `<img src="${src}" alt=""><p>${esc(cap || '')}</p>`;
+  d.onclick = () => d.remove();
+  document.body.appendChild(d);
+}
+async function printReport() {
+  await loadPhotos($('#report'));
+  document.body.classList.add('printing');
+  setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 300);
+}
+/** 上傳前壓縮照片（最長邊 1600px、JPEG） */
+function resizeImage(file, max = 1600, q = 0.82) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('無法讀取這張照片（HEIC 請改用 JPG）')); };
+    img.src = url;
+  });
+}
+
 /* ---------- 使用者條款（沿用原表單） ---------- */
 const TERMS = `1. 特別說明
 1.1 本回收交易使用條款（下稱：本使用條款），是本網站「使用者協議」組成的有效部分。您在使用本服務前，請確認您已完整閱讀、充分理解，並接受本使用條款的全部內容。一旦您選擇「同意」或以其他方式選擇接受本使用條款並使用本服務，即表示您同意遵守本使用條款的所有內容。
@@ -287,6 +379,20 @@ const mockDB = (() => {
   ];
 })();
 
+const mockPhotos = (() => {
+  const svg = (bg, t) => 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${bg}"/><text x="400" y="315" text-anchor="middle" font-family="sans-serif" font-size="44" fill="#fff">${t}</text></svg>`);
+  return { demo1: svg('#6b7280', '正面全景'), demo2: svg('#9a6b4f', '右側邊框刮傷特寫'), demo3: svg('#4b5563', '背面全景'), demo4: svg('#3f6b8f', '電池健康度 86%') };
+})();
+mockDB.find(o => o.id === 'AR261115002').report = {
+  updatedAt: '2026-11-18 15:40', summary: '整體功能正常，外觀有輕微使用痕跡。電池健康度 86%，略低於同型號平均。',
+  items: [{
+    title: 'iPhone 13 Pro 256GB', grade: 'B', battery: '86',
+    checks: CHECK_ITEMS.map(c => ({ k: c.k, label: c.label, r: c.k === 'body' ? 'bad' : 'ok', note: c.k === 'body' ? '右側邊框刮傷約 1 公分' : c.k === 'water' ? '泡水指示貼片正常（白色）' : '' })),
+    photos: [{ id: 'demo1', caption: '正面全景' }, { id: 'demo2', caption: '右側邊框刮傷' }, { id: 'demo3', caption: '背面全景' }, { id: 'demo4', caption: '電池健康度' }],
+    base: 13800, deductions: [{ reason: '邊框刮傷／掉漆', amount: 800 }, { reason: '電池健康度偏低', amount: 500 }], subtotal: 12500,
+  }], total: 12500,
+};
+
 async function mockApi(action, d) {
   await new Promise(r => setTimeout(r, 350));
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
@@ -309,6 +415,15 @@ async function mockApi(action, d) {
     case 'cancelOrder': { const o = find(d.id); setStatus(o, '已取消'); return { ok: true, order: pub(o) }; }
     case 'adminWhoami': return { ok: true, isAdmin: true, userId: 'Umock', name: '店長' };
     case 'adminList': return { ok: true, orders: [...mockDB].reverse().map(o => ({ ...o, history: [...o.history] })), statuses: STATUS_LIST };
+    case 'photo': if (!mockPhotos[d.fileId]) throw new Error('找不到照片'); return { ok: true, dataUrl: mockPhotos[d.fileId] };
+    case 'adminUploadPhoto': { const id = 'up' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[id] = d.dataUrl; return { ok: true, fileId: id }; }
+    case 'adminDeletePhoto': return { ok: true };
+    case 'adminSaveReport': {
+      const o = find(d.id), rep = computeReport(JSON.parse(JSON.stringify(d.report)));
+      rep.updatedAt = now(); o.report = rep;
+      if (d.submit) { if (!rep.total) throw new Error('請先填寫基本收購價'); o.quote = String(rep.total); o.quoteNote = rep.summary; setStatus(o, '已報價'); }
+      return { ok: true, order: { ...o, history: [...o.history] } };
+    }
     case 'adminUpdate': {
       const o = find(d.id), f = d.fields || {};
       if (f.status === '已報價' && !(f.quote ?? o.quote)) throw new Error('請先填寫報價金額');

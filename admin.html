@@ -63,6 +63,39 @@
   .row-actions select { flex: 1; min-width: 160px; }
   .alert { background: #fff4e5; color: #8a5300; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
   .gate { max-width: 460px; margin: 80px auto; }
+  /* 檢測報告編輯器 */
+  .rep-ed { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: none; flex-direction: column; }
+  .rep-ed.show { display: flex; }
+  .rep-ed .d-head { gap: 10px; }
+  .rep-ed-body { flex: 1; overflow-y: auto; padding: 16px; max-width: 820px; width: 100%; margin: 0 auto; }
+  .rep-ed .d-foot { max-width: none; }
+  .rep-ed .card { padding: 18px; }
+  .ck-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 0; border-top: 1px solid #f0f0f2; }
+  .ck-row .ck-note { grid-column: 1 / -1; padding: 7px 10px; font-size: 14px; display: none; }
+  .ck-row.bad .ck-note, .ck-row .ck-note:not(:placeholder-shown) { display: block; }
+  .ck-row.bad .ck-lbl { color: var(--red); font-weight: 600; }
+  .ck-lbl { font-size: 14px; }
+  .seg { display: inline-flex; background: #f2f2f4; border-radius: 999px; padding: 3px; }
+  .seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 999px; font-size: 13px; color: var(--ink-2); }
+  .seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 700; }
+  .ck-row.ok .seg button.on { color: #1f9d55; } .ck-row.bad .seg button.on { color: #e5484d; } .ck-row.na .seg button.on { color: #8e8e93; }
+  .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .ph { position: relative; }
+  .ph img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: #eceef1; display: block; cursor: zoom-in; }
+  .ph .input { margin-top: 6px; padding: 7px 10px; font-size: 13px; }
+  .ph-del { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; }
+  .ph-del.static { position: static; background: #f2f2f4; color: var(--ink-2); flex: none; }
+  .ph-add { display: grid; place-items: center; aspect-ratio: 4/3; border: 2px dashed var(--line-2); border-radius: 10px; color: var(--ink-2); font-weight: 600; cursor: pointer; }
+  .ph-add:hover { border-color: var(--ink); }
+  .price-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .price-row > span { flex: 1; font-size: 14px; }
+  .price-row .input { padding: 9px 12px; }
+  .price-row .num { max-width: 140px; text-align: right; }
+  .price-row.minus .input:first-child { flex: 1; }
+  .price-row.sub { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
+  .price-row.sub b { font-size: 18px; }
+  .lightbox.prev { cursor: default; justify-content: flex-start; overflow-y: auto; padding: 24px 12px; }
+  .prev-box { max-width: 640px; width: 100%; }
   .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
 </style>
 </head>
@@ -217,6 +250,12 @@ function openDrawer(id) {
         ${o.notified ? `<div class="small muted" style="margin-top:8px">上次通知：${esc(o.notified)}</div>` : ''}
       </div>
 
+      <div class="card">
+        <h3>檢測估價報告 ${o.report ? `<span class="small" style="font-weight:500">NT$ ${money(o.report.total)}・${o.report.items.reduce((s, it) => s + it.photos.length, 0)} 張照片・${esc(o.report.updatedAt || '')}</span>` : ''}</h3>
+        ${['已取件', '檢測中'].includes(o.status) && !o.report ? '<p class="small muted" style="margin:0 0 10px">檢測完成後在這裡填寫報告、上傳照片，送出後客戶會收到含照片的完整報價</p>' : ''}
+        <button class="btn ${o.report ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${o.report ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>
+      </div>
+
       ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請匯款後按「改為已付款」。</div>` : ''}
       ${o.status === '客戶不同意' ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
 
@@ -265,7 +304,162 @@ function openDrawer(id) {
   $('.d-close', d).onclick = closeDrawer;
   $$('[data-copy]', d).forEach(b => b.onclick = () => navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}));
   $('#save').onclick = () => save(o, $('#stSel').value);
+  $('#repBtn').onclick = () => openReport(o);
   if ($('#nextBtn')) $('#nextBtn').onclick = () => save(o, next);
+}
+
+/* ============================== 檢測報告編輯 ============================== */
+let rep = null, repOrder = null;
+
+function newReport(o) {
+  return {
+    summary: '',
+    items: (o.items.length ? o.items : [{ category: '其他', name: '商品' }]).map(it => ({
+      title: it.category === '其他' ? (it.name || '其他商品') : itemTitle(it),
+      grade: '', battery: '', base: '', deductions: [], photos: [],
+      checks: CHECK_ITEMS.map(c => ({ k: c.k, label: c.label, r: 'ok', note: '' })),
+    })),
+  };
+}
+
+function openReport(o) {
+  repOrder = o;
+  rep = o.report ? JSON.parse(JSON.stringify(o.report)) : newReport(o);
+  let ed = $('#repEd');
+  if (!ed) { ed = document.createElement('div'); ed.id = 'repEd'; ed.className = 'rep-ed'; document.body.appendChild(ed); }
+  drawReport();
+  ed.classList.add('show');
+}
+function closeReport() { $('#repEd').classList.remove('show'); }
+
+function drawReport() {
+  const o = repOrder, ed = $('#repEd');
+  const keep = $('.rep-ed-body', ed)?.scrollTop || 0;
+  computeReport(rep);
+  const canSubmit = ['已取件', '檢測中', '已報價'].includes(o.status);
+  ed.innerHTML = `
+    <div class="d-head"><b>檢測報告・${esc(o.id)}</b><button class="btn btn-ghost btn-sm" id="rePrev">客戶看到的樣子</button><button class="d-close" id="reClose" aria-label="關閉">✕</button></div>
+    <div class="rep-ed-body">
+      <datalist id="dedList">${DEDUCT_SUGGEST.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+      ${rep.items.map((it, i) => `<div class="card" data-i="${i}">
+        <label class="field"><span>商品 ${rep.items.length > 1 ? i + 1 : ''}</span><input class="input" data-f="title" value="${esc(it.title)}"></label>
+        <div class="grid2">
+          <div class="field"><span>外觀等級</span><div class="chips">${['A', 'B', 'C', 'D'].map(g => `<label class="chip" title="${GRADE_TEXT[g]}"><input type="radio" name="g${i}" data-grade value="${g}" ${it.grade === g ? 'checked' : ''}><span>${g} ${GRADE_TEXT[g]}</span></label>`).join('')}</div></div>
+          <label class="field"><span>電池健康度（%）</span><input class="input" data-f="battery" inputmode="numeric" maxlength="3" value="${esc(it.battery)}" placeholder="例：86"></label>
+        </div>
+
+        <div class="field"><span>照片 <small class="muted" style="font-weight:400">外觀刮傷、異常處、電池健康度截圖等，可多選</small></span>
+          <div class="ph-grid">
+            ${it.photos.map((p, j) => `<div class="ph"><img data-photo="${esc(p.id)}" alt="${esc(p.caption)}"><button class="ph-del" data-delph="${j}" aria-label="刪除">✕</button>
+              <input class="input" data-cap="${j}" value="${esc(p.caption)}" placeholder="照片說明"></div>`).join('')}
+            <label class="ph-add">＋ 加照片<input type="file" accept="image/*" multiple hidden data-upload></label>
+          </div>
+        </div>
+
+        <div class="field"><span style="display:flex;justify-content:space-between">檢測項目 <button type="button" class="link" data-allok style="font-size:13px;padding:0">全部設為正常</button></span>
+          ${it.checks.map((c, j) => `<div class="ck-row ${c.r}">
+            <div class="ck-lbl">${esc(c.label)}</div>
+            <div class="seg">${['ok', 'bad', 'na'].map(r => `<button type="button" class="${c.r === r ? 'on' : ''}" data-ck="${j}" data-r="${r}">${RES[r][0]}</button>`).join('')}</div>
+            <input class="input ck-note" data-note="${j}" value="${esc(c.note)}" placeholder="${c.k === 'water' ? '例：泡水指示貼片正常（白色）' : '說明（選填）'}">
+          </div>`).join('')}
+        </div>
+
+        <div class="field"><span>估價</span>
+          <div class="price-row"><span>基本收購價</span><input class="input num" data-f="base" inputmode="numeric" value="${esc(it.base)}" placeholder="例：13800"></div>
+          ${it.deductions.map((d, j) => `<div class="price-row minus"><input class="input" list="dedList" data-dr="${j}" value="${esc(d.reason)}" placeholder="扣減原因">
+            <input class="input num" data-da="${j}" inputmode="numeric" value="${esc(d.amount)}" placeholder="金額"><button type="button" class="ph-del static" data-deld="${j}" aria-label="刪除">✕</button></div>`).join('')}
+          <button type="button" class="link" data-addd>＋ 新增扣減項目</button>
+          <div class="price-row sub"><span>小計</span><b class="num" data-subtotal>NT$ ${money(it.subtotal)}</b></div>
+        </div>
+      </div>`).join('')}
+      <div class="card">
+        <label class="field"><span>給客戶的檢測說明</span><textarea class="input" data-summary placeholder="例：整體功能正常，外觀有輕微使用痕跡；電池健康度略低於同型號平均。">${esc(rep.summary)}</textarea></label>
+        <div class="rep-total"><span>檢測後回收價</span><b id="reTotal">NT$ ${money(rep.total)}</b></div>
+      </div>
+    </div>
+    <div class="d-foot"><span class="err" id="reErr" style="flex:1;margin:0"></span>
+      <button class="btn btn-ghost" id="reSave">儲存草稿</button>
+      ${canSubmit ? `<button class="btn btn-dark" id="reSubmit">${o.status === '已報價' ? '更新並重寄報價' : '送出報價給客戶'}</button>` : ''}
+    </div>`;
+  $('.rep-ed-body', ed).scrollTop = keep;
+  loadPhotos(ed);
+  $('#reClose').onclick = closeReport;
+  $('#rePrev').onclick = () => { computeReport(rep); const w = document.createElement('div'); w.className = 'lightbox prev'; w.innerHTML = `<div class="prev-box">${reportHTML({ ...rep, updatedAt: '（預覽）' })}<button class="btn btn-dark btn-block" style="margin-top:12px">關閉預覽</button></div>`; w.onclick = e => { if (e.target === w || e.target.tagName === 'BUTTON') w.remove(); }; document.body.appendChild(w); loadPhotos(w); };
+  $('#reSave').onclick = () => saveReport(false);
+  if ($('#reSubmit')) $('#reSubmit').onclick = () => saveReport(true);
+}
+
+function itemOf(el) { return rep.items[+el.closest('[data-i]').dataset.i]; }
+function refreshTotals() {
+  computeReport(rep);
+  $$('#repEd [data-i]').forEach(card => { const it = rep.items[+card.dataset.i]; $('[data-subtotal]', card).textContent = 'NT$ ' + money(it.subtotal); });
+  $('#reTotal').textContent = 'NT$ ' + money(rep.total);
+}
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (!t.closest('#repEd')) return;
+  if (t.matches('[data-summary]')) { rep.summary = t.value; return; }
+  if (!t.closest('[data-i]')) return;
+  const it = itemOf(t);
+  if (t.dataset.f) { it[t.dataset.f] = t.value; if (t.dataset.f === 'base') refreshTotals(); }
+  else if (t.dataset.note !== undefined) it.checks[+t.dataset.note].note = t.value;
+  else if (t.dataset.cap !== undefined) it.photos[+t.dataset.cap].caption = t.value;
+  else if (t.dataset.dr !== undefined) it.deductions[+t.dataset.dr].reason = t.value;
+  else if (t.dataset.da !== undefined) { it.deductions[+t.dataset.da].amount = t.value; refreshTotals(); }
+});
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (!t.closest('#repEd') || !t.closest('[data-i]')) return;
+  const it = itemOf(t);
+  if (t.matches('[data-grade]')) { it.grade = t.value; return; }
+  if (t.matches('[data-upload]')) {
+    const files = [...t.files];
+    if (it.photos.length + files.length > 12) { toast('每件商品最多 12 張照片'); return; }
+    $('#reErr').textContent = `上傳中 0 / ${files.length}…`;
+    let done = 0;
+    for (const f of files) {
+      try {
+        const dataUrl = await resizeImage(f);
+        const r = await api('adminUploadPhoto', { id: repOrder.id, dataUrl });
+        photoCache[r.fileId] = dataUrl;
+        it.photos.push({ id: r.fileId, caption: '' });
+        $('#reErr').textContent = `上傳中 ${++done} / ${files.length}…`;
+      } catch (err) { toast(err.message); }
+    }
+    $('#reErr').textContent = done ? '照片已上傳，記得按「儲存」' : '';
+    drawReport();
+  }
+});
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (!t.closest('#repEd') || !t.closest('[data-i]')) return;
+  const it = itemOf(t);
+  if (t.dataset.ck !== undefined) { it.checks[+t.dataset.ck].r = t.dataset.r; const row = t.closest('.ck-row'); row.className = 'ck-row ' + t.dataset.r; $$('button', row).forEach(b => b.classList.toggle('on', b === t)); }
+  else if (t.matches('[data-allok]')) { it.checks.forEach(c => c.r = 'ok'); drawReport(); }
+  else if (t.dataset.delph !== undefined) { if (!confirm('刪除這張照片？')) return; const [p] = it.photos.splice(+t.dataset.delph, 1); api('adminDeletePhoto', { fileId: p.id }).catch(() => {}); drawReport(); }
+  else if (t.matches('[data-addd]')) { it.deductions.push({ reason: '', amount: '' }); drawReport(); $$(`#repEd [data-i="${rep.items.indexOf(it)}"] [data-dr]`).pop()?.focus(); }
+  else if (t.dataset.deld !== undefined) { it.deductions.splice(+t.dataset.deld, 1); drawReport(); }
+});
+
+async function saveReport(submit) {
+  computeReport(rep);
+  if (submit) {
+    if (!rep.total) { $('#reErr').textContent = '請先填寫基本收購價'; return; }
+    const photos = rep.items.reduce((s, it) => s + it.photos.length, 0);
+    if (!confirm(`送出檢測報告給客戶？\n\n回收價：NT$ ${money(rep.total)}\n照片：${photos} 張\n\n客戶會收到含照片的檢測估價報告 Email，並可在網站上同意或不同意。`)) return;
+  }
+  const btns = $$('#reSave, #reSubmit'); btns.forEach(b => b.disabled = true);
+  try {
+    const r = await api('adminSaveReport', { id: repOrder.id, report: rep, submit });
+    orders[orders.findIndex(x => x.id === repOrder.id)] = r.order;
+    toast(submit ? '已送出報價，客戶會收到檢測報告' : '已儲存');
+    closeReport();
+    renderBoard();
+    openDrawer(repOrder.id);
+  } catch (e) {
+    if (e.auth) { closeReport(); return start(); }
+    $('#reErr').textContent = e.message; btns.forEach(b => b.disabled = false);
+  }
 }
 
 async function save(o, status) {
