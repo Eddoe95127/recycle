@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>收購後台｜iPhone收購中心</title>
+<link rel="stylesheet" href="style.css">
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  body { background: #f2f2f4; }
+  .wrap { max-width: 1280px; }
+  .nav .tag { font-size: 12px; font-weight: 600; background: var(--ink); color: #fff; padding: 2px 8px; border-radius: 6px; margin-left: 4px; }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
+  .stats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin: 22px 0 18px; }
+  @media (max-width: 1100px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: #fff; border: 0; border-radius: 16px; padding: 14px 16px; text-align: left; box-shadow: var(--shadow); color: var(--ink); position: relative; overflow: hidden; transition: transform .15s; }
+  .stat:hover { transform: translateY(-2px); }
+  .stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+  .stat .n { font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+  .stat .l { font-size: 13px; color: var(--muted); }
+  .stat.hot .n { color: var(--c); }
+  .stat.on { box-shadow: 0 0 0 2px var(--c), var(--shadow); }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .input { max-width: 320px; padding: 10px 14px; border-radius: 999px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .tabs button { border: 0; background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 13px; white-space: nowrap; color: var(--ink-2); box-shadow: var(--shadow); }
+  .tabs button.on { background: var(--ink); color: #fff; }
+  .tabs button i { font-style: normal; opacity: .6; margin-left: 4px; }
+  .table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); font-size: 14px; }
+  .table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 12px 14px; background: #fafafa; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .table td { padding: 13px 14px; border-bottom: 1px solid #f0f0f2; vertical-align: top; }
+  .table tr:last-child td { border-bottom: 0; }
+  .table tbody tr { cursor: pointer; transition: background .1s; }
+  .table tbody tr:hover { background: #f8f8fa; }
+  .table tbody tr.sel { background: #eef5ff; }
+  .table .sub { color: var(--muted); font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  @media (max-width: 760px) {
+    .table thead { display: none; }
+    .table, .table tbody, .table tr, .table td { display: block; }
+    .table tr { padding: 12px 14px; border-bottom: 1px solid #f0f0f2; }
+    .table td { padding: 2px 0; border: 0; }
+    .table td.hide-m { display: none; }
+  }
+  /* drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--bg); z-index: 50; transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; box-shadow: -10px 0 40px rgba(0,0,0,.12); }
+  .drawer.show { transform: none; }
+  .d-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background: #fff; border-bottom: 1px solid var(--line); }
+  .d-head b { font-size: 18px; flex: 1; }
+  .d-close { border: 0; background: #f2f2f4; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; color: var(--ink-2); }
+  .d-body { flex: 1; overflow-y: auto; padding: 16px 16px 24px; }
+  .d-body .card { padding: 18px; border-radius: 16px; margin-bottom: 12px; }
+  .d-body h3 { font-size: 14px; margin: 0 0 12px; color: var(--ink-2); display: flex; justify-content: space-between; align-items: center; }
+  .d-foot { padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+  .copy { border: 0; background: #f2f2f4; border-radius: 6px; font-size: 12px; padding: 2px 8px; margin-left: 6px; color: var(--ink-2); }
+  .next-btn { display: flex; width: 100%; justify-content: space-between; align-items: center; border: 0; border-radius: 14px; padding: 14px 16px; color: #fff; background: var(--c); font-weight: 700; font-size: 16px; }
+  .next-btn small { font-weight: 500; opacity: .85; font-size: 12px; }
+  .row-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .row-actions select { flex: 1; min-width: 160px; }
+  .alert { background: #fff4e5; color: #8a5300; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+  .gate { max-width: 460px; margin: 80px auto; }
+  .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="admin.html"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 5h3"/></svg></span><span id="shopName">iPhone收購中心</span><span class="tag">後台</span></a>
+    <div class="nav-right"><span id="who"></span><button class="btn btn-ghost btn-sm" id="refresh" hidden>重新整理</button></div>
+  </div>
+</header>
+<main class="wrap" id="app"><div class="spinner"></div></main>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<script src="config.js"></script>
+<script src="shared.js"></script>
+<script>
+const app = $('#app');
+let orders = [];
+let filter = 'active';
+let query = '';
+let openId = null;
+
+const CLOSED = ['已付款', '已退回', '已取消'];
+const GROUPS = [
+  { key: 'g-new', label: '待安排取件', color: '#0A84FF', match: o => o.status === '已預約' },
+  { key: 'g-ship', label: '物流中', color: '#5E5CE6', match: o => ['已安排取件', '已取件'].includes(o.status) },
+  { key: 'g-check', label: '檢測中', color: '#BF5AF2', match: o => o.status === '檢測中' },
+  { key: 'g-quote', label: '待客戶確認', color: '#FF9F0A', match: o => o.status === '已報價' },
+  { key: 'g-pay', label: '待匯款', color: '#30D158', match: o => o.status === '客戶同意', hot: true },
+  { key: 'g-return', label: '待寄回', color: '#8E8E93', match: o => ['客戶不同意', '退回寄送中'].includes(o.status), hot: true },
+  { key: 'g-done', label: '本月成交', color: '#1d1d1f', match: o => o.status === '已付款' && (o.updatedAt || '').slice(0, 7) === thisMonth() },
+];
+const thisMonth = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+
+/* ============================== 進入 ============================== */
+(async function init() {
+  $('#shopName').textContent = CFG.SHOP_NAME;
+  try { await initLine(); } catch (e) { app.innerHTML = `<div class="card gate empty">LINE 初始化失敗：${esc(e.message)}</div>`; return; }
+  if (!isLoggedIn()) {
+    app.innerHTML = `<div class="card gate center"><h2 class="card-title">收購後台</h2><p class="muted">請用管理者的 LINE 帳號登入</p><button class="btn btn-line btn-block" id="lg">使用 LINE 登入</button></div>`;
+    $('#lg').onclick = () => login(MOCK ? { mock: 1 } : {});
+    return;
+  }
+  try {
+    const me = await api('adminWhoami');
+    if (!me.isAdmin) {
+      app.innerHTML = `<div class="card gate"><h2 class="card-title">尚未開通後台權限</h2>
+        <p class="muted">${esc(me.name)} 您好，請把下面這串 LINE ID 加到 Apps Script「指令碼屬性」的 <b>ADMIN_LINE_IDS</b>（多人用逗號分隔），再重新整理此頁。</p>
+        <div class="uid">${esc(me.userId)}</div><button class="btn btn-dark btn-sm" id="cp">複製 ID</button></div>`;
+      $('#cp').onclick = () => navigator.clipboard?.writeText(me.userId).then(() => toast('已複製'));
+      return;
+    }
+    $('#who').textContent = me.name;
+    $('#refresh').hidden = false;
+    $('#refresh').onclick = () => load(true);
+    await load();
+  } catch (e) {
+    app.innerHTML = `<div class="card gate empty">${esc(e.message)}</div>`;
+  }
+})();
+
+async function load(keepOpen) {
+  if (!orders.length) app.innerHTML = '<div class="spinner"></div>';
+  try {
+    orders = (await api('adminList')).orders;
+    renderBoard();
+    if (keepOpen && openId) openDrawer(openId);
+    if (keepOpen) toast('已更新');
+  } catch (e) { toast(e.message); }
+}
+
+/* ============================== 列表 ============================== */
+function visible() {
+  const q = query.trim().toLowerCase();
+  return orders.filter(o => {
+    if (filter === 'active' && CLOSED.includes(o.status)) return false;
+    if (filter === 'closed' && !CLOSED.includes(o.status)) return false;
+    if (filter.startsWith('g-') && !GROUPS.find(g => g.key === filter).match(o)) return false;
+    if (STATUS_LIST.includes(filter) && o.status !== filter) return false;
+    if (!q) return true;
+    return [o.id, o.name, o.phone, o.email, o.tracking, o.itemsText, o.address].join(' ').toLowerCase().includes(q);
+  });
+}
+
+function renderBoard() {
+  const active = orders.filter(o => !CLOSED.includes(o.status)).length;
+  app.innerHTML = `
+    <div class="stats">${GROUPS.map(g => { const n = orders.filter(g.match).length; return `<button class="stat ${g.hot && n ? 'hot' : ''} ${filter === g.key ? 'on' : ''}" style="--c:${g.color}" data-f="${g.key}"><div class="n num">${n}</div><div class="l">${g.label}</div></button>`; }).join('')}</div>
+    <div class="toolbar">
+      <input class="input" id="q" placeholder="搜尋 姓名／電話／訂單編號／單號／型號" value="${esc(query)}">
+      <div class="tabs">
+        <button data-f="active" class="${filter === 'active' ? 'on' : ''}">進行中<i>${active}</i></button>
+        <button data-f="all" class="${filter === 'all' ? 'on' : ''}">全部<i>${orders.length}</i></button>
+        ${STATUS_LIST.map(s => { const n = orders.filter(o => o.status === s).length; return n ? `<button data-f="${esc(s)}" class="${filter === s ? 'on' : ''}">${esc(s)}<i>${n}</i></button>` : ''; }).join('')}
+      </div>
+    </div>
+    <div id="tbl"></div>`;
+  $$('[data-f]').forEach(b => b.onclick = () => { filter = filter === b.dataset.f && b.dataset.f.startsWith('g-') ? 'active' : b.dataset.f; renderBoard(); });
+  $('#q').oninput = e => { query = e.target.value; renderTable(); };
+  renderTable();
+}
+
+function renderTable() {
+  const list = visible();
+  if (!list.length) { $('#tbl').innerHTML = '<div class="card empty">沒有符合的訂單</div>'; return; }
+  $('#tbl').innerHTML = `<table class="table"><thead><tr><th>訂單</th><th>客戶</th><th>商品</th><th>狀態</th><th>報價</th><th>更新</th></tr></thead><tbody>
+    ${list.map(o => { const first = o.items[0] || {}; return `<tr data-id="${esc(o.id)}" class="${o.id === openId ? 'sel' : ''}">
+      <td><b class="num">${esc(o.id)}</b><div class="sub">${esc(o.createdAt)}</div></td>
+      <td>${esc(o.name)}<div class="sub num">${esc(o.phone)}</div></td>
+      <td>${esc(itemTitle(first))}${o.items.length > 1 ? ` <span class="sub">+${o.items.length - 1}</span>` : ''}<div class="sub">${esc(first.category || '')}</div></td>
+      <td>${badge(o.status)}</td>
+      <td class="num hide-m">${o.quote ? 'NT$ ' + money(o.quote) : '<span class="sub">—</span>'}</td>
+      <td class="sub num hide-m">${esc((o.updatedAt || '').slice(5))}</td>
+    </tr>`; }).join('')}
+  </tbody></table>`;
+  $$('#tbl tbody tr').forEach(tr => tr.onclick = () => openDrawer(tr.dataset.id));
+}
+
+/* ============================== 訂單抽屜 ============================== */
+function closeDrawer() { openId = null; $('#drawer').classList.remove('show'); $('#scrim').classList.remove('show'); $$('#tbl tr.sel').forEach(t => t.classList.remove('sel')); }
+$('#scrim').onclick = closeDrawer;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+function openDrawer(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  openId = id;
+  $$('#tbl tr').forEach(t => t.classList.toggle('sel', t.dataset.id === id));
+  const next = NEXT_STATUS[o.status];
+  const shipText = `${o.name}\n${o.phone}\n${o.city}${o.address}`;
+  const bankText = o.bankAccount ? `${o.bankName} ${o.bankBranch}\n戶名：${o.bankHolder}\n帳號：${o.bankAccount}` : '';
+  const d = $('#drawer');
+  d.innerHTML = `
+    <div class="d-head"><b class="num">${esc(o.id)}</b>${badge(o.status)}<button class="d-close" aria-label="關閉">✕</button></div>
+    <div class="d-body">
+      <div class="card">
+        ${stepperHTML(o.status)}
+        ${next ? `<button class="next-btn" id="nextBtn" style="--c:${statusColor(next)};margin-top:18px"><span>改為「${esc(next)}」</span><small>並通知客戶 →</small></button>` : ''}
+        <div class="row-actions">
+          <select class="input" id="stSel">${STATUS_LIST.map(s => `<option ${s === o.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+          <label class="check small"><input type="checkbox" id="notify" checked> 改狀態時通知客戶</label>
+        </div>
+        ${o.notified ? `<div class="small muted" style="margin-top:8px">上次通知：${esc(o.notified)}</div>` : ''}
+      </div>
+
+      ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請匯款後按「改為已付款」。</div>` : ''}
+      ${o.status === '客戶不同意' ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
+
+      <div class="card">
+        <h3>物流</h3>
+        <div class="grid2">
+          <label class="field"><span>物流公司</span><input class="input" id="fCarrier" value="${esc(o.carrier)}" list="carriers" placeholder="黑貓宅急便"><datalist id="carriers"><option value="黑貓宅急便"><option value="新竹物流"><option value="中華郵政"><option value="全家二手機回收"></datalist></label>
+          <label class="field"><span>託運單號</span><input class="input" id="fTracking" value="${esc(o.tracking)}"></label>
+        </div>
+        <h3 style="margin-top:4px">檢測報價</h3>
+        <label class="field"><span>報價金額（NT$）</span><input class="input num" id="fQuote" value="${esc(o.quote)}" inputmode="numeric" placeholder="例：12500"></label>
+        <label class="field"><span>報價說明（客戶看得到）</span><textarea class="input" id="fQuoteNote" placeholder="例：電池健康度 86%，背蓋輕微刮傷">${esc(o.quoteNote)}</textarea></label>
+        <label class="field" style="margin-bottom:0"><span>內部備註（客戶看不到）</span><textarea class="input" id="fInternal">${esc(o.internal)}</textarea></label>
+      </div>
+
+      <div class="card">
+        <h3>客戶資料 <button class="copy" data-copy="${esc(shipText)}">複製寄件資訊</button></h3>
+        <dl class="kv">
+          <dt>姓名</dt><dd>${esc(o.name)}　<span class="muted small">LINE：${esc(o.lineName)}</span></dd>
+          <dt>手機</dt><dd><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><button class="copy" data-copy="${esc(o.phone)}">複製</button></dd>
+          <dt>Email</dt><dd><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></dd>
+          <dt>身分證</dt><dd class="num">${esc(o.idNo)}</dd>
+          <dt>地址</dt><dd>${esc(o.city)}${esc(o.address)}<button class="copy" data-copy="${esc(o.city + o.address)}">複製</button></dd>
+          <dt>收件時段</dt><dd>${esc(o.slot)}</dd>
+          ${o.note ? `<dt>客戶備註</dt><dd>${esc(o.note)}</dd>` : ''}
+        </dl>
+      </div>
+
+      <div class="card">
+        <h3>匯款帳戶 ${bankText ? `<button class="copy" data-copy="${esc(bankText)}">複製</button>` : ''}</h3>
+        ${o.bankAccount ? `<dl class="kv"><dt>銀行</dt><dd>${esc(o.bankName)} ${esc(o.bankBranch)}</dd><dt>戶名</dt><dd>${esc(o.bankHolder)}${o.bankHolder && o.bankHolder !== o.name ? ' <span style="color:var(--red)" class="small">⚠ 與回收者姓名不同</span>' : ''}</dd><dt>帳號</dt><dd class="num">${esc(o.bankAccount)}<button class="copy" data-copy="${esc(o.bankAccount)}">複製</button></dd></dl>` : '<p class="muted small" style="margin:0">客戶尚未填寫（同意報價時會要求填寫）</p>'}
+      </div>
+
+      <div class="card">
+        <h3>回收商品（${o.items.length}）</h3>
+        ${o.items.map((it, i) => `<div style="padding:10px 0;border-top:${i ? '1px solid var(--line)' : '0'}"><b>${i + 1}. ${esc(it.category)}・${esc(itemTitle(it))}</b><div class="small muted">${esc(itemSummary(it))}</div></div>`).join('') || `<div class="small" style="white-space:pre-line">${esc(o.itemsText)}</div>`}
+      </div>
+
+      <div class="card">
+        <h3>狀態紀錄</h3>
+        <ul class="timeline" style="--c:${statusColor(o.status)}">${[...o.history].reverse().map(h => `<li><b>${esc(h.status)}</b><time>${esc(h.time)}</time></li>`).join('')}</ul>
+      </div>
+    </div>
+    <div class="d-foot"><span class="err" id="dErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="save">儲存</button></div>`;
+  d.classList.add('show'); $('#scrim').classList.add('show');
+  $('.d-close', d).onclick = closeDrawer;
+  $$('[data-copy]', d).forEach(b => b.onclick = () => navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}));
+  $('#save').onclick = () => save(o, $('#stSel').value);
+  if ($('#nextBtn')) $('#nextBtn').onclick = () => save(o, next);
+}
+
+async function save(o, status) {
+  const fields = {
+    carrier: $('#fCarrier').value.trim(), tracking: $('#fTracking').value.trim(),
+    quote: $('#fQuote').value.replace(/[^\d]/g, ''), quoteNote: $('#fQuoteNote').value.trim(), internal: $('#fInternal').value.trim(),
+  };
+  if (status && status !== o.status) fields.status = status;
+  if (fields.status === '已報價' && !fields.quote) { $('#dErr').textContent = '請先填寫報價金額'; $('#fQuote').focus(); return; }
+  if (fields.status && !confirm(`將 ${o.id} 改為「${fields.status}」${$('#notify').checked ? '並通知客戶' : '（不通知客戶）'}？`)) return;
+  const btns = $$('#save, #nextBtn'); btns.forEach(b => b.disabled = true);
+  try {
+    const r = await api('adminUpdate', { id: o.id, fields, notify: $('#notify').checked });
+    const i = orders.findIndex(x => x.id === o.id);
+    orders[i] = r.order;
+    toast(fields.status ? `已改為「${fields.status}」${r.order.notified ? '（' + r.order.notified.split('｜')[1] + '）' : ''}` : '已儲存');
+    renderBoard();
+    openDrawer(o.id);
+  } catch (e) {
+    $('#dErr').textContent = e.message; btns.forEach(b => b.disabled = false);
+  }
+}
+</script>
+</body>
+</html>

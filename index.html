@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>iPhone收購中心｜宅配收購</title>
+<meta name="description" content="iPhone、iPad、Mac 宅配收購。線上預約，黑貓到府收件，專業檢測報價，同意後 2 個工作天匯款。">
+<meta name="theme-color" content="#f5f5f7">
+<link rel="stylesheet" href="style.css">
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  /* ---------- home ---------- */
+  .hero { background: radial-gradient(120% 90% at 80% 0%, #2c2c34 0%, #0b0b0f 60%); color: #f5f5f7; padding: 64px 0 72px; overflow: hidden; position: relative; }
+  .hero::after { content: ""; position: absolute; right: -120px; top: -80px; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(10,132,255,.35), transparent 65%); filter: blur(10px); }
+  .hero .wrap { position: relative; z-index: 1; }
+  .eyebrow { display: inline-block; font-size: 13px; font-weight: 600; letter-spacing: .04em; color: #a1a1a6; border: 1px solid rgba(255,255,255,.18); padding: 5px 12px; border-radius: 999px; }
+  .hero h1 { font-size: clamp(34px, 7vw, 60px); line-height: 1.12; letter-spacing: -.025em; margin: 18px 0 16px; font-weight: 800; }
+  .hero h1 span { background: linear-gradient(90deg, #64d2ff, #0a84ff 50%, #bf5af2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { font-size: clamp(16px, 2.4vw, 19px); color: #a1a1a6; max-width: 560px; margin: 0 0 30px; }
+  .hero .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .trust { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 36px; font-size: 14px; color: #d2d2d7; }
+  .trust div { display: flex; align-items: center; gap: 8px; }
+  .trust i { width: 22px; height: 22px; border-radius: 50%; background: rgba(48,209,88,.18); color: #30d158; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; }
+  .section { padding: 64px 0 8px; }
+  .section h2 { font-size: clamp(26px, 4.5vw, 38px); letter-spacing: -.02em; margin: 0 0 8px; text-align: center; }
+  .section .lead { text-align: center; color: var(--muted); margin: 0 0 32px; }
+  .steps4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 820px) { .steps4 { grid-template-columns: 1fr 1fr; } }
+  .step4 { background: #fff; border-radius: var(--r-lg); padding: 22px; box-shadow: var(--shadow); }
+  .step4 .n { font-size: 13px; font-weight: 700; color: var(--accent); }
+  .step4 h3 { margin: 6px 0 6px; font-size: 18px; }
+  .step4 p { margin: 0; color: var(--muted); font-size: 14px; }
+  .cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 820px) { .cats { grid-template-columns: 1fr 1fr; } }
+  .cat { background: #fff; border: 0; border-radius: var(--r-lg); padding: 26px 18px; text-align: center; box-shadow: var(--shadow); color: var(--ink); transition: transform .2s, box-shadow .2s; }
+  .cat:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,.08); }
+  .cat svg { width: 44px; height: 44px; margin-bottom: 10px; }
+  .cat b { display: block; font-size: 18px; }
+  .cat small { color: var(--muted); font-size: 13px; }
+  .faq details { background: #fff; border-radius: var(--r); padding: 4px 20px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+  .faq summary::after { content: "+"; font-size: 22px; line-height: 1; color: var(--muted); transition: transform .2s; }
+  .faq details[open] summary::after { transform: rotate(45deg); }
+  .faq details p { margin: 0 0 16px; color: var(--ink-2); font-size: 15px; }
+  .band { margin: 64px 0 0; background: var(--dark); color: #fff; border-radius: 28px; padding: 40px 28px; text-align: center; }
+  .band h2 { color: #fff; }
+  .band p { color: #a1a1a6; margin: 0 0 24px; }
+
+  /* ---------- wizard ---------- */
+  .page-head { padding: 28px 0 8px; }
+  .page-head h1 { font-size: 28px; letter-spacing: -.02em; margin: 0; }
+  .page-head p { color: var(--muted); margin: 4px 0 0; }
+  .wsteps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 18px 0 20px; }
+  .wsteps div { font-size: 12px; color: var(--muted); }
+  .wsteps div::before { content: ""; display: block; height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 7px; transition: background .3s; }
+  .wsteps div.on { color: var(--ink); font-weight: 600; }
+  .wsteps div.on::before, .wsteps div.done::before { background: var(--ink); }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile { border: 1px solid var(--line-2); background: #fff; border-radius: var(--r); padding: 18px 14px; text-align: left; display: flex; gap: 12px; align-items: center; color: var(--ink); transition: all .15s; }
+  .tile:hover { border-color: var(--ink); }
+  .tile svg { width: 32px; height: 32px; flex: none; }
+  .tile b { display: block; font-size: 16px; }
+  .tile small { color: var(--muted); font-size: 12px; }
+  .item-card { border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 14px; background: #fff; }
+  .item-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .item-head svg { width: 26px; height: 26px; }
+  .item-head b { font-size: 17px; flex: 1; }
+  .wbar { position: sticky; bottom: 0; background: linear-gradient(to top, var(--bg) 70%, rgba(245,245,247,0)); padding: 18px 0 calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 10px; z-index: 5; }
+  .wbar .btn { flex: 1; }
+  .terms { max-height: 220px; overflow: auto; background: #f5f5f7; border-radius: var(--r-sm); padding: 14px 16px; font-size: 13px; color: var(--ink-2); white-space: pre-line; line-height: 1.7; margin-bottom: 16px; }
+  .review-item { padding: 12px 0; border-top: 1px solid var(--line); }
+  .review-item:first-child { border-top: 0; padding-top: 0; }
+  .review-item b { display: block; }
+  .review-item span { color: var(--muted); font-size: 13px; }
+
+  /* ---------- orders / detail ---------- */
+  .order-card { display: block; width: 100%; text-align: left; border: 0; background: #fff; border-radius: var(--r-lg); padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 12px; color: var(--ink); transition: transform .15s; }
+  .order-card:active { transform: scale(.99); }
+  .order-card .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .order-card .t { font-weight: 700; font-size: 17px; }
+  .order-card .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin: 10px 0 6px; }
+  .status-hero { background: var(--dark); color: #fff; border-radius: var(--r-lg); padding: 24px 22px 20px; margin-bottom: 16px; }
+  .status-hero .id { color: #a1a1a6; font-size: 13px; letter-spacing: .02em; }
+  .status-hero h2 { font-size: 30px; margin: 4px 0 4px; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; }
+  .status-hero h2 i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 30%, transparent); }
+  .status-hero p { color: #d2d2d7; margin: 0 0 22px; font-size: 15px; }
+  .status-hero .stepper::before { background: rgba(255,255,255,.14); }
+  .status-hero .stepper .dot { background: #2c2c2e; border-color: #3a3a3c; color: #8e8e93; }
+  .status-hero .stepper .st.done .dot { background: var(--c); border-color: var(--c); color: #fff; }
+  .status-hero .stepper .st.cur .dot { background: #1c1c1e; border-color: var(--c); color: #fff; }
+  .status-hero .stepper .lbl { color: #8e8e93; }
+  .status-hero .stepper .st.cur .lbl, .status-hero .stepper .st.done .lbl { color: #f5f5f7; }
+  .quote-card { background: linear-gradient(135deg, #fff7e8, #fff); border: 1.5px solid #ffd59a; }
+  .price { font-size: 44px; font-weight: 800; letter-spacing: -.03em; margin: 6px 0 4px; }
+  .price small { font-size: 18px; font-weight: 600; color: var(--muted); margin-right: 4px; }
+  .dev { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .dev:first-of-type { border-top: 0; padding-top: 0; }
+  .dev svg { width: 26px; height: 26px; flex: none; color: var(--ink-2); margin-top: 2px; }
+  .dev b { display: block; }
+  .dev span { color: var(--muted); font-size: 13px; }
+  .copy { border: 0; background: #f5f5f7; border-radius: 6px; font-size: 12px; padding: 2px 8px; margin-left: 6px; color: var(--ink-2); }
+  .ok-mark { width: 76px; height: 76px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; margin: 8px auto 16px; font-size: 38px; animation: pop .5s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+  .contact-row { display: flex; gap: 10px; }
+  .contact-row .btn { flex: 1; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#/"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 5h3"/></svg></span><span id="shopName">iPhone收購中心</span></a>
+    <nav class="nav-links">
+      <button data-nav="book">預約收購</button>
+      <button data-nav="orders">查詢進度</button>
+    </nav>
+  </div>
+</header>
+<main id="app"><div class="spinner"></div></main>
+<footer class="footer">
+  <div id="footInfo"></div>
+</footer>
+
+<script src="config.js"></script>
+<script src="shared.js"></script>
+<script>
+const app = $('#app');
+
+/* ============================== 路由 ============================== */
+function route() {
+  const h = location.hash.replace(/^#\/?/, '');
+  const [page, id] = h.split('/');
+  $$('.nav-links button').forEach(b => b.classList.toggle('on', b.dataset.nav === page || (page === 'order' && b.dataset.nav === 'orders')));
+  window.scrollTo(0, 0);
+  if (page === 'book') return needLogin('book') && renderBook();
+  if (page === 'orders') return needLogin('orders') && renderOrders();
+  if (page === 'order' && id) return needLogin('detail', id) && renderDetail(decodeURIComponent(id));
+  renderHome();
+}
+const go = path => { location.hash = '#/' + path; };
+window.addEventListener('hashchange', route);
+$$('.nav-links button').forEach(b => b.onclick = () => go(b.dataset.nav));
+
+function needLogin(page, id) {
+  if (isLoggedIn()) return true;
+  app.innerHTML = `<div class="narrow rise"><div class="card center" style="margin-top:40px;padding:36px 24px">
+    <h2 class="card-title">請先用 LINE 登入</h2>
+    <p class="muted">登入後可預約宅配收購、隨時查詢檢測與匯款進度。</p>
+    <button class="btn btn-line btn-block" id="loginBtn">使用 LINE 登入</button>
+  </div></div>`;
+  $('#loginBtn').onclick = () => login(id ? { page, id } : { page });
+  return false;
+}
+
+/* ============================== 首頁 ============================== */
+function renderHome() {
+  app.innerHTML = `
+  <section class="hero"><div class="wrap rise">
+    <span class="eyebrow">宅配收購・全台到府收件</span>
+    <h1>舊 iPhone 換現金，<br><span>在家就能完成。</span></h1>
+    <p>線上填單 3 分鐘，黑貓到府收件。專業檢測後透明報價，同意才成交，2 個工作天內匯款。</p>
+    <div class="cta">
+      <button class="btn btn-light" onclick="go('book')">立即預約收購</button>
+      <button class="btn btn-ghost" style="color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)" onclick="go('orders')">查詢收購進度</button>
+    </div>
+    <div class="trust"><div><i>✓</i>黑貓到府收件</div><div><i>✓</i>3 個工作天內報價</div><div><i>✓</i>同意後 2 天匯款</div><div><i>✓</i>每一步線上可查</div></div>
+  </div></section>
+
+  <div class="wrap">
+    <section class="section">
+      <h2>四個步驟，輕鬆完成</h2>
+      <p class="lead">從填單到收款，每一步都能在這裡查詢</p>
+      <div class="steps4">
+        <div class="step4"><div class="n">STEP 1</div><h3>線上填單</h3><p>選擇商品、填寫型號與狀況，用 LINE 登入送出預約。</p></div>
+        <div class="step4"><div class="n">STEP 2</div><h3>黑貓到府收件</h3><p>1–3 個工作天內黑貓與您聯繫，包裝好交給司機即可。</p></div>
+        <div class="step4"><div class="n">STEP 3</div><h3>專業檢測報價</h3><p>收到後 3 個工作天內完成檢測，線上確認報價。</p></div>
+        <div class="step4"><div class="n">STEP 4</div><h3>同意後匯款</h3><p>同意報價後 2 個工作天內匯入您指定的帳戶。</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>我們收購</h2>
+      <p class="lead">點選類別直接開始預約</p>
+      <div class="cats">${Object.entries(CATEGORY_INFO).map(([k, c]) => `<button class="cat" data-cat="${esc(k)}">${c.icon}<b>${esc(c.title)}</b><small>${esc(c.sub)}</small></button>`).join('')}</div>
+    </section>
+
+    <section class="section faq narrow" style="padding-left:0;padding-right:0">
+      <h2>常見問題</h2>
+      <p class="lead">寄出前請先看看</p>
+      <details><summary>寄出前需要做什麼？</summary><p>請先備份資料、登出 Apple ID／iCloud（關閉「尋找」）、清除所有內容，並取出 SIM 卡與記憶卡。未登出帳號的設備可能無法回收。</p></details>
+      <details><summary>要怎麼包裝？運費誰付？</summary><p>請用紙盒加氣泡紙妥善包裝，交給到府的黑貓司機即可，寄送運費由我們負擔。若需要包材，可至全家便利商店使用「二手機回收」服務（酌收運費與手續費 30 元，含包材）。</p></details>
+      <details><summary>多久可以知道價格？</summary><p>收到商品後 3 個工作天內完成檢測並通知報價。收購價格隨市場浮動，以宅配公司收件當日報價為準。</p></details>
+      <details><summary>不滿意報價怎麼辦？</summary><p>您可以在網站上選擇「不同意」，我們會將商品寄回給您，退回運費由使用者負擔。</p></details>
+      <details><summary>多久會收到款項？</summary><p>在網站上同意報價後，2 個工作天內匯入您指定的帳戶（帳戶戶名需與回收者相同）。</p></details>
+      <details><summary>為什麼需要身分證字號？</summary><p>依規定需確認設備來源合法，資料僅用於本次交易驗證，不會提供給第三方。</p></details>
+    </section>
+
+    <section class="band rise">
+      <h2>準備好了嗎？</h2>
+      <p>3 分鐘填單，剩下的交給我們。</p>
+      <button class="btn btn-light" onclick="go('book')">立即預約收購</button>
+    </section>
+  </div>`;
+  $$('.cat').forEach(b => b.onclick = () => { const d = loadDraft(); if (!d.items.length) d.items.push(newItem(b.dataset.cat)); d.step = 0; saveDraft(d); go('book'); });
+}
+
+/* ============================== 預約流程 ============================== */
+const FIELDS = {
+  iPhone: [
+    { k: 'model', label: 'iPhone 型號', type: 'select', options: IPHONE_MODELS, req: true },
+    { k: 'capacity', label: '容量', type: 'chips', options: CAPACITIES },
+    { k: 'color', label: '顏色', type: 'text', ph: '例：午夜色、天峰藍' },
+    { k: 'newOrUsed', label: '全新或二手', type: 'chips', options: NEW_USED },
+    { k: 'imei', label: 'IMEI 碼', type: 'text', req: true, ph: '15 碼數字', inputmode: 'numeric', hint: '設定 → 一般 → 關於本機，或撥號 *#06#。無法開機可免填。' },
+    { k: 'appearance', label: '外觀狀況', type: 'chips', options: IPHONE_APPEARANCE },
+    { k: 'issues', label: '功能狀況（可複選）', type: 'multi', options: IPHONE_ISSUES },
+    { k: 'issueNote', label: '功能問題補充', type: 'textarea', ph: '例：電池健康度 85%、Face ID 偶爾失靈…' },
+  ],
+  iPad: [
+    { k: 'model', label: 'iPad 型號', type: 'select', options: IPAD_MODELS, req: true },
+    { k: 'connectivity', label: '連線能力版本', type: 'chips', options: IPAD_CONNECTIVITY, req: true },
+    { k: 'capacity', label: '容量', type: 'chips', options: CAPACITIES, req: true },
+    { k: 'color', label: '顏色', type: 'text', req: true, ph: '例：太空灰' },
+    { k: 'newOrUsed', label: '全新或二手', type: 'chips', options: NEW_USED },
+    { k: 'issueNote', label: '功能或外觀描述', type: 'textarea', ph: '例：螢幕無刮傷、邊框有小凹痕' },
+  ],
+  Mac: [
+    { k: 'year', label: '年份', type: 'text', ph: '例：2021', inputmode: 'numeric', half: true },
+    { k: 'model', label: 'Mac 型號', type: 'text', req: true, ph: '例：MacBook Pro 14 吋', half: true },
+    { k: 'spec', label: '規格（處理器、記憶體、硬碟）', type: 'textarea', ph: '例：M1 Pro / 16GB / 512GB' },
+    { k: 'newOrUsed', label: '全新或二手', type: 'chips', options: NEW_USED },
+    { k: 'serial', label: 'Mac 序號', type: 'text', ph: '左上角蘋果選單 → 關於這台 Mac' },
+  ],
+  '其他': [
+    { k: 'name', label: '商品名稱與狀況', type: 'textarea', req: true, ph: '例：Apple Watch S8 45mm，錶面無刮傷，附原廠充電線' },
+  ],
+};
+const newItem = cat => ({ category: cat, issues: [] });
+const loadDraft = () => { const d = store.get('draft') || {}; return { step: d.step || 0, items: d.items || [], contact: d.contact || {}, bank: d.bank || {} }; };
+const saveDraft = d => store.set('draft', d);
+let draft;
+
+function fieldHTML(f, it, i) {
+  const v = it[f.k] ?? '';
+  const name = `${f.k}-${i}`;
+  const label = `<span>${esc(f.label)}${f.req ? '<em>*</em>' : ''}</span>`;
+  let ctl = '';
+  if (f.type === 'select') ctl = `<select class="input" data-k="${f.k}">${opts(f.options, v, '請選擇')}</select>`;
+  else if (f.type === 'text') ctl = `<input class="input" data-k="${f.k}" value="${esc(v)}" placeholder="${esc(f.ph || '')}" ${f.inputmode ? `inputmode="${f.inputmode}"` : ''} maxlength="60">`;
+  else if (f.type === 'textarea') ctl = `<textarea class="input" data-k="${f.k}" placeholder="${esc(f.ph || '')}" maxlength="300">${esc(v)}</textarea>`;
+  else if (f.type === 'chips') ctl = chips(name, f.options, v);
+  else if (f.type === 'multi') ctl = chips(name, f.options, v, true);
+  const tag = f.type === 'chips' || f.type === 'multi' ? 'div' : 'label';
+  return `<${tag} class="field">${label}${ctl}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</${tag}>`;
+}
+
+function itemCardHTML(it, i) {
+  const fs = FIELDS[it.category];
+  const halves = fs.filter(f => f.half), rest = fs.filter(f => !f.half);
+  return `<div class="item-card rise" data-i="${i}">
+    <div class="item-head">${CATEGORY_INFO[it.category].icon}<b>商品 ${i + 1}・${esc(it.category)}</b><button type="button" class="link" style="color:var(--red)" data-del="${i}">移除</button></div>
+    ${halves.length ? `<div class="grid2">${halves.map(f => fieldHTML(f, it, i)).join('')}</div>` : ''}
+    ${rest.map(f => fieldHTML(f, it, i)).join('')}
+  </div>`;
+}
+
+function syncItems() {
+  $$('.item-card').forEach(card => {
+    const i = +card.dataset.i, it = draft.items[i];
+    FIELDS[it.category].forEach(f => {
+      if (f.type === 'chips') it[f.k] = ($(`input[name="${f.k}-${i}"]:checked`, card) || {}).value || '';
+      else if (f.type === 'multi') it[f.k] = $$(`input[name="${f.k}-${i}"]:checked`, card).map(x => x.value);
+      else it[f.k] = ($(`[data-k="${f.k}"]`, card) || {}).value?.trim() || '';
+    });
+  });
+}
+function syncForm(sel, target) { $$(sel + ' [name]').forEach(el => { if (el.type === 'radio') { if (el.checked) target[el.name] = el.value; } else target[el.name] = el.value.trim(); }); }
+function syncAll() {
+  if (draft.step === 0) syncItems();
+  if (draft.step === 1) syncForm('#contact', draft.contact);
+  if (draft.step === 2) syncForm('#bank', draft.bank);
+  saveDraft(draft);
+}
+
+function validateStep(step) {
+  if (step === 0) {
+    if (!draft.items.length) return '請先選擇要回收的商品類別';
+    for (let i = 0; i < draft.items.length; i++) {
+      const it = draft.items[i], no = `商品 ${i + 1}：`;
+      const miss = FIELDS[it.category].find(f => f.req && f.k !== 'imei' && !(Array.isArray(it[f.k]) ? it[f.k].length : it[f.k]));
+      if (miss) return no + '請填寫「' + miss.label + '」';
+      if (it.category === 'iPhone' && !(it.issues || []).includes('無法開機運作') && !/^\d{15}$/.test((it.imei || '').replace(/\D/g, ''))) return no + '請填寫 15 碼 IMEI（無法開機請在功能狀況勾選）';
+    }
+  }
+  if (step === 1) {
+    const c = draft.contact;
+    if (!c.name) return '請填寫姓名';
+    if (!/^09\d{8}$/.test((c.phone || '').replace(/[\s-]/g, ''))) return '請填寫正確的手機號碼（09 開頭 10 碼）';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || '')) return '請填寫正確的 Email';
+    if (!/^[A-Z][12890ABCD]\d{8}$/.test((c.idNo || '').toUpperCase())) return '請填寫正確的身分證字號';
+    if (!c.city) return '請選擇縣市';
+    if ((c.address || '').length < 5) return '請填寫完整收件地址';
+  }
+  if (step === 2) {
+    const b = draft.bank;
+    if ((b.bankName || b.bankAccount || b.bankHolder) && (!b.bankName || !b.bankHolder || !/^\d[\d-]{5,}$/.test(b.bankAccount || ''))) return '匯款帳戶請完整填寫銀行、帳號、戶名，或全部留空稍後再填';
+  }
+  return '';
+}
+
+function renderBook() {
+  draft = loadDraft();
+  const labels = ['回收商品', '聯絡與取件', '匯款帳戶', '確認送出'];
+  const s = draft.step;
+  let body = '';
+  if (s === 0) {
+    body = `<div class="card">
+      <h2 class="card-title">要回收哪些商品？</h2>
+      <p class="card-sub">一次可預約多項，同一箱寄出即可</p>
+      <div id="items">${draft.items.map(itemCardHTML).join('')}</div>
+      <div id="picker" ${draft.items.length ? 'hidden' : ''}>
+        ${draft.items.length ? '<p class="small muted" style="margin:4px 0 10px">選擇要加入的商品類別</p>' : ''}
+        <div class="tiles">${Object.entries(CATEGORY_INFO).map(([k, c]) => `<button type="button" class="tile" data-add="${esc(k)}">${c.icon}<div><b>${esc(c.title)}</b><small>${esc(c.sub)}</small></div></button>`).join('')}</div>
+      </div>
+      ${draft.items.length ? `<button type="button" class="btn btn-ghost btn-block" id="showPicker" style="margin-top:4px">＋ 再加一項商品</button>` : ''}
+    </div>`;
+  } else if (s === 1) {
+    const c = draft.contact;
+    body = `<div class="card" id="contact">
+      <h2 class="card-title">聯絡與取件資訊</h2>
+      <p class="card-sub">黑貓物流會在 1–3 個工作天內（不含假日）與您聯繫上門收件</p>
+      <div class="grid2">
+        <label class="field"><span>姓名<em>*</em></span><input class="input" name="name" value="${esc(c.name)}" autocomplete="name" maxlength="30"></label>
+        <label class="field"><span>手機號碼<em>*</em></span><input class="input" name="phone" value="${esc(c.phone)}" inputmode="tel" autocomplete="tel" placeholder="09xxxxxxxx" maxlength="12"></label>
+      </div>
+      <label class="field"><span>Email<em>*</em></span><input class="input" type="email" name="email" value="${esc(c.email)}" autocomplete="email" placeholder="進度通知會寄到這裡" maxlength="100"></label>
+      <label class="field"><span>身分證字號<em>*</em></span><input class="input" name="idNo" value="${esc(c.idNo)}" maxlength="10" style="text-transform:uppercase" autocomplete="off"><small>依規定需驗證設備來源合法性，僅用於本次交易，不會提供給第三方。</small></label>
+      <div class="grid3">
+        <label class="field"><span>縣市<em>*</em></span><select class="input" name="city">${opts(CITIES, c.city, '請選擇')}</select></label>
+        <label class="field"><span>收件地址<em>*</em></span><input class="input" name="address" value="${esc(c.address)}" autocomplete="street-address" placeholder="區、路、門牌、樓層" maxlength="150"></label>
+      </div>
+      <div class="field"><span>方便收件時段</span>${chips('slot', SLOTS, c.slot || '不指定')}</div>
+      <label class="field" style="margin-bottom:0"><span>備註</span><textarea class="input" name="note" maxlength="300" placeholder="例：管理室代收、附原廠盒…">${esc(c.note)}</textarea></label>
+    </div>`;
+  } else if (s === 2) {
+    const b = draft.bank;
+    body = `<div class="card" id="bank">
+      <h2 class="card-title">匯款帳戶 <span class="muted small" style="font-weight:500">（選填）</span></h2>
+      <p class="card-sub">同意報價後款項會匯入此帳戶。現在不想填也可以，確認報價時再填。</p>
+      <label class="field"><span>銀行</span><input class="input" name="bankName" value="${esc(b.bankName)}" list="banks" placeholder="例：822 中國信託"><datalist id="banks">${BANKS.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
+      <div class="grid2">
+        <label class="field"><span>分行</span><input class="input" name="bankBranch" value="${esc(b.bankBranch)}" placeholder="例：永和分行"></label>
+        <label class="field"><span>戶名</span><input class="input" name="bankHolder" value="${esc(b.bankHolder)}" placeholder="需與回收者同名"></label>
+      </div>
+      <label class="field" style="margin-bottom:0"><span>帳號</span><input class="input" name="bankAccount" value="${esc(b.bankAccount)}" inputmode="numeric" maxlength="30"></label>
+    </div>`;
+  } else {
+    const c = draft.contact, b = draft.bank;
+    body = `<div class="card">
+      <h2 class="card-title">確認預約內容</h2>
+      <p class="card-sub">送出後黑貓會與您聯繫收件</p>
+      ${draft.items.map((it, i) => `<div class="review-item"><b>${i + 1}. ${esc(it.category)}・${esc(itemTitle(it))}</b><span>${esc(itemSummary(it))}</span></div>`).join('')}
+      <div style="display:flex;justify-content:flex-end"><button class="link" data-goto="0">修改商品</button></div>
+    </div>
+    <div class="card">
+      <dl class="kv">
+        <dt>聯絡人</dt><dd>${esc(c.name)}　${esc(c.phone)}</dd>
+        <dt>Email</dt><dd>${esc(c.email)}</dd>
+        <dt>收件地址</dt><dd>${esc(c.city)}${esc(c.address)}</dd>
+        <dt>收件時段</dt><dd>${esc(c.slot || '不指定')}</dd>
+        <dt>匯款帳戶</dt><dd>${b.bankAccount ? `${esc(b.bankName)} ${esc(b.bankBranch)}\n${esc(b.bankHolder)}　****${esc(b.bankAccount.slice(-4))}` : '<span class="muted">確認報價時再填</span>'}</dd>
+      </dl>
+      <div style="display:flex;justify-content:flex-end"><button class="link" data-goto="1">修改資料</button></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title" style="font-size:16px">使用者條款</h2>
+      <div class="terms">${esc(TERMS)}</div>
+      <div class="note" style="margin-bottom:16px"><b>寄出前提醒</b><ul><li>備份資料、登出 Apple ID／iCloud 並清除所有內容</li><li>取出 SIM 卡</li><li>以紙盒＋氣泡紙包裝好</li></ul></div>
+      <label class="check"><input type="checkbox" id="agree"> 我已閱讀並同意使用者條款，並確認已年滿 20 歲</label>
+    </div>`;
+  }
+
+  app.innerHTML = `<div class="narrow">
+    <div class="page-head"><h1>預約宅配收購</h1><p>填寫約 3 分鐘，資料會自動暫存</p></div>
+    <div class="wsteps">${labels.map((l, i) => `<div class="${i === s ? 'on' : i < s ? 'done' : ''}">${i + 1}. ${l}</div>`).join('')}</div>
+    ${body}
+    <div class="err center" id="err"></div>
+    <div class="wbar">
+      ${s > 0 ? '<button class="btn btn-ghost" id="prev">上一步</button>' : ''}
+      <button class="btn btn-dark" id="next">${s === 3 ? '確認送出' : '下一步'}</button>
+    </div>
+  </div>`;
+
+  if (s === 0) {
+    $$('[data-add]').forEach(b => b.onclick = () => { syncItems(); draft.items.push(newItem(b.dataset.add)); saveDraft(draft); renderBook(); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); });
+    $$('[data-del]').forEach(b => b.onclick = () => { syncItems(); draft.items.splice(+b.dataset.del, 1); saveDraft(draft); renderBook(); });
+    $('#showPicker') && ($('#showPicker').onclick = () => { $('#picker').hidden = false; $('#showPicker').remove(); });
+    $('#items').addEventListener('change', () => { syncItems(); saveDraft(draft); });
+  } else if (s === 1 || s === 2) {
+    $(s === 1 ? '#contact' : '#bank').addEventListener('input', () => syncAll());
+  }
+  $$('[data-goto]').forEach(b => b.onclick = () => { draft.step = +b.dataset.goto; saveDraft(draft); renderBook(); window.scrollTo(0, 0); });
+  $('#prev') && ($('#prev').onclick = () => { syncAll(); draft.step--; saveDraft(draft); renderBook(); window.scrollTo(0, 0); });
+  $('#next').onclick = async () => {
+    syncAll();
+    const msg = validateStep(s);
+    if (msg) { $('#err').textContent = msg; return; }
+    if (s < 3) { draft.step++; saveDraft(draft); renderBook(); window.scrollTo(0, 0); return; }
+    if (!$('#agree').checked) { $('#err').textContent = '請勾選同意使用者條款'; return; }
+    const btn = $('#next'); btn.disabled = true; btn.textContent = '送出中…';
+    try {
+      const c = draft.contact;
+      const { order } = await api('createOrder', { order: {
+        ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: c.idNo.toUpperCase(), slot: c.slot || '不指定',
+        items: draft.items, bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
+      store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
+      renderSuccess(order);
+    } catch (e) {
+      $('#err').textContent = e.message; btn.disabled = false; btn.textContent = '確認送出';
+    }
+  };
+}
+
+function renderSuccess(o) {
+  window.scrollTo(0, 0);
+  app.innerHTML = `<div class="narrow rise"><div class="card center" style="margin-top:28px;padding:36px 24px">
+    <div class="ok-mark">✓</div>
+    <h2 class="card-title" style="font-size:24px">預約成功</h2>
+    <p class="muted" style="margin:6px 0 18px">訂單編號 <b style="color:var(--ink)">${esc(o.id)}</b><br>確認信已寄到 ${esc(o.email)}</p>
+    <div class="note" style="text-align:left;margin-bottom:20px"><b>接下來</b><ul>
+      <li>黑貓會在 1–3 個工作天內與您聯繫上門收件</li>
+      <li>請先包裝好，並確認已登出 Apple ID、取出 SIM 卡</li>
+      <li>每一步進度都會寄信通知，也可隨時回來查詢</li></ul></div>
+    <button class="btn btn-dark btn-block" onclick="go('order/${encodeURIComponent(o.id)}')">查看收購進度</button>
+    <a class="btn btn-ghost btn-block" style="margin-top:10px" href="${esc(CFG.OA_URL)}">加入 LINE 好友，有問題直接問</a>
+  </div></div>`;
+}
+
+/* ============================== 我的訂單 ============================== */
+async function renderOrders() {
+  app.innerHTML = `<div class="narrow"><div class="page-head"><h1>收購進度</h1><p>您用此 LINE 帳號預約的訂單</p></div><div id="list">${spinner()}</div></div>`;
+  try {
+    const { orders } = await api('listOrders');
+    const list = $('#list');
+    if (!orders.length) { list.innerHTML = `<div class="card empty">目前還沒有收購訂單<br><br><button class="btn btn-dark" onclick="go('book')">立即預約收購</button></div>`; return; }
+    list.innerHTML = orders.map((o, n) => {
+      const first = o.items[0] || {};
+      return `<button class="order-card rise" style="animation-delay:${n * 40}ms" data-id="${esc(o.id)}">
+        <div class="top"><span class="t">${esc(itemTitle(first))}${o.items.length > 1 ? `<span class="muted small"> 等 ${o.items.length} 項</span>` : ''}</span>${badge(o.status)}</div>
+        <div class="meta"><span>${esc(o.id)}</span><span>更新 ${esc((o.updatedAt || '').slice(5))}</span></div>
+        <div class="mini-bar" style="--c:${statusColor(o.status)}"><i style="width:${progressPct(o.status)}%"></i></div>
+      </button>`;
+    }).join('');
+    $$('[data-id]', list).forEach(b => b.onclick = () => go('order/' + encodeURIComponent(b.dataset.id)));
+  } catch (e) { $('#list').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; }
+}
+
+/* ============================== 訂單明細 ============================== */
+const STATUS_TEXT = {
+  '已預約': '黑貓物流會在 1–3 個工作天內與您聯繫上門收件，請先包裝好商品。',
+  '已安排取件': '已安排物流上門收件，請準備好包裝完成的商品。',
+  '已取件': '商品運送中，送達後我們會立即檢測。',
+  '檢測中': '技術人員檢測中，約 3 個工作天內完成報價。',
+  '已報價': '檢測完成！請確認回收報價。',
+  '客戶同意': '感謝您的確認，款項將於 2 個工作天內匯入。',
+  '已付款': '款項已匯出，交易完成，感謝您的支持！',
+  '客戶不同意': '已收到您的回覆，我們會盡快將商品寄回。',
+  '退回寄送中': '商品已寄回，請留意物流通知。',
+  '已退回': '商品已退回完成。',
+  '已取消': '此預約已取消。',
+};
+
+async function renderDetail(id) {
+  app.innerHTML = `<div class="narrow">${spinner()}</div>`;
+  try { const { order } = await api('getOrder', { id }); drawDetail(order); }
+  catch (e) { app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">${esc(e.message)}<br><br><button class="link" onclick="go('orders')">回到我的訂單</button></div></div>`; }
+}
+
+function drawDetail(o) {
+  const c = statusColor(o.status);
+  const bankForm = `<label class="field"><span>銀行<em>*</em></span><input class="input" id="bName" list="banks2" placeholder="例：822 中國信託"><datalist id="banks2">${BANKS.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
+    <div class="grid2"><label class="field"><span>分行</span><input class="input" id="bBranch"></label><label class="field"><span>戶名<em>*</em></span><input class="input" id="bHolder" placeholder="需與回收者同名"></label></div>
+    <label class="field"><span>帳號<em>*</em></span><input class="input" id="bAcc" inputmode="numeric"></label>`;
+  app.innerHTML = `<div class="narrow rise" style="padding-top:20px">
+    <button class="link" onclick="go('orders')">‹ 我的訂單</button>
+    <div class="status-hero" style="--c:${c};margin-top:10px">
+      <div class="id">訂單 ${esc(o.id)}</div>
+      <h2><i></i>${esc((STATUS_META[o.status] || {}).label || o.status)}</h2>
+      <p>${esc(STATUS_TEXT[o.status] || '')}</p>
+      ${stepperHTML(o.status)}
+    </div>
+
+    ${o.status === '已報價' ? `<div class="card quote-card">
+      <div class="muted small" style="font-weight:600">檢測後回收價</div>
+      <div class="price"><small>NT$</small>${money(o.quote)}</div>
+      ${o.quoteNote ? `<p style="margin:0 0 16px;white-space:pre-line">${esc(o.quoteNote)}</p>` : ''}
+      ${o.hasBank ? `<div class="note" style="margin-bottom:16px">款項將匯入：${esc(o.bank.bankName)} ${esc(o.bank.bankBranch)}　${esc(o.bank.bankHolder)}　${esc(o.bank.bankAccount)}</div>` : `<p class="small muted" style="margin:0 0 12px">請填寫匯款帳戶，同意後 2 個工作天內匯款</p>${bankForm}`}
+      <div class="err" id="qerr"></div>
+      <button class="btn btn-dark btn-block" id="accept">同意報價，請匯款</button>
+      <button class="btn btn-ghost btn-block" id="reject" style="margin-top:10px">不同意，請寄回商品</button>
+      <p class="small muted center" style="margin:12px 0 0">依使用者條款 6.3，不同意報價的退回運費由使用者負擔</p>
+    </div>` : ''}
+
+    ${['客戶同意', '已付款'].includes(o.status) && o.quote ? `<div class="card"><div class="muted small" style="font-weight:600">回收金額</div><div class="price" style="font-size:34px"><small>NT$</small>${money(o.quote)}</div>${o.bank ? `<div class="small muted">匯入 ${esc(o.bank.bankName)}　${esc(o.bank.bankAccount)}</div>` : ''}</div>` : ''}
+
+    ${o.tracking ? `<div class="card"><h2 class="card-title" style="font-size:16px">物流資訊</h2><dl class="kv" style="margin-top:12px"><dt>物流公司</dt><dd>${esc(o.carrier || '黑貓宅急便')}</dd><dt>託運單號</dt><dd>${esc(o.tracking)}<button class="copy" data-copy="${esc(o.tracking)}">複製</button></dd></dl></div>` : ''}
+
+    <div class="card">
+      <h2 class="card-title" style="font-size:16px;margin-bottom:14px">進度紀錄</h2>
+      <ul class="timeline" style="--c:${c}">${[...o.history].reverse().map(h => `<li><b>${esc((STATUS_META[h.status] || {}).label || h.status)}</b><time>${esc(h.time)}</time></li>`).join('')}</ul>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title" style="font-size:16px;margin-bottom:14px">回收商品</h2>
+      ${o.items.map(it => `<div class="dev">${(CATEGORY_INFO[it.category] || CATEGORY_INFO['其他']).icon}<div><b>${esc(itemTitle(it))}</b><span>${esc(itemSummary(it))}</span></div></div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h2 class="card-title" style="font-size:16px;margin-bottom:14px">預約資料</h2>
+      <dl class="kv">
+        <dt>建立時間</dt><dd>${esc(o.createdAt)}</dd>
+        <dt>聯絡人</dt><dd>${esc(o.name)}　${esc(o.phone)}</dd>
+        <dt>Email</dt><dd>${esc(o.email)}</dd>
+        <dt>收件地址</dt><dd>${esc(o.city)}${esc(o.address)}</dd>
+        <dt>收件時段</dt><dd>${esc(o.slot)}</dd>
+        ${o.note ? `<dt>備註</dt><dd>${esc(o.note)}</dd>` : ''}
+      </dl>
+    </div>
+
+    <div class="contact-row">
+      <a class="btn btn-line" href="${esc(CFG.OA_URL)}">LINE 詢問</a>
+      <a class="btn btn-ghost" href="tel:${esc(CFG.PHONE)}">撥打客服</a>
+    </div>
+    ${o.status === '已預約' ? '<button class="btn btn-danger btn-block" id="cancel" style="margin-top:12px">取消預約</button>' : ''}
+  </div>`;
+
+  $$('[data-copy]').forEach(b => b.onclick = () => { navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}); });
+  const run = async (btn, fn) => { btn.disabled = true; try { await fn(); } catch (e) { toast(e.message); btn.disabled = false; } };
+  if ($('#accept')) {
+    $('#accept').onclick = () => {
+      let bank = null;
+      if (!o.hasBank) {
+        bank = { bankName: $('#bName').value.trim(), bankBranch: $('#bBranch').value.trim(), bankHolder: $('#bHolder').value.trim(), bankAccount: $('#bAcc').value.trim() };
+        if (!bank.bankName || !bank.bankHolder || !/^\d[\d-]{5,}$/.test(bank.bankAccount)) { $('#qerr').textContent = '請完整填寫銀行、戶名、帳號'; return; }
+      }
+      if (!confirm(`確定同意以 NT$ ${money(o.quote)} 回收？`)) return;
+      run($('#accept'), async () => { const r = await api('respondQuote', { id: o.id, accept: true, bank }); toast('已確認，我們會盡快匯款'); drawDetail(r.order); window.scrollTo(0, 0); });
+    };
+    $('#reject').onclick = () => {
+      if (!confirm('確定不同意報價？我們會將商品寄回（退回運費由使用者負擔）。')) return;
+      run($('#reject'), async () => { const r = await api('respondQuote', { id: o.id, accept: false }); toast('已收到，將安排寄回'); drawDetail(r.order); window.scrollTo(0, 0); });
+    };
+  }
+  if ($('#cancel')) $('#cancel').onclick = () => {
+    if (!confirm('確定要取消這筆預約？')) return;
+    run($('#cancel'), async () => { const r = await api('cancelOrder', { id: o.id }); toast('已取消預約'); drawDetail(r.order); });
+  };
+}
+
+/* ============================== 啟動 ============================== */
+(async function init() {
+  $('#shopName').textContent = CFG.SHOP_NAME;
+  $('#footInfo').innerHTML = `${esc(CFG.SHOP_NAME)}・宅配收購<br><a href="${esc(CFG.OA_URL)}">LINE 官方帳號</a>　·　<a href="tel:${esc(CFG.PHONE)}">${esc(CFG.PHONE)}</a>`;
+  try { await initLine(); }
+  catch (e) { app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">LINE 初始化失敗：${esc(e.message)}</div></div>`; return; }
+  // LIFF / 通知信連結使用 ?page=…&id=…，轉成站內路由
+  const q = new URLSearchParams(location.search);
+  const page = q.get('page'), id = q.get('id');
+  if (page) {
+    const hash = page === 'detail' && id ? 'order/' + encodeURIComponent(id) : page;
+    history.replaceState(null, '', location.pathname + (MOCK ? '?mock=1' : '') + '#/' + hash);
+  }
+  route();
+})();
+</script>
+</body>
+</html>
