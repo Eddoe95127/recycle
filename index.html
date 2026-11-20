@@ -565,7 +565,7 @@ function drawDetail(o) {
         $('#idDrop').classList.add('has');
       } catch (err) { $('#qerr').textContent = err.message; }
     };
-    $('#accept').onclick = () => {
+    $('#accept').onclick = async () => {
       let bank = null;
       if (!o.hasBank) {
         bank = { bankName: $('#bName').value.trim(), bankBranch: $('#bBranch').value.trim(), bankHolder: $('#bHolder').value.trim(), bankAccount: $('#bAcc').value.trim() };
@@ -574,16 +574,16 @@ function drawDetail(o) {
       const idNo = $('#idNo').value.trim().toUpperCase();
       if (!/^[A-Z][12890ABCD]\d{8}$/.test(idNo)) { $('#qerr').textContent = '請填寫正確的身分證字號'; $('#idNo').focus(); return; }
       if (!idPhoto) { $('#qerr').textContent = '請上傳身分證正面照片'; return; }
-      if (!confirm(`確定同意以 NT$ ${money(o.quote)} 回收？`)) return;
+      if (!(await ask(`確定同意以 NT$ ${money(o.quote)} 回收？`, '同意'))) return;
       run($('#accept'), async () => { const r = await api('respondQuote', { id: o.id, accept: true, bank, idNo, idPhoto }); toast('已確認，我們會盡快匯款'); drawDetail(r.order); window.scrollTo(0, 0); });
     };
-    $('#reject').onclick = () => {
-      if (!confirm('確定不同意報價？我們會將商品寄回（退回運費由使用者負擔）。')) return;
+    $('#reject').onclick = async () => {
+      if (!(await ask('確定不同意報價？\n我們會將商品寄回（退回運費由使用者負擔）。', '不同意'))) return;
       run($('#reject'), async () => { const r = await api('respondQuote', { id: o.id, accept: false }); toast('已收到，將安排寄回'); drawDetail(r.order); window.scrollTo(0, 0); });
     };
   }
-  if ($('#cancel')) $('#cancel').onclick = () => {
-    if (!confirm('確定要取消這筆預約？')) return;
+  if ($('#cancel')) $('#cancel').onclick = async () => {
+    if (!(await ask('確定要取消這筆預約？', '取消預約', '返回'))) return;
     run($('#cancel'), async () => { const r = await api('cancelOrder', { id: o.id }); toast('已取消預約'); drawDetail(r.order); });
   };
 }

@@ -438,13 +438,13 @@ document.addEventListener('change', async e => {
     drawReport();
   }
 });
-document.addEventListener('click', e => {
+document.addEventListener('click', async e => {
   const t = e.target;
   if (!t.closest('#repEd') || !t.closest('[data-i]')) return;
   const it = itemOf(t);
   if (t.dataset.ck !== undefined) { it.checks[+t.dataset.ck].r = t.dataset.r; const row = t.closest('.ck-row'); row.className = 'ck-row ' + t.dataset.r; $$('button', row).forEach(b => b.classList.toggle('on', b === t)); }
   else if (t.matches('[data-allok]')) { it.checks.forEach(c => c.r = 'ok'); drawReport(); }
-  else if (t.dataset.delph !== undefined) { if (!confirm('刪除這張照片？')) return; const [p] = it.photos.splice(+t.dataset.delph, 1); api('adminDeletePhoto', { fileId: p.id }).catch(() => {}); drawReport(); }
+  else if (t.dataset.delph !== undefined) { if (!(await ask('刪除這張照片？', '刪除'))) return; const [p] = it.photos.splice(+t.dataset.delph, 1); api('adminDeletePhoto', { fileId: p.id }).catch(() => {}); drawReport(); }
   else if (t.matches('[data-addd]')) { it.deductions.push({ reason: '', amount: '' }); drawReport(); $$(`#repEd [data-i="${rep.items.indexOf(it)}"] [data-dr]`).pop()?.focus(); }
   else if (t.dataset.deld !== undefined) { it.deductions.splice(+t.dataset.deld, 1); drawReport(); }
 });
@@ -454,7 +454,7 @@ async function saveReport(submit) {
   if (submit) {
     if (!rep.total) { $('#reErr').textContent = '請先填寫基本收購價'; return; }
     const photos = rep.items.reduce((s, it) => s + it.photos.length, 0);
-    if (!confirm(`送出檢測報告給客戶？\n\n回收價：NT$ ${money(rep.total)}\n照片：${photos} 張\n\n客戶會收到含照片的檢測估價報告 Email，並可在網站上同意或不同意。`)) return;
+    if (!(await ask(`送出檢測報告給客戶？\n\n回收價：NT$ ${money(rep.total)}\n照片：${photos} 張\n\n客戶會收到含照片的檢測估價報告 Email，並可在網站上同意或不同意。`, '送出'))) return;
   }
   const btns = $$('#reSave, #reSubmit'); btns.forEach(b => b.disabled = true);
   try {
@@ -477,7 +477,7 @@ async function save(o, status) {
   };
   if (status && status !== o.status) fields.status = status;
   if (fields.status === '已報價' && !fields.quote) { $('#dErr').textContent = '請先填寫報價金額'; $('#fQuote').focus(); return; }
-  if (fields.status && !confirm(`將 ${o.id} 改為「${fields.status}」${$('#notify').checked ? '並通知客戶' : '（不通知客戶）'}？`)) return;
+  if (fields.status && !(await ask(`將 ${o.id} 改為「${fields.status}」${$('#notify').checked ? '並通知客戶' : '（不通知客戶）'}？`))) return;
   const btns = $$('#save, #nextBtn'); btns.forEach(b => b.disabled = true);
   try {
     const r = await api('adminUpdate', { id: o.id, fields, notify: $('#notify').checked });

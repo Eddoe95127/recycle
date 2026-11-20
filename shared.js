@@ -250,6 +250,21 @@ const opts = (list, val, placeholder) => (placeholder ? `<option value="">${esc(
 const chips = (name, list, val, multi) => `<div class="chips">${list.map(v => `<label class="chip"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(v)}" ${(multi ? (val || []).includes(v) : v === val) ? 'checked' : ''}><span>${esc(v)}</span></label>`).join('')}</div>`;
 const badge = s => `<span class="badge" style="--c:${statusColor(s)}">${esc((STATUS_META[s] || {}).label || s)}</span>`;
 const spinner = () => '<div class="spinner"></div>';
+/** 網站自己的確認視窗（取代瀏覽器的 confirm，部分 App 內建瀏覽器會封鎖 confirm） */
+function ask(message, okText = '確定', cancelText = '取消') {
+  return new Promise(res => {
+    const d = document.createElement('div');
+    d.className = 'ask-wrap';
+    d.innerHTML = `<div class="ask-box" role="dialog" aria-modal="true"><p>${esc(message).replace(/\n/g, '<br>')}</p>
+      <div class="ask-btns"><button type="button" class="btn btn-ghost" data-v="0">${esc(cancelText)}</button><button type="button" class="btn btn-dark" data-v="1">${esc(okText)}</button></div></div>`;
+    const done = v => { d.remove(); document.removeEventListener('keydown', key); res(v); };
+    const key = e => { if (e.key === 'Escape') done(false); if (e.key === 'Enter') done(true); };
+    d.onclick = e => { const v = e.target.dataset && e.target.dataset.v; if (e.target === d) done(false); else if (v !== undefined) done(v === '1'); };
+    document.addEventListener('keydown', key);
+    document.body.appendChild(d);
+    d.querySelector('[data-v="1"]').focus();
+  });
+}
 function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); } t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
