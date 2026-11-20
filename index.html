@@ -142,14 +142,16 @@ $$('.nav-links button').forEach(b => b.onclick = () => go(b.dataset.nav));
 
 function needLogin(page, id) {
   if (isLoggedIn()) return true;
-  app.innerHTML = `<div class="narrow rise"><div class="card center" style="margin-top:40px;padding:36px 24px">
-    <h2 class="card-title">請先用 LINE 登入</h2>
-    <p class="muted">登入後可預約宅配收購、隨時查詢檢測與匯款進度。</p>
-    <button class="btn btn-line btn-block" id="loginBtn">使用 LINE 登入</button>
-  </div></div>`;
-  $('#loginBtn').onclick = () => login(id ? { page, id } : { page });
+  mountLogin(app, {
+    title: '登入以繼續',
+    sub: '登入後可預約宅配收購，隨時查詢檢測與匯款進度',
+    lineParams: id ? { page, id } : { page },
+    onDone: route,
+  });
   return false;
 }
+// 登入失效（例如過期）時回到登入畫面
+window.addEventListener('unhandledrejection', e => { if (e.reason && e.reason.auth) route(); });
 
 /* ============================== 首頁 ============================== */
 function renderHome() {
@@ -309,6 +311,7 @@ function validateStep(step) {
 
 function renderBook() {
   draft = loadDraft();
+  if (!draft.contact.email && auth.user && auth.user.email) draft.contact.email = auth.user.email;
   const labels = ['回收商品', '聯絡與取件', '匯款帳戶', '確認送出'];
   const s = draft.step;
   let body = '';
@@ -415,6 +418,7 @@ function renderBook() {
       store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
       renderSuccess(order);
     } catch (e) {
+      if (e.auth) return route(); // 資料已暫存，重新登入後可直接送出
       $('#err').textContent = e.message; btn.disabled = false; btn.textContent = '確認送出';
     }
   };
@@ -437,7 +441,9 @@ function renderSuccess(o) {
 
 /* ============================== 我的訂單 ============================== */
 async function renderOrders() {
-  app.innerHTML = `<div class="narrow"><div class="page-head"><h1>收購進度</h1><p>您用此 LINE 帳號預約的訂單</p></div><div id="list">${spinner()}</div></div>`;
+  const u = auth.user || {};
+  const who = u.via === 'LINE' || !u.via ? 'LINE 帳號' : (u.email || '此帳號');
+  app.innerHTML = `<div class="narrow"><div class="page-head"><h1>收購進度</h1><p>${esc(who)} 預約的訂單　<button class="link" onclick="logout()">登出</button></p></div><div id="list">${spinner()}</div></div>`;
   try {
     const { orders } = await api('listOrders');
     const list = $('#list');
@@ -451,7 +457,7 @@ async function renderOrders() {
       </button>`;
     }).join('');
     $$('[data-id]', list).forEach(b => b.onclick = () => go('order/' + encodeURIComponent(b.dataset.id)));
-  } catch (e) { $('#list').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; }
+  } catch (e) { if (e.auth) return route(); $('#list').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; }
 }
 
 /* ============================== 訂單明細 ============================== */
@@ -472,7 +478,7 @@ const STATUS_TEXT = {
 async function renderDetail(id) {
   app.innerHTML = `<div class="narrow">${spinner()}</div>`;
   try { const { order } = await api('getOrder', { id }); drawDetail(order); }
-  catch (e) { app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">${esc(e.message)}<br><br><button class="link" onclick="go('orders')">回到我的訂單</button></div></div>`; }
+  catch (e) { if (e.auth) return route(); app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">${esc(e.message)}<br><br><button class="link" onclick="go('orders')">回到我的訂單</button></div></div>`; }
 }
 
 function drawDetail(o) {

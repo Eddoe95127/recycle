@@ -143,30 +143,127 @@ function progressPct(status) {
   return Math.round(((i < 0 ? 0 : i) + 1) / steps.length * 100);
 }
 
-/* ---------- LINE 登入 + API ---------- */
+/* ---------- 登入（LINE / Google / Email 驗證碼）+ API ---------- */
 let liffReady = false;
+let mockLoggedIn = !new URLSearchParams(location.search).has('login'); // 預覽登入畫面：?mock=1&login=1
+const auth = {
+  get session() { return store.get('session'); },
+  get user() { return store.get('sessionUser') || (liffReady && !MOCK && liff.isLoggedIn() ? { via: 'LINE' } : null); },
+  save(r) { store.set('session', r.session); store.set('sessionUser', r.user); },
+  clear() { try { localStorage.removeItem('session'); localStorage.removeItem('sessionUser'); } catch (e) {} },
+};
 async function initLine() {
   if (MOCK) { liffReady = true; return; }
   await liff.init({ liffId: CFG.LIFF_ID });
   liffReady = true;
 }
-const isLoggedIn = () => MOCK || (liffReady && liff.isLoggedIn());
+const isLoggedIn = () => MOCK ? mockLoggedIn : (!!auth.session || (liffReady && liff.isLoggedIn()));
 function login(params) {
   if (MOCK) return;
   const url = new URL(location.href);
   url.search = new URLSearchParams(params || {}).toString();
+  url.hash = '';
   liff.login({ redirectUri: url.toString() });
 }
-async function lineProfile() {
-  if (MOCK) return { displayName: '王小明', userId: 'Umock' };
-  try { return await liff.getProfile(); } catch (e) { return {}; }
+function logout() {
+  auth.clear();
+  if (MOCK) { mockLoggedIn = false; location.reload(); return; }
+  if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
+  location.reload();
 }
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
-  const res = await fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify({ action, accessToken: liff.getAccessToken(), ...data }) });
+  const body = { action, ...data };
+  if (!NO_AUTH.includes(action)) {
+    if (auth.session) body.session = auth.session;
+    else if (liffReady && liff.isLoggedIn()) body.accessToken = liff.getAccessToken();
+  }
+  const res = await fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify(body) });
   const j = await res.json();
-  if (!j.ok) throw new Error(j.error || '發生錯誤，請稍後再試');
+  if (!j.ok) {
+    if (j.auth) auth.clear();
+    const e = new Error(j.error || '發生錯誤，請稍後再試'); e.auth = !!j.auth; throw e;
+  }
   return j;
+}
+
+/* ---------- 登入畫面 ---------- */
+const LINE_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8.1-6C21.4 14.3 22 12.7 22 11c0-4.4-4.5-8-10-8z"/></svg>';
+const G_ICON = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function loadGsi() {
+  return new Promise((res, rej) => {
+    if (window.google && google.accounts && google.accounts.id) return res();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+/**
+ * 顯示登入畫面。opts: { title, sub, lineParams, onDone }
+ * 在 LINE App 裡會自動是 LINE 登入，不會出現這個畫面。
+ */
+function mountLogin(el, opts) {
+  const hasGoogle = MOCK || !!CFG.GOOGLE_CLIENT_ID;
+  el.innerHTML = `<div class="narrow" style="padding-top:36px"><div class="card login-card rise">
+    <h2 class="card-title" style="font-size:22px">${esc(opts.title)}</h2>
+    <p class="muted" style="margin:6px 0 24px;font-size:15px">${esc(opts.sub)}</p>
+    <button class="btn btn-line btn-block" id="lgLine">${LINE_ICON}使用 LINE 登入</button>
+    ${hasGoogle ? '<div id="lgGoogle" class="g-wrap"></div>' : ''}
+    <div class="divider"><span>或用 Email 收驗證碼登入</span></div>
+    <div id="lgEmail">
+      <input class="input" id="lgMail" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email">
+      <button class="btn btn-ghost btn-block" id="lgSend" style="margin-top:10px">寄送驗證碼</button>
+    </div>
+    <div class="err" id="lgErr"></div>
+    <p class="small muted" style="margin:14px 0 0">用 Google 或 Email 登入時，同一個 Email 會看到同一批訂單</p>
+  </div></div>`;
+  const err = m => { $('#lgErr').textContent = m || ''; };
+  const done = r => { if (MOCK) mockLoggedIn = true; else auth.save(r); opts.onDone(); };
+  $('#lgLine').onclick = () => MOCK ? done({}) : login(opts.lineParams);
+
+  if (hasGoogle) {
+    const box = $('#lgGoogle');
+    if (MOCK) {
+      box.innerHTML = `<button class="btn btn-ghost btn-block" id="gMock">${G_ICON}使用 Google 登入</button>`;
+      $('#gMock').onclick = async () => done(await api('loginGoogle', { credential: 'mock' }));
+    } else {
+      loadGsi().then(() => {
+        google.accounts.id.initialize({
+          client_id: CFG.GOOGLE_CLIENT_ID,
+          callback: async resp => { err(); try { done(await api('loginGoogle', { credential: resp.credential })); } catch (e) { err(e.message); } },
+        });
+        google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', locale: 'zh-TW', width: Math.min(400, box.clientWidth || 320) });
+      }).catch(() => { box.innerHTML = ''; });
+    }
+  }
+
+  const askCode = email => {
+    $('#lgEmail').innerHTML = `<p class="small muted" style="margin:0 0 10px">驗證碼已寄到 <b style="color:var(--ink)">${esc(email)}</b><br>10 分鐘內有效，沒收到請看垃圾郵件匣</p>
+      <input class="input" id="lgCode" inputmode="numeric" maxlength="6" placeholder="6 位數驗證碼" autocomplete="one-time-code" style="letter-spacing:.35em;text-align:center;font-size:22px;font-weight:700">
+      <button class="btn btn-dark btn-block" id="lgVerify" style="margin-top:10px">登入</button>
+      <button class="link" id="lgBack" style="display:block;margin:10px auto 0">換一個 Email</button>`;
+    $('#lgCode').focus();
+    const verify = async () => {
+      const code = $('#lgCode').value.replace(/\D/g, '');
+      if (code.length !== 6) return err('請輸入 6 位數驗證碼');
+      const b = $('#lgVerify'); b.disabled = true; err();
+      try { done(await api('emailVerify', { email, code })); } catch (e) { err(e.message); b.disabled = false; }
+    };
+    $('#lgVerify').onclick = verify;
+    $('#lgCode').oninput = e => { if (e.target.value.replace(/\D/g, '').length === 6) verify(); };
+    $('#lgBack').onclick = () => mountLogin(el, opts);
+  };
+  const send = async () => {
+    const email = $('#lgMail').value.trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return err('請輸入正確的 Email');
+    const b = $('#lgSend'); b.disabled = true; b.textContent = '寄送中…'; err();
+    try { await api('emailStart', { email }); askCode(email); }
+    catch (e) { err(e.message); b.disabled = false; b.textContent = '寄送驗證碼'; }
+  };
+  $('#lgSend').onclick = send;
+  $('#lgMail').onkeydown = e => { if (e.key === 'Enter') send(); };
 }
 
 /* ---------- 假資料（網址加 ?mock=1 預覽，不連 LINE、不寫入資料） ---------- */
@@ -197,6 +294,9 @@ async function mockApi(action, d) {
   const setStatus = (o, s) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s }); } };
   const pub = o => ({ ...o, idNo: o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3), hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history] });
   switch (action) {
+    case 'loginGoogle': return { ok: true, session: 'mock', user: { name: 'Google 用戶', email: 'ming@gmail.com', via: 'Google' } };
+    case 'emailStart': return { ok: true };
+    case 'emailVerify': if (d.code !== '123456') throw new Error('驗證碼不正確（預覽請輸入 123456）'); return { ok: true, session: 'mock', user: { name: d.email, email: d.email, via: 'Email' } };
     case 'listOrders': return { ok: true, orders: mockDB.filter(o => o.lineId === 'Umock').reverse().map(pub) };
     case 'getOrder': return { ok: true, order: pub(find(d.id)) };
     case 'createOrder': {

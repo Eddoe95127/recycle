@@ -70,7 +70,7 @@
 <header class="nav">
   <div class="wrap">
     <a class="logo" href="admin.html"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 5h3"/></svg></span><span id="shopName">iPhone收購中心</span><span class="tag">後台</span></a>
-    <div class="nav-right"><span id="who"></span><button class="btn btn-ghost btn-sm" id="refresh" hidden>重新整理</button></div>
+    <div class="nav-right"><span id="who"></span><button class="btn btn-ghost btn-sm" id="refresh" hidden>重新整理</button><button class="link" id="logout" hidden onclick="logout()">登出</button></div>
   </div>
 </header>
 <main class="wrap" id="app"><div class="spinner"></div></main>
@@ -102,28 +102,36 @@ const thisMonth = () => { const d = new Date(); return d.getFullYear() + '-' + S
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
   try { await initLine(); } catch (e) { app.innerHTML = `<div class="card gate empty">LINE 初始化失敗：${esc(e.message)}</div>`; return; }
+  start();
+})();
+
+async function start() {
   if (!isLoggedIn()) {
-    app.innerHTML = `<div class="card gate center"><h2 class="card-title">收購後台</h2><p class="muted">請用管理者的 LINE 帳號登入</p><button class="btn btn-line btn-block" id="lg">使用 LINE 登入</button></div>`;
-    $('#lg').onclick = () => login(MOCK ? { mock: 1 } : {});
+    mountLogin(app, { title: '收購後台', sub: '請用管理者帳號登入（LINE、Google 或 Email 驗證碼）', lineParams: MOCK ? { mock: 1 } : {}, onDone: start });
     return;
   }
+  app.innerHTML = '<div class="spinner"></div>';
   try {
     const me = await api('adminWhoami');
     if (!me.isAdmin) {
+      const key = me.via === 'LINE' ? 'ADMIN_LINE_IDS' : 'ADMIN_EMAIL';
       app.innerHTML = `<div class="card gate"><h2 class="card-title">尚未開通後台權限</h2>
-        <p class="muted">${esc(me.name)} 您好，請把下面這串 LINE ID 加到 Apps Script「指令碼屬性」的 <b>ADMIN_LINE_IDS</b>（多人用逗號分隔），再重新整理此頁。</p>
-        <div class="uid">${esc(me.userId)}</div><button class="btn btn-dark btn-sm" id="cp">複製 ID</button></div>`;
+        <p class="muted">${esc(me.name)} 您好，請把下面這個${me.via === 'LINE' ? ' LINE ID' : ' Email'} 加到 Apps Script「指令碼屬性」的 <b>${key}</b>（多個用逗號分隔），再重新整理此頁。</p>
+        <div class="uid">${esc(me.userId)}</div>
+        <button class="btn btn-dark btn-sm" id="cp">複製</button> <button class="btn btn-ghost btn-sm" onclick="logout()">換帳號登入</button></div>`;
       $('#cp').onclick = () => navigator.clipboard?.writeText(me.userId).then(() => toast('已複製'));
       return;
     }
     $('#who').textContent = me.name;
     $('#refresh').hidden = false;
     $('#refresh').onclick = () => load(true);
+    $('#logout').hidden = false;
     await load();
   } catch (e) {
+    if (e.auth) return start();
     app.innerHTML = `<div class="card gate empty">${esc(e.message)}</div>`;
   }
-})();
+}
 
 async function load(keepOpen) {
   if (!orders.length) app.innerHTML = '<div class="spinner"></div>';
@@ -132,7 +140,7 @@ async function load(keepOpen) {
     renderBoard();
     if (keepOpen && openId) openDrawer(openId);
     if (keepOpen) toast('已更新');
-  } catch (e) { toast(e.message); }
+  } catch (e) { if (e.auth) return start(); toast(e.message); }
 }
 
 /* ============================== 列表 ============================== */
@@ -277,6 +285,7 @@ async function save(o, status) {
     renderBoard();
     openDrawer(o.id);
   } catch (e) {
+    if (e.auth) { closeDrawer(); return start(); }
     $('#dErr').textContent = e.message; btns.forEach(b => b.disabled = false);
   }
 }
