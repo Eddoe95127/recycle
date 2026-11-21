@@ -59,7 +59,7 @@ async function repairPage(refresh) {
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
       <div class="stat" style="--c:#FF9F0A"><div class="n num">${cnt('待維修')}</div><div class="l">待維修</div></div>
       <div class="stat" style="--c:#0A84FF"><div class="n num">${cnt('維修中')}</div><div class="l">維修中</div></div>
-      <div class="stat" style="--c:#30D158"><div class="n num">${cnt('待取件')}</div><div class="l">待取件</div></div>
+      <div class="stat" style="--c:#30D158"><div class="n num">${cnt('待取件') + cnt('無法維修')}</div><div class="l">待取件${cnt('無法維修') ? `（含無法維修 ${cnt('無法維修')}）` : ''}</div></div>
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${repairs.filter(o => o.status === '已取件' && (o.pickupAt || '').slice(0, 10) === today).length}</div><div class="l">今日取件</div></div>
     </div>
     ${P('repair') ? '<a class="btn btn-dark btn-block" href="#repair/new" style="margin-bottom:14px">＋ 新增維修單</a>' : ''}
@@ -79,7 +79,7 @@ function repairMatches(o, q) {
 }
 function drawRepairList() {
   const q = rpQuery.trim();
-  const list = repairs.filter(o => repairMatches(o, q) && (q || rpStatus === 'all' || (rpStatus === 'open' ? ['待維修', '維修中', '待取件', '無法維修'].includes(o.status) : o.status === rpStatus)));
+  const list = repairs.filter(o => repairMatches(o, q) && (q || rpStatus === 'all' || (rpStatus === 'open' ? ['待維修', '維修中', '待取件', '無法維修'].includes(o.status) : rpStatus === '待取件' ? ['待取件', '無法維修'].includes(o.status) : o.status === rpStatus)));
   $('#rpTbl').innerHTML = (q ? `<p class="small muted" style="margin:0 4px 8px">搜尋「${esc(q)}」：找到 ${list.length} 筆維修紀錄（含所有狀態）</p>` : '')
     + (list.length ? `<table class="table"><thead><tr><th>維修單</th><th>客戶</th><th>機型／項目</th><th>狀態</th></tr></thead><tbody>
     ${list.map(o => `<tr data-rid="${esc(o.id)}"><td><b class="num">${esc(o.id)}</b><div class="sub">${esc(o.createdAt.slice(0, 16))}</div></td>
