@@ -57,18 +57,53 @@ const deviceOcr = (() => {
     return canvas;
   }
 
-  /** 連續掃描用：建立一次辨識引擎，重複使用 */
-  async function session() {
+  /** 黑白二值化（Otsu），字和底色分得更清楚 */
+  function binarize(canvas) {
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    const img = g.getImageData(0, 0, canvas.width, canvas.height), px = img.data, n = px.length / 4;
+    const hist = new Array(256).fill(0);
+    for (let i = 0; i < n; i++) hist[px[i * 4]]++;
+    let sum = 0; for (let v = 0; v < 256; v++) sum += v * hist[v];
+    let sumB = 0, wB = 0, best = 0, th = 128;
+    for (let v = 0; v < 256; v++) {
+      wB += hist[v]; if (!wB) continue;
+      const wF = n - wB; if (!wF) break;
+      sumB += v * hist[v];
+      const mB = sumB / wB, mF = (sum - sumB) / wF, between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > best) { best = between; th = v; }
+    }
+    for (let i = 0; i < n; i++) { const v = px[i * 4] > th ? 255 : 0; px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v; }
+    g.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  /** 只找 IMEI／序號（不需要中文標籤也找得到） */
+  function parseCodes(text) {
+    const r = parse(text);
+    let imei = r.imei, serial = r.serial && /^[A-Z0-9]{8,14}$/.test(r.serial) && /[A-Z]/.test(r.serial) && /\d/.test(r.serial) ? r.serial : '';
+    if (!serial) {
+      // Apple 序號：10 或 12 碼英數混合（不含 O、I），排除純數字（IMEI、ICCID、EID）
+      const tokens = text.toUpperCase().split(/[\s:：|,，;]+/).map(t => t.replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1'));
+      const ok = t => (t.length === 10 || t.length === 12) && (t.match(/[A-Z]/g) || []).length >= 2 && (t.match(/\d/g) || []).length >= 2;
+      serial = tokens.filter(ok).sort((a, b) => b.length - a.length)[0] || '';
+    }
+    return { imei, serial };
+  }
+
+  /** 連續掃描用：建立一次辨識引擎，重複使用。codes：只讀英數字（IMEI／序號），更快更準 */
+  async function session(opt = {}) {
     const api = await loadLibrary();
-    const worker = await api.createWorker(['eng','chi_tra'], api.OEM.LSTM_ONLY, {
+    const worker = await api.createWorker(opt.codes ? ['eng'] : ['eng','chi_tra'], api.OEM.LSTM_ONLY, {
       workerPath:new URL('worker.min.js',assets).href,
       corePath:new URL('tesseract-core-lstm.wasm.js',assets).href,
       langPath:assets.href,
       workerBlobURL:false,
     });
-    await worker.setParameters({ tessedit_pageseg_mode:api.PSM.SPARSE_TEXT });
+    await worker.setParameters(opt.codes
+      ? { tessedit_pageseg_mode:api.PSM.SINGLE_BLOCK, tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 :-/', preserve_interword_spaces:'1' }
+      : { tessedit_pageseg_mode:api.PSM.SPARSE_TEXT });
     return {
-      async read(canvas) { const r = await worker.recognize(canvas); return { ...parse(r.data.text), text: r.data.text }; },
+      async read(canvas) { const r = await worker.recognize(canvas); return { ...(opt.codes ? parseCodes(r.data.text) : parse(r.data.text)), text: r.data.text }; },
       end() { void worker.terminate(); },
     };
   }
@@ -167,5 +202,5 @@ const deviceOcr = (() => {
     }
   }
 
-  return { parse, recognize, session, enhance, luhn };
+  return { parse, parseCodes, recognize, session, enhance, binarize, luhn };
 })();

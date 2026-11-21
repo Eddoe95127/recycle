@@ -622,9 +622,9 @@ async function scanDevice(it) {
   w.className = 'scan-wrap';
   w.innerHTML = `<video playsinline muted autoplay></video>
     <div class="scan-frame"><i></i><i></i><i></i><i></i><div class="scan-line"></div></div>
-    <div class="scan-top"><b>把「設定 → 一般 → 關於本機」放進框內</b><span>型號、序號、IMEI 那幾行對準框框，手機拿穩、避免反光</span></div>
+    <div class="scan-top"><b>把 IMEI 或序號那一行對準框框</b><span>設定 → 一般 → 關於本機，或盒子上的標籤；靠近一點、拿穩、避免反光</span></div>
     <div class="scan-bottom">
-      <div class="scan-chips"><span data-c="model">型號</span><span data-c="imei">IMEI</span><span data-c="serial">序號</span></div>
+      <div class="scan-chips"><span data-c="imei">IMEI</span><span data-c="serial">序號</span></div>
       <p class="scan-msg">正在開啟相機…</p>
       <div class="scan-btns">
         <button type="button" class="btn scan-ghost" data-x>關閉</button>
@@ -635,13 +635,13 @@ async function scanDevice(it) {
   document.body.appendChild(w);
   const video = $('video', w), msg = t => { const m = $('.scan-msg', w); if (m) m.textContent = t; };
   let stream, eng, alive = true, last = null;
-  const found = { model: '', imei: '', serial: '' }, votes = {};
+  const found = { imei: '', serial: '' }, votes = {};
   const close = () => { alive = false; stream && stream.getTracks().forEach(t => t.stop()); eng && eng.end(); w.remove(); };
   $('[data-x]', w).onclick = close;
   $('[data-file]', w).onchange = e => { const f = e.target.files[0]; if (f) { close(); runOcr(f, it); } };
   const show = () => {
     Object.keys(found).forEach(k => $(`[data-c="${k}"]`, w).classList.toggle('ok', !!found[k]));
-    $('[data-use]', w).disabled = !(found.model || found.imei || found.serial);
+    $('[data-use]', w).disabled = !(found.imei || found.serial);
   };
   const finish = () => { const snap = last; close(); confirmOcr(it, { ...found }, snap); };
   $('[data-use]', w).onclick = finish;
@@ -657,7 +657,7 @@ async function scanDevice(it) {
     msg('無法開啟相機（請允許相機權限），可改用「從相簿選」照片辨識。'); return;
   }
   msg('正在載入辨識工具，第一次使用需要幾秒…');
-  try { eng = await deviceOcr.session(); } catch (e) { msg(e.message || '辨識工具載入失敗，請改用「從相簿選」'); return; }
+  try { eng = await deviceOcr.session({ codes: true }); } catch (e) { msg(e.message || '辨識工具載入失敗，請改用「從相簿選」'); return; }
   if (!alive) return eng.end();
   msg('掃描中…對準框框，保持不動');
   // 框框在影片上的位置 → 換算成影片原始像素
@@ -668,26 +668,43 @@ async function scanDevice(it) {
     const sx = Math.max(0, (fr.left - vr.left + ox) / k), sy = Math.max(0, (fr.top - vr.top + oy) / k);
     return [sx, sy, Math.min(vw - sx, fr.width / k), Math.min(vh - sy, fr.height / k)];
   };
+  // 有條碼辨識的裝置（例如 Android Chrome）也讀盒子上的條碼
+  let bd = null;
+  try { if ('BarcodeDetector' in window) bd = new BarcodeDetector({ formats: ['code_128', 'code_39', 'qr_code', 'data_matrix'] }); } catch (e) { bd = null; }
   let rounds = 0;
   while (alive) {
     if (!video.videoWidth) { await new Promise(r => setTimeout(r, 200)); continue; }
     const [sx, sy, sw, sh] = crop();
-    const cv = deviceOcr.enhance(video, sx, sy, sw, sh, 1600);
-    let r;
-    try { r = await eng.read(cv); } catch (e) { if (!alive) return; msg('辨識失敗，重試中…'); continue; }
+    const cv = deviceOcr.enhance(video, sx, sy, sw, sh, 1800);
+    const r = { imei: '', serial: '' };
+    if (bd) {
+      try {
+        (await bd.detect(cv)).forEach(b => {
+          const v = String(b.rawValue || '').trim().toUpperCase();
+          if (deviceOcr.luhn(v.replace(/\D/g, '')) && v.replace(/\D/g, '').length === 15) r.imei = r.imei || v.replace(/\D/g, '');
+          else { const m = v.match(/^S?([A-Z0-9]{10,12})$/); if (m && /\d/.test(m[1]) && /[A-Z]/.test(m[1])) r.serial = r.serial || m[1]; }
+        });
+      } catch (e) { bd = null; }
+    }
+    if (!r.imei) {
+      // 輪流用「高對比」和「黑白二值化」兩種影像，提高成功率
+      const img = rounds % 2 ? deviceOcr.binarize(cv) : cv;
+      let o;
+      try { o = await eng.read(img); } catch (e) { if (!alive) return; msg('辨識失敗，重試中…'); continue; }
+      r.imei = r.imei || o.imei; r.serial = r.serial || o.serial;
+    }
     if (!alive) return;
     rounds++;
     let got = false;
     if (r.imei && !found.imei) { found.imei = r.imei; got = true; } // IMEI 有檢查碼，讀到一次就可信
-    ['model', 'serial'].forEach(k => { // 型號、序號：連續兩次讀到一樣才採用
-      if (!r[k] || found[k]) return;
-      const key = k + ':' + r[k]; votes[key] = (votes[key] || 0) + 1;
-      if (votes[key] >= 2 || (k === 'model' && /^iPhone /.test(r[k]))) { found[k] = r[k]; got = true; }
-    });
+    if (r.serial && !found.serial) { // 序號：讀到兩次一樣才採用
+      votes[r.serial] = (votes[r.serial] || 0) + 1;
+      if (votes[r.serial] >= 2) { found.serial = r.serial; got = true; }
+    }
     if (got) { last = cv.toDataURL('image/jpeg', 0.85); if (navigator.vibrate) navigator.vibrate(40); }
     show();
-    if (found.model && (found.imei || found.serial)) { msg('辨識完成'); await new Promise(r => setTimeout(r, 400)); if (alive) finish(); return; }
-    msg(rounds > 6 && !got && !(found.model || found.imei || found.serial) ? '還沒讀到，請靠近一點、讓字清楚對焦，或改用「從相簿選」' : '掃描中…對準框框，保持不動');
+    if (found.imei || found.serial) { msg('辨識完成'); await new Promise(r => setTimeout(r, 300)); if (alive) finish(); return; }
+    msg(rounds > 8 ? '還沒讀到：請把 IMEI 或序號那一行放在框中間、靠近一點讓字變大，或改用「從相簿選」' : '掃描中…把 IMEI 或序號那一行對準框框');
   }
 }
 
@@ -697,14 +714,14 @@ function confirmOcr(it, r, img) {
   w.className = 'ask-wrap';
   w.innerHTML = `<div class="ask-box" style="max-width:420px">${img ? `<img src="${img}" style="width:100%;max-height:200px;object-fit:contain;border-radius:10px;background:#f2f2f4">` : ''}
     <p class="small" style="margin:10px 0">請對照確認，可直接修改：</p>
-    <label class="field"><span>品名／型號</span><input class="input" id="oM" value="${esc(r.model)}"></label>
+    ${r.model ? `<label class="field"><span>品名／型號</span><input class="input" id="oM" value="${esc(r.model)}"></label>` : ''}
     <label class="field"><span>IMEI／序號</span><input class="input num" id="oS" value="${esc(r.imei || r.serial)}"></label>
     ${r.imei && r.serial ? `<p class="small muted" style="text-align:left;margin:0 0 10px">也讀到序號 ${esc(r.serial)}</p>` : ''}
     <div class="ask-btns"><button class="btn btn-ghost" data-x>取消</button><button class="btn btn-dark" data-ok>帶入表單</button></div></div>`;
   document.body.appendChild(w);
   $('[data-x]', w).onclick = () => w.remove();
   $('[data-ok]', w).onclick = () => {
-    const m = $('#oM', w).value.trim(), s = $('#oS', w).value.trim();
+    const m = $('#oM', w) ? $('#oM', w).value.trim() : '', s = $('#oS', w).value.trim();
     if (m) { it.model = m; it._m = it._m || {}; it._m.model = !IN_CATS[it.category]?.includes(m); }
     if (s) it.serial = s;
     w.remove(); drawForm(); toast('已帶入辨識結果');

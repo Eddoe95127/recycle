@@ -162,14 +162,14 @@
   /* 掃描框 */
   .scan-wrap { position: fixed; inset: 0; z-index: 400; background: #000; color: #fff; overflow: hidden; }
   .scan-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .scan-frame { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: min(90vw, 640px); height: min(42vh, 420px); border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(0,0,0,.55); }
+  .scan-frame { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); width: min(92vw, 720px); height: min(20vh, 180px); border-radius: 14px; box-shadow: 0 0 0 200vmax rgba(0,0,0,.6); }
   .scan-frame i { position: absolute; width: 34px; height: 34px; border: 4px solid #34c759; }
   .scan-frame i:nth-child(1) { left: -2px; top: -2px; border-right: 0; border-bottom: 0; border-radius: 14px 0 0 0; }
   .scan-frame i:nth-child(2) { right: -2px; top: -2px; border-left: 0; border-bottom: 0; border-radius: 0 14px 0 0; }
   .scan-frame i:nth-child(3) { left: -2px; bottom: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 14px; }
   .scan-frame i:nth-child(4) { right: -2px; bottom: -2px; border-left: 0; border-top: 0; border-radius: 0 0 14px 0; }
   .scan-line { position: absolute; left: 4%; right: 4%; height: 2px; background: linear-gradient(90deg, transparent, #34c759, transparent); animation: scanline 2.2s ease-in-out infinite; }
-  @keyframes scanline { 0%, 100% { top: 6%; } 50% { top: 92%; } }
+  @keyframes scanline { 0%, 100% { top: 12%; } 50% { top: 86%; } }
   .scan-top { position: absolute; left: 0; right: 0; top: max(18px, env(safe-area-inset-top)); text-align: center; padding: 0 20px; display: grid; gap: 4px; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
   .scan-top b { font-size: 18px; } .scan-top span { font-size: 13px; opacity: .85; }
   .scan-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px max(18px, env(safe-area-inset-bottom)); text-align: center; }
@@ -236,10 +236,10 @@
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
 <script>window.AUTH_NS = 'admin_';</script>
-<script src="device-ocr.js?v=20261122a" defer></script>
+<script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261122c"></script>
-<script src="store.js?v=20261122d"></script>
+<script src="store.js?v=20261122e"></script>
 <script>
 const app = $('#app');
 let orders = [];
