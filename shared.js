@@ -293,6 +293,20 @@ function progressPct(status) {
   return Math.round(((i < 0 ? 0 : i) + 1) / steps.length * 100);
 }
 
+/* ---------- 線上估價 ---------- */
+/** 預估價：最高收購價 × 外觀% × 電池% × Π(1 − 故障扣%)；有需檢測的故障就不給數字 */
+function estimatePrice(price, sel, rules) {
+  const find = (list, label) => (list || []).find(x => x.label === label);
+  const ap = find(rules.appearance, sel.appearance), bt = find(rules.battery, sel.battery);
+  const issues = (sel.issues || []).map(l => find(rules.issues, l)).filter(Boolean);
+  if (issues.some(i => i.inspect)) return { inspect: true, issues };
+  let v = price * (ap ? ap.pct : 100) / 100 * (bt ? bt.pct : 100) / 100;
+  issues.forEach(i => { v *= (100 - i.pct) / 100; });
+  const high = Math.max(0, Math.floor(v / 100) * 100);
+  const low = Math.max(0, Math.floor(high * (100 - (rules.spread || 0)) / 100 / 100) * 100);
+  return { low, high, issues, deducted: issues.length > 0 };
+}
+
 /* ---------- 登入（LINE / Google / Email 驗證碼）+ API ---------- */
 let liffReady = false;
 let mockLoggedIn = !new URLSearchParams(location.search).has('login'); // 預覽登入畫面：?mock=1&login=1
@@ -322,7 +336,7 @@ function logout() {
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'priceTable'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };
@@ -454,7 +468,7 @@ mockDB.find(o => o.id === 'AR261115002').report = {
 
 { const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
 // 預覽用員工帳號（密碼都是 password123）
-const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）' };
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）' };
 const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake'] };
 const mockUsers = [
   { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
@@ -463,6 +477,13 @@ const mockUsers = [
   { username: 'acct1', name: '會計 Amy', role: '會計', perms: MOCK_PRESETS['會計'], enabled: true, mustChange: true, createdAt: '2026-11-20 10:02', lastLogin: '', pw: 'password123' },
 ];
 let mockMe = ''; // 目前預覽登入的員工帳號；空白 = 老闆
+const mockPriceRules = { spread: 8,
+  appearance: [{ label: '完全無刮傷', pct: 100 }, { label: '外觀小刮傷', pct: 92 }, { label: '外觀有凹撞傷', pct: 75 }],
+  battery: [{ label: '90% 以上', pct: 100 }, { label: '85–89%', pct: 96 }, { label: '80–84%', pct: 92 }, { label: '低於 80% 或顯示「維修」', pct: 85 }],
+  issues: [{ label: '螢幕有破裂', pct: 30 }, { label: '按鍵功能不正常', pct: 10 }, { label: '相機功能不正常', pct: 15 }, { label: '無法開機運作', inspect: true }, { label: '機身進過水', inspect: true }, { label: '其他問題', inspect: true }],
+  note: '以上為預估價格，實際收購價以收到商品後的檢測結果為準；價格會隨市場行情調整。' };
+let mockPrices = [['iPhone 13', '128GB', 9000], ['iPhone 13', '256GB', 10500], ['iPhone 14 Pro', '128GB', 15500], ['iPhone 14 Pro', '256GB', 17000], ['iPhone 15 Pro', '256GB', 21000], ['iPhone 15 Pro Max', '256GB', 24500], ['iPhone 16', '128GB', 0]]
+  .map(([model, capacity, price]) => ({ category: 'iPhone', model, capacity, price, note: '' }));
 const mockIntakes = [], mockStock = [
   { sku: 'AR261112001-1', source: '宅配', ref: 'AR261112001', inAt: '2026-11-15 11:00', category: '手機', model: 'iPhone 15 Pro', capacity: '256GB', color: '原色鈦金屬', serial: '356789012345678', notes: '外觀 A', cost: 18800, status: '已售出', saleDate: '2026-11-18', channel: '蝦皮', salePrice: 21500, updatedAt: '2026-11-18 14:00', updatedBy: '老闆', photos: [] },
 ];
@@ -601,6 +622,9 @@ async function mockApiInner(action, d) {
       }
       return { ok: true, order: adm(o) };
     }
+    case 'priceTable': return { ok: true, rows: mockPrices.filter(r => r.price > 0), rules: mockPriceRules };
+    case 'adminPrices': need('edit_prices'); return { ok: true, rows: mockPrices.map(r => ({ ...r })), rules: JSON.parse(JSON.stringify(mockPriceRules)) };
+    case 'adminSavePrices': { need('edit_prices'); mockPrices = d.rows.filter(r => r.model).map(r => ({ ...r, price: Number(String(r.price).replace(/[^\d]/g, '')) || 0 })); if (d.rules) Object.assign(mockPriceRules, d.rules); return { ok: true, rows: mockPrices, rules: mockPriceRules }; }
     case 'intakeList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, intakes: [...mockIntakes].reverse().map(o => inOut(o, s)) }; }
     case 'intakeCreate': {
       const s = need('create_intake');

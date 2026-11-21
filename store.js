@@ -37,16 +37,18 @@ const IN_NOTICE = [
   ['您的權利', '您可依個資法第 3 條請求查詢、閱覽、製給複本、補充更正、停止利用或刪除，請洽門市或客服。'],
 ];
 
-const isStoreRoute = page => ['intake', 'intake/new', 'stock', 'remit'].includes(page);
+const isStoreRoute = page => ['intake', 'intake/new', 'stock', 'remit', 'prices'].includes(page);
 function storeRoute(page) {
   $('#refresh').hidden = page === 'intake/new';
   if (page === 'intake/new' && P('create_intake')) return intakeForm();
   if (page === 'intake' && canStoreView()) { $('#refresh').onclick = () => intakePage(true); return intakePage(); }
   if (page === 'stock' && canStoreView()) { $('#refresh').onclick = () => stockPage(true); return stockPage(); }
+  if (page === 'prices' && P('edit_prices')) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
   if (page === 'remit' && P('edit_payment')) { $('#refresh').onclick = () => remitPage(true); return remitPage(); }
   location.hash = '';
 }
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
+const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
 const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-US');
 
 /* ============================== 收購單列表 ============================== */
@@ -58,7 +60,7 @@ async function intakePage(refresh) {
     try { await loadIntakes(); } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('intake') + `<div class="card empty">${esc(e.message)}</div>`; return; }
     if (refresh) toast('已更新');
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const todays = intakes.filter(o => o.createdAt.slice(0, 10) === today);
   app.innerHTML = `${pagesNav('intake')}
     ${SHOP && P('create_intake') ? '<a class="shop-cta" href="#intake/new"><div><b>＋ 新增收購單</b><small>客人在現場：填商品 → 核對證件 → 雙方簽名 → 列印收購聯</small></div><span class="go">→</span></a>' : ''}
@@ -414,7 +416,7 @@ async function stockPage(refresh) {
     if (refresh) toast('已更新');
   }
   const active = stockCache.filter(r => r.status !== '已售出');
-  const month = new Date().toISOString().slice(0, 7);
+  const month = localDay().slice(0, 7);
   const soldM = stockCache.filter(r => r.status === '已售出' && (r.saleDate || '').slice(0, 7) === month);
   app.innerHTML = `${pagesNav('stock')}
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
@@ -467,7 +469,7 @@ function stockDrawer(r) {
       ${can ? `<div class="card"><h3>庫存狀態</h3>
         <div class="chips">${['在庫', '整理中', '已售出'].map(s => `<label class="chip"><input type="radio" name="sst" value="${s}" ${r.status === s ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div>
         <div id="saleBox" ${r.status === '已售出' ? '' : 'hidden'} style="margin-top:12px"><div class="grid2">
-          <label class="field"><span>銷售日期</span><input class="input" type="date" id="sDate" value="${esc(r.saleDate || new Date().toISOString().slice(0, 10))}"></label>
+          <label class="field"><span>銷售日期</span><input class="input" type="date" id="sDate" value="${esc(r.saleDate || localDay())}"></label>
           <label class="field"><span>銷售管道</span><input class="input" id="sCh" list="chList" value="${esc(r.channel)}"><datalist id="chList">${SALE_CHANNELS.map(c => `<option value="${c}">`).join('')}</datalist></label>
           <label class="field"><span>銷售價格（NT$）</span><input class="input num" id="sPrice" inputmode="numeric" value="${esc(r.salePrice ?? '')}"></label></div></div></div>` : ''}
     </div>
@@ -502,7 +504,7 @@ function exportCsv() {
   const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本'] : []), '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
   const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost] : []), r.status, r.saleDate, r.channel, r.salePrice ?? '']);
   const blob = new Blob(['﻿' + [head, ...rows].map(x => x.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `庫存盤點-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `庫存盤點-${localDay()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
@@ -537,4 +539,70 @@ function drawRemitTable() {
       <td class="sub hide-m">${o.remit === '已匯款' ? esc(o.remitAt) : esc(o.period === '指定日期' ? o.payDate : o.period)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="card empty">沒有${rmFilter}的門市收購單</div>`;
   $$('[data-rm]').forEach(tr => tr.onclick = () => intakeDrawer(intakes.find(o => o.id === tr.dataset.rm)));
+}
+
+/* ============================== 線上估價表（後台） ============================== */
+let pr = null, prDirty = false, prFilter = '';
+window.addEventListener('beforeunload', e => { if (prDirty && location.hash === '#prices') { e.preventDefault(); e.returnValue = ''; } });
+async function pricesPage(refresh) {
+  if (prDirty && refresh && !(await ask('有尚未儲存的修改，確定要重新載入？', '重新載入'))) return;
+  app.innerHTML = pagesNav('prices') + '<div class="spinner"></div>';
+  try { pr = await api('adminPrices'); prDirty = false; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('prices') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+  drawPrices();
+}
+function drawPrices() {
+  const q = prFilter.trim().toLowerCase();
+  const filled = pr.rows.filter(r => Number(r.price) > 0).length;
+  const ruleRows = (key, withInspect) => pr.rules[key].map((x, i) => `<div class="pr-rule" data-rk="${key}" data-ri="${i}">
+      <input class="input" data-rf="label" value="${esc(x.label)}" placeholder="選項名稱">
+      <label class="pr-pct"><input class="input num" data-rf="pct" inputmode="numeric" value="${esc(x.pct ?? '')}" ${x.inspect ? 'disabled' : ''}><span>${key === 'issues' ? '% 扣' : '%'}</span></label>
+      ${withInspect ? `<label class="check small"><input type="checkbox" data-rf="inspect" ${x.inspect ? 'checked' : ''}> 需檢測</label>` : ''}
+      <button type="button" class="ph-del static" data-rdel aria-label="刪除">✕</button></div>`).join('') +
+    `<button type="button" class="link" data-radd="${key}" style="font-size:13px">＋ 新增選項</button>`;
+  app.innerHTML = `${pagesNav('prices')}
+    <div class="card"><h3>線上估價表 <span class="small muted" style="font-weight:400">已填價格 ${filled} / ${pr.rows.length} 列（空白的不會顯示給客戶）</span></h3>
+      <p class="small muted" style="margin:0">「最高收購價」＝外觀無刮傷、電池 90% 以上、功能都正常的價格。客戶看到的預估價＝最高收購價 × 外觀% × 電池% ×（1 − 故障扣%），再往下顯示 ${esc(pr.rules.spread)}% 的區間。</p></div>
+    <div class="grid2 pr-grid">
+      <div class="card"><h3>價格</h3>
+        <div class="toolbar" style="margin-bottom:8px"><input class="input" id="prQ" placeholder="搜尋型號" value="${esc(prFilter)}"><button class="btn btn-ghost btn-sm" id="prAdd">＋ 新增一列</button></div>
+        <table class="table pr-table"><thead><tr><th>類別</th><th>型號</th><th>容量</th><th>最高收購價</th><th></th></tr></thead><tbody>
+        ${pr.rows.map((r, i) => !q || (r.model + ' ' + r.capacity + ' ' + r.category).toLowerCase().includes(q) ? `<tr data-pi="${i}" class="${i && pr.rows[i - 1].model === r.model ? 'same' : ''}">
+          <td><select class="input" data-pf="category">${['iPhone', 'iPad', 'Mac', '其他'].map(c => `<option ${r.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
+          <td><input class="input" data-pf="model" value="${esc(r.model)}"></td>
+          <td><input class="input" data-pf="capacity" value="${esc(r.capacity)}" style="max-width:90px"></td>
+          <td><input class="input num" data-pf="price" inputmode="numeric" value="${esc(r.price || '')}" placeholder="未填" style="max-width:110px"></td>
+          <td><button type="button" class="ph-del static" data-pdel="${i}" aria-label="刪除">✕</button></td></tr>` : '').join('')}
+        </tbody></table></div>
+      <div>
+        <div class="card"><h3>外觀</h3>${ruleRows('appearance')}</div>
+        <div class="card"><h3>電池健康度</h3>${ruleRows('battery')}</div>
+        <div class="card"><h3>故障</h3><p class="small muted" style="margin:-4px 0 10px">勾「需檢測」＝不顯示價格，改顯示「需實際檢測後報價」</p>${ruleRows('issues', true)}</div>
+        <div class="card"><h3>其他</h3>
+          <label class="field"><span>價格區間（%）</span><input class="input num" id="prSpread" inputmode="numeric" value="${esc(pr.rules.spread)}" style="max-width:100px"></label>
+          <label class="field" style="margin:0"><span>給客戶的說明</span><textarea class="input" id="prNote">${esc(pr.rules.note)}</textarea></label></div>
+      </div>
+    </div>
+    <div class="in-foot"><span class="err" id="prErr" style="flex:1;margin:0">${prDirty ? '有尚未儲存的修改' : ''}</span>
+      <a class="btn btn-ghost" href="index.html#/estimate" target="_blank">看客戶畫面 ↗</a><button class="btn btn-dark" id="prSave">儲存並上線</button></div>`;
+  const dirty = () => { prDirty = true; $('#prErr').textContent = '有尚未儲存的修改'; };
+  $('#prQ').oninput = e => { prFilter = e.target.value; const pos = e.target.selectionStart; drawPrices(); const n = $('#prQ'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('[data-pi]').forEach(tr => { const r = pr.rows[+tr.dataset.pi]; $$('[data-pf]', tr).forEach(el => el.oninput = el.onchange = () => { r[el.dataset.pf] = el.dataset.pf === 'price' ? el.value.replace(/[^\d]/g, '') : el.value; dirty(); }); });
+  $$('[data-pdel]').forEach(b => b.onclick = () => { pr.rows.splice(+b.dataset.pdel, 1); prDirty = true; drawPrices(); });
+  $('#prAdd').onclick = () => { pr.rows.unshift({ category: 'iPhone', model: prFilter || '', capacity: '', price: '', note: '' }); prDirty = true; drawPrices(); $('[data-pi="0"] [data-pf=model]')?.focus(); };
+  $$('[data-rk]').forEach(row => {
+    const x = pr.rules[row.dataset.rk][+row.dataset.ri];
+    $$('[data-rf]', row).forEach(el => el.oninput = el.onchange = () => {
+      if (el.dataset.rf === 'inspect') { x.inspect = el.checked; prDirty = true; drawPrices(); return; }
+      x[el.dataset.rf] = el.dataset.rf === 'pct' ? el.value.replace(/[^\d]/g, '') : el.value; dirty();
+    });
+    $('[data-rdel]', row).onclick = () => { pr.rules[row.dataset.rk].splice(+row.dataset.ri, 1); prDirty = true; drawPrices(); };
+  });
+  $$('[data-radd]').forEach(b => b.onclick = () => { pr.rules[b.dataset.radd].push({ label: '', pct: b.dataset.radd === 'issues' ? 10 : 90 }); prDirty = true; drawPrices(); });
+  $('#prSpread').oninput = e => { pr.rules.spread = e.target.value.replace(/[^\d]/g, ''); dirty(); };
+  $('#prNote').oninput = e => { pr.rules.note = e.target.value; dirty(); };
+  $('#prSave').onclick = async () => {
+    const b = $('#prSave'); b.disabled = true; $('#prErr').textContent = '儲存中…';
+    try { pr = await api('adminSavePrices', { rows: pr.rows, rules: pr.rules }); prDirty = false; toast('已儲存，客戶網站 10 分鐘內更新'); drawPrices(); }
+    catch (e) { if (e.auth) return start(); $('#prErr').textContent = e.message; b.disabled = false; }
+  };
 }

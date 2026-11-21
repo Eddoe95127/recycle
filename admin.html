@@ -11,7 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="門市收購">
 <meta name="theme-color" content="#f5f5f7">
-<link rel="stylesheet" href="style.css?v=20261121b">
+<link rel="stylesheet" href="style.css?v=20261121d">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   body { background: #f2f2f4; }
@@ -166,6 +166,17 @@
   body.shop .sig-pad { border-width: 3px; }
   .shop-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 28px; border-radius: 20px; background: #1d1d1f; color: #fff; text-decoration: none; margin-bottom: 16px; box-shadow: var(--shadow); }
   .shop-cta b { font-size: 24px; display: block; } .shop-cta small { opacity: .7; font-size: 14px; } .shop-cta span.go { font-size: 34px; }
+  .pr-grid { align-items: start; gap: 14px; }
+  .pr-table td { padding: 4px 6px; } .pr-table .input { min-height: 36px; padding: 6px 8px; font-size: 14px; }
+  .pr-table tr.same td:nth-child(2) .input { color: #8e8e93; }
+  .pr-rule { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .pr-rule > .input { flex: 1; } .pr-pct { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 13px; } .pr-pct .input { width: 64px; }
+  @media (max-width: 860px) { .pr-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) {
+    .pr-table tr { display: grid !important; grid-template-columns: 78px 1fr 78px 92px 26px; gap: 6px; align-items: center; padding: 6px 8px !important; }
+    .pr-table td { padding: 0 !important; } .pr-table td .input { max-width: none !important; width: 100%; }
+    .pr-table tr.same td:first-child .input, .pr-table tr.same td:nth-child(2) .input { opacity: .45; }
+  }
   .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
 </style>
 </head>
@@ -181,10 +192,10 @@
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
 <script>window.AUTH_NS = 'admin_';</script>
-<script src="device-ocr.js?v=20261121b" defer></script>
-<script src="config.js?v=20261121b"></script>
-<script src="shared.js?v=20261121b"></script>
-<script src="store.js?v=20261121c"></script>
+<script src="device-ocr.js?v=20261121d" defer></script>
+<script src="config.js?v=20261121d"></script>
+<script src="shared.js?v=20261121d"></script>
+<script src="store.js?v=20261121d"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -264,7 +275,7 @@ function pagesNav(cur) {
     return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
   }
   const items = [['', '宅配訂單'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
-    P('edit_payment') && ['remit', '匯款'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
+    P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
   return `<nav class="pages">${items.map(([k, l]) => k === 'shopLink' ? `<a href="admin.html?shop=1#intake/new" style="order:99;margin-left:auto">${l}</a>` : `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 

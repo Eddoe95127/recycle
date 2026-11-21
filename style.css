@@ -173,3 +173,12 @@ textarea.input { min-height: 84px; resize: vertical; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 .footer { padding: 40px 0 60px; color: var(--muted); font-size: 13px; text-align: center; }
 .footer a { color: var(--ink-2); }
+
+/* ---------- 線上估價 ---------- */
+.est-result { text-align: center; padding: 26px 22px; }
+.est-label { font-size: 14px; color: var(--ink-2); }
+.est-price { font-size: 38px; font-weight: 800; letter-spacing: -.02em; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.est-price span { color: var(--ink-2); font-weight: 400; margin: 0 4px; }
+.est-price.small-price { font-size: 26px; }
+.est-warn { background: #fff4e5; color: #8a5300; border-radius: 12px; padding: 10px 12px; font-size: 13px; text-align: left; margin: 12px 0 0; }
+@media (max-width: 480px) { .est-price { font-size: 30px; } .nav-links button { padding: 8px 8px; font-size: 13px; } }
