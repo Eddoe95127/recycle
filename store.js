@@ -235,6 +235,7 @@ function intakeEvalHTML(o, compact) {
       const n = o.items.indexOf(it) + 1;
       return `<div class="rep-item">
         <div class="rep-title">${o.items.length > 1 ? n + '. ' : ''}${esc([it.model, it.capacity, it.color].filter(Boolean).join(' '))}</div>
+        <div class="rep-sn">IMEI／序號：<b class="num">${esc(it.serial || '未填')}</b></div>
         <div class="rep-tags">
           ${it.grade ? `<span class="tag">外觀 ${esc(it.grade)}・${esc(GRADE_TEXT[it.grade] || '')}</span>` : ''}
           ${it.battery ? `<span class="tag">電池 ${esc(it.battery)}%</span>` : ''}
@@ -764,6 +765,15 @@ async function runOcr(file, it) {
 }
 
 /* ============================== 收購聯（列印） ============================== */
+/** 加到主畫面的 App 模式（iPad 常不能用瀏覽器列印），改用 PDF 分享 */
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const canPrint = () => typeof window.print === 'function' && !isStandalone();
+const canSharePdf = f => !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] }));
+function downloadFile(f) {
+  const url = URL.createObjectURL(f), a = document.createElement('a');
+  a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 async function showReceipt(o, kind) {
   const customer = kind === 'customer';
   const maskTail = (s, n) => s ? '*'.repeat(Math.max(0, s.length - n)) + s.slice(-n) : '';
@@ -785,11 +795,36 @@ async function showReceipt(o, kind) {
     ${o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : ''}
     <div class="rc-sign"><div><img data-photo="${esc(o.sellerSign)}" alt="出售人簽名"><span>出售人 ${esc(o.seller)}</span></div>
       <div>${o.staffSign ? `<img data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<div class="rc-staff">${esc(o.staff)}</div>`}<span>經手人${o.staffSign ? ' ' + esc(o.staff) : ''}</span></div></div>
-  </div><div class="no-print" style="display:flex;gap:8px;margin-top:12px"><button class="btn" style="flex:1;background:#fff;color:#111" data-print>🖨 列印／存成 PDF</button><button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div></div>`;
+  </div><div class="no-print" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
+    ${canPrint() ? '<button class="btn" style="background:#fff;color:#111" data-print>🖨 列印</button>' : ''}
+    <button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div>
+    <p class="no-print small" style="color:rgba(255,255,255,.75);margin:8px 0 0;text-align:center">在平板上按「PDF」會打開分享選單，可選「列印」「儲存到檔案」「AirDrop」或「郵件」</p></div>`;
   document.body.appendChild(w);
   w.onclick = e => { if (e.target === w || e.target.dataset.close !== undefined) w.remove(); };
-  await loadPhotos(w);
-  $('[data-print]', w).onclick = () => { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 200); };
+  // 列印：直接在點擊當下呼叫（iPad 需要），不用等照片
+  const pr = $('[data-print]', w);
+  if (pr) pr.onclick = () => {
+    document.body.classList.add('printing');
+    window.print();
+    setTimeout(() => document.body.classList.remove('printing'), 1500);
+  };
+  // PDF：先在背景產生好，按下去馬上分享／下載
+  const pb = $('[data-pdf]', w);
+  let pdfFile = null;
+  api('intakePdf', { id: o.id, kind: customer ? 'customer' : 'shop' }).then(r => {
+    const bin = atob(r.data), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    pdfFile = new File([bytes], r.name, { type: 'application/pdf' });
+    pb.disabled = false; pb.textContent = canSharePdf(pdfFile) ? '📄 PDF（列印／存檔／分享）' : '📄 下載 PDF';
+  }).catch(e => { if (e.auth) return start(); pb.textContent = 'PDF 產生失敗：' + e.message; });
+  pb.onclick = async () => {
+    if (!pdfFile) return;
+    if (canSharePdf(pdfFile)) {
+      try { await navigator.share({ files: [pdfFile], title: pdfFile.name }); } catch (e) { if (e.name !== 'AbortError') downloadFile(pdfFile); }
+    } else downloadFile(pdfFile);
+  };
+  loadPhotos(w);
 }
 
 /* ============================== 庫存 ============================== */

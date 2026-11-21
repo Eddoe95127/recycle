@@ -194,7 +194,11 @@
   .receipt th { background: #f3f5f8; font-weight: 600; white-space: nowrap; }
   .rc-total td { font-weight: 700; font-size: 16px; }
   .receipt td.num { white-space: nowrap; }
-  .rc-ids { display: flex; gap: 10px; margin: 8px 0 12px; } .rc-ids img { width: 48%; max-width: 300px; border-radius: 8px; border: 1px solid #ddd; }
+  .rc-ids { display: flex; justify-content: center; align-items: center; gap: 16px; flex-wrap: wrap; margin: 12px auto 16px; }
+  .rc-ids img { width: calc(50% - 8px); max-width: 300px; aspect-ratio: 86/54; object-fit: contain; background: #fafafa; border-radius: 8px; border: 1px solid #ddd; display: block; }
+  .rc-ids img:only-child { width: 60%; }
+  .rep-sn { font-size: 13px; color: var(--ink-2, #3a3a3c); margin: 2px 0 4px; }
+  .in-eval.compact .rep-sn { font-size: 11px; }
   .rc-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
   .rc-sign img { width: 100%; max-width: 260px; aspect-ratio: 600/220; object-fit: contain; border-bottom: 1px solid #111; display: block; }
   .rc-sign span { font-size: 13px; color: #555; }
@@ -240,8 +244,8 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122c"></script>
-<script src="store.js?v=20261122h"></script>
+<script src="shared.js?v=20261122d"></script>
+<script src="store.js?v=20261122j"></script>
 <script>
 const app = $('#app');
 let orders = [];

@@ -703,6 +703,11 @@ async function mockApiInner(action, d) {
       items.forEach((it, i) => mockStock.push({ sku: id + '-' + (i + 1), source: '門市', ref: id, inAt: o.createdAt, category: it.category, model: it.model, capacity: it.capacity, color: it.color, serial: it.serial, notes: it.notes, cost: it.price, status: '在庫', saleDate: '', channel: '', salePrice: '', updatedAt: o.createdAt, updatedBy: s.name, photos: it.photos }));
       return { ok: true, intake: inOut(o, s) };
     }
+    case 'intakePdf': {
+      need();
+      const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
+      return { ok: true, name: `二手商品收購單_${d.id}_${d.kind === 'shop' ? '門市存聯' : '客戶聯'}.pdf`, data: btoa(pdf) };
+    }
     case 'intakeMail': {
       const s = need('create_intake'), o = mockIntakes.find(x => x.id === d.id);
       const email = (d.email || '').toLowerCase() || o.email;
