@@ -49,10 +49,13 @@ const IPHONE_MODELS = ['iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max', 'iPhon
   'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max', 'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
   'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max', 'iPhone 16e', 'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
   'iPhone 17e', 'iPhone 17', 'iPhone Air', 'iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 18 Pro', 'iPhone 18 Pro Max', 'iPhone Duo'];
-const IPAD_MODELS = ['iPad Air4', 'iPad Air5', 'iPad Air6', 'iPad Air7', 'iPad Air8', 'iPad 6th', 'iPad 7th', 'iPad 8th', 'iPad 9th', 'iPad 10th', 'iPad 11th',
-  'iPad mini5', 'iPad mini6', 'iPad mini7', 'iPad Pro M4', 'iPad Pro 11寸(第二代)', 'iPad Pro 11寸(第三代)', 'iPad Pro 11寸(第四代)',
-  'iPad Pro 12.9(第三代)', 'iPad Pro 12.9(第四代)', 'iPad Pro 12.9(第五代)', 'iPad Pro 12.9(第六代)'];
-const CAPACITIES = ['64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
+const IPAD_MODELS = [ // 與線上估價表的 iPad 型號名稱一致，估價後可直接帶入
+  'iPad Pro (M5) 11吋', 'iPad Pro (M5) 13吋', 'iPad Pro (M4) 11吋', 'iPad Pro (M4) 13吋',
+  'iPad Air 8 (M4) 11吋', 'iPad Air 8 (M4) 13吋', 'iPad Air 7 (M3) 11吋', 'iPad Air 7 (M3) 13吋', 'iPad Air 6 (M2) 11吋', 'iPad Air 6 (M2) 13吋', 'iPad Air 5', 'iPad Air 4',
+  'iPad 11th (A16)', 'iPad 10th', 'iPad 9th', 'iPad 8th', 'iPad 7th', 'iPad 6th', 'iPad mini 7', 'iPad mini 6', 'iPad mini 5',
+  'iPad Pro 11吋 第4代', 'iPad Pro 11吋 第3代', 'iPad Pro 11吋 第2代', 'iPad Pro 11吋 第1代',
+  'iPad Pro 12.9吋 第6代', 'iPad Pro 12.9吋 第5代', 'iPad Pro 12.9吋 第4代', 'iPad Pro 12.9吋 第3代', '其他 iPad'];
+const CAPACITIES = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 const IPHONE_APPEARANCE = ['完全無刮傷', '外觀小刮傷', '外觀有凹撞傷'];
 const IPHONE_ISSUES = ['功能都完全正常', '無法開機運作', '螢幕有破裂', '機身進過水', '按鍵功能不正常', '相機功能不正常', '其他問題'];
 const IPAD_CONNECTIVITY = ['Wi-Fi', 'Wi-Fi + 行動網路'];
