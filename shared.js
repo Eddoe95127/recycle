@@ -523,8 +523,8 @@ mockDB.find(o => o.id === 'AR261115002').report = {
 
 { const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
 // 預覽用員工帳號（密碼都是 password123）
-const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）' };
-const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake'] };
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）', repair: '門市維修作業（建立維修單、更新進度、取件與保固查詢）' };
+const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake', 'repair'], '維修技師': ['repair'] };
 const mockUsers = [
   { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
   { username: 'ship1', name: '小美', role: '物流客服', perms: MOCK_PRESETS['物流客服'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:01', lastLogin: '', pw: 'password123' },
@@ -548,6 +548,7 @@ let mockPrices = [['iPhone 11', '64GB', 2000, 0, 300, '沒有原廠盒子'], ['i
     { category: 'Samsung', model: 'Galaxy S24 Ultra', capacity: '12G/256G', price: 11100, newPrice: 0, battery: '', acc: '', accItems: '', note: '' },
     { category: 'Apple Watch', model: 'Apple Watch 12', capacity: '42mm GPS', price: 0, newPrice: 9500, battery: '', acc: '', accItems: '', note: '' },
   ]);
+const mockRepairs = [];
 const mockIntakes = [], mockStock = [
   { sku: 'AR261112001-1', source: '宅配', ref: 'AR261112001', inAt: '2026-11-15 11:00', category: '手機', model: 'iPhone 15 Pro', capacity: '256GB', color: '原色鈦金屬', serial: '356789012345678', notes: '外觀 A', cost: 18800, status: '已售出', saleDate: '2026-11-18', channel: '蝦皮', salePrice: 21500, updatedAt: '2026-11-18 14:00', updatedBy: '老闆', photos: [] },
 ];
@@ -555,7 +556,8 @@ const mockIntakes = [], mockStock = [
 // 預覽模式：前台與後台共用同一份假資料（存在這台電腦的瀏覽器裡，網址加 &reset=1 可重置）
 if (MOCK) {
   try {
-    if (new URLSearchParams(location.search).has('reset')) { ['mockDB', 'mockPhotos', 'mockUsers', 'mockMe', 'mockIntakes', 'mockStock'].forEach(k => localStorage.removeItem(k)); }
+    if (new URLSearchParams(location.search).has('reset')) { ['mockDB', 'mockPhotos', 'mockUsers', 'mockMe', 'mockIntakes', 'mockStock', 'mockRepairs'].forEach(k => localStorage.removeItem(k)); }
+    const mr = JSON.parse(localStorage.getItem('mockRepairs') || 'null'); if (mr) mockRepairs.splice(0, mockRepairs.length, ...mr);
     const mi = JSON.parse(localStorage.getItem('mockIntakes') || 'null'); if (mi) mockIntakes.splice(0, mockIntakes.length, ...mi);
     const ms = JSON.parse(localStorage.getItem('mockStock') || 'null'); if (ms) mockStock.splice(0, mockStock.length, ...ms);
     const us = JSON.parse(localStorage.getItem('mockUsers') || 'null');
@@ -573,6 +575,7 @@ function mockPersist() {
     localStorage.setItem('mockMe', mockMe);
     localStorage.setItem('mockIntakes', JSON.stringify(mockIntakes));
     localStorage.setItem('mockStock', JSON.stringify(mockStock));
+    localStorage.setItem('mockRepairs', JSON.stringify(mockRepairs));
     localStorage.setItem('mockPhotos', JSON.stringify(Object.fromEntries(Object.entries(mockPhotos).filter(([k]) => !k.startsWith('demo')))));
   } catch (e) {}
 }
@@ -711,6 +714,47 @@ async function mockApiInner(action, d) {
       need();
       const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
       return { ok: true, name: `二手商品收購單_${d.id}_${d.kind === 'shop' ? '門市存聯' : '客戶聯'}.pdf`, data: btoa(pdf) };
+    }
+    case 'repairList': { const s = need(); return { ok: true, repairs: [...mockRepairs].reverse().map(o => { const a = JSON.parse(JSON.stringify(o)); a.masked = {}; if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.partsCost = null; a.parts.forEach(p => { p.cost = null; }); } return a; }) }; }
+    case 'repairCreate': {
+      const s = need('repair');
+      if (!d.customer) throw new Error('請填寫客戶姓名');
+      if (!d.dropSign) throw new Error('請客人完成送修簽名');
+      const save = (u) => { const k = 'rk' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[k] = u; return k; };
+      const day = now().slice(2, 10).replace(/-/g, ''), id = 'RP' + day + String(mockRepairs.length + 1).padStart(3, '0');
+      const items = (d.items || []).map(x => ({ name: x.name, amount: Number(x.amount) || 0, warranty: Number(x.warranty) || 0 }));
+      const o = { id, createdAt: now(), staff: s.name, status: '待維修', customer: d.customer, phone: d.phone, email: d.email || '', category: d.category, model: d.model, capacity: d.capacity || '', color: d.color || '',
+        serial: d.serial || '', issue: d.issue, condition: d.condition || '', items, quote: items.reduce((t, x) => t + x.amount, 0), parts: [], partsCost: 0, fee: null, payment: '', promise: d.promise || '',
+        doneAt: '', pickupAt: '', pickupBy: '', warrantyEnd: '', note: d.note || '', history: [`${now()}｜待維修（收件）｜${s.name}`], photos: (d.photos || []).map(save), dropSign: save(d.dropSign), pickSign: '',
+        mailLog: d.email ? `${now()} 已寄送（收件）→ ${d.email}（模擬）` : '', masked: {} };
+      mockRepairs.push(o);
+      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+    }
+    case 'repairUpdate': {
+      const s = need('repair'), o = mockRepairs.find(x => x.id === d.id);
+      if (d.expected && d.expected !== o.status) throw new Error('這張維修單剛被其他人更新，請重新整理');
+      if (d.items) { o.items = d.items; o.quote = d.items.reduce((t, x) => t + (Number(x.amount) || 0), 0); }
+      if (d.parts) { o.parts = d.parts; o.partsCost = d.parts.reduce((t, p) => t + (Number(p.cost) || 0), 0); }
+      if (d.note != null) o.note = d.note;
+      if (d.status && d.status !== o.status) { if (d.status === '待取件') { o.doneAt = now(); if (o.email) o.mailLog = `${now()} 已寄送（完修通知）→ ${o.email}（模擬）\n` + o.mailLog; } o.status = d.status; o.history.unshift(`${now()}｜${d.status}｜${s.name}`); }
+      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+    }
+    case 'repairPickup': {
+      const s = need('repair'), o = mockRepairs.find(x => x.id === d.id);
+      if (!d.pickSign) throw new Error('請客人完成取件簽名');
+      if (d.items) { o.items = d.items; o.quote = d.items.reduce((t, x) => t + (Number(x.amount) || 0), 0); }
+      const max = Math.max(0, ...o.items.map(x => Number(x.warranty) || 0));
+      const t = new Date(); t.setDate(t.getDate() + max);
+      o.warrantyEnd = max ? t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0') : '';
+      o.fee = Number(d.fee) || 0; o.payment = o.fee ? d.payment : ''; o.pickupAt = now(); o.pickupBy = s.name; o.doneAt = o.doneAt || o.pickupAt; o.status = '已取件';
+      const k = 'rk' + Date.now(); mockPhotos[k] = d.pickSign; o.pickSign = k; o.history.unshift(`${now()}｜已取件｜${s.name}`);
+      if (o.email) o.mailLog = `${now()} 已寄送（取件保固）→ ${o.email}（模擬）\n` + o.mailLog;
+      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+    }
+    case 'repairPdf': {
+      need();
+      const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
+      return { ok: true, name: `維修${d.kind === 'pickup' ? '取件單' : '送修單'}_${d.id}.pdf`, data: btoa(pdf) };
     }
     case 'intakeMail': {
       const s = need('create_intake'), o = mockIntakes.find(x => x.id === d.id);

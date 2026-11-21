@@ -35,10 +35,12 @@ const IN_NOTICE = [
   ['您的權利', '您可依個資法第 3 條請求查詢、閱覽、製給複本、補充更正、停止利用或刪除，請洽門市或客服。'],
 ];
 
-const isStoreRoute = page => ['intake', 'intake/new', 'stock', 'remit', 'prices', 'report'].includes(page);
+const isStoreRoute = page => ['intake', 'intake/new', 'repair', 'repair/new', 'stock', 'remit', 'prices', 'report'].includes(page);
 function storeRoute(page) {
   $('#refresh').hidden = page === 'intake/new';
   if (page === 'intake/new' && P('create_intake')) return intakeForm();
+  if (page === 'repair/new' && P('repair')) return repairForm();
+  if (page === 'repair' && (P('repair') || P('view_cost'))) { $('#refresh').onclick = () => repairPage(true); return repairPage(); }
   if (page === 'intake' && canStoreView()) { $('#refresh').onclick = () => intakePage(true); return intakePage(); }
   if (page === 'stock' && canStoreView()) { $('#refresh').onclick = () => stockPage(true); return stockPage(); }
   if (page === 'prices' && P('edit_prices')) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
@@ -660,7 +662,7 @@ function estApply(it, sel, row, plan, isNew, rules) {
 }
 
 /** 掃描框：開相機，只辨識框內，連續掃到型號＋IMEI／序號就停 */
-async function scanDevice(it) {
+async function scanDevice(it, onDone) {
   if (typeof deviceOcr === 'undefined') return toast('辨識功能載入失敗');
   const w = document.createElement('div');
   w.className = 'scan-wrap';
@@ -682,12 +684,12 @@ async function scanDevice(it) {
   const found = { imei: '', serial: '' }, votes = {};
   const close = () => { alive = false; stream && stream.getTracks().forEach(t => t.stop()); eng && eng.end(); w.remove(); };
   $('[data-x]', w).onclick = close;
-  $('[data-file]', w).onchange = e => { const f = e.target.files[0]; if (f) { close(); runOcr(f, it); } };
+  $('[data-file]', w).onchange = e => { const f = e.target.files[0]; if (f) { close(); runOcr(f, it, onDone); } };
   const show = () => {
     Object.keys(found).forEach(k => $(`[data-c="${k}"]`, w).classList.toggle('ok', !!found[k]));
     $('[data-use]', w).disabled = !(found.imei || found.serial);
   };
-  const finish = () => { const snap = last; close(); confirmOcr(it, { ...found }, snap); };
+  const finish = () => { const snap = last; close(); confirmOcr(it, { ...found }, snap, onDone); };
   $('[data-use]', w).onclick = finish;
   // 相機
   try {
@@ -753,7 +755,7 @@ async function scanDevice(it) {
 }
 
 /** 辨識結果確認框（可修改後帶入） */
-function confirmOcr(it, r, img) {
+function confirmOcr(it, r, img, onDone) {
   const w = document.createElement('div');
   w.className = 'ask-wrap';
   w.innerHTML = `<div class="ask-box" style="max-width:420px">${img ? `<img src="${img}" style="width:100%;max-height:200px;object-fit:contain;border-radius:10px;background:#f2f2f4">` : ''}
@@ -768,11 +770,11 @@ function confirmOcr(it, r, img) {
     const m = $('#oM', w) ? $('#oM', w).value.trim() : '', s = $('#oS', w).value.trim();
     if (m) { it.model = m; it._m = it._m || {}; it._m.model = !IN_CATS[it.category]?.includes(m); }
     if (s) it.serial = s;
-    w.remove(); drawForm(); toast('已帶入辨識結果');
+    w.remove(); (onDone || drawForm)(); toast('已帶入辨識結果');
   };
 }
 
-async function runOcr(file, it) {
+async function runOcr(file, it, onDone) {
   if (typeof deviceOcr === 'undefined') return toast('辨識功能載入失敗');
   const w = document.createElement('div');
   w.className = 'ask-wrap';
@@ -787,7 +789,7 @@ async function runOcr(file, it) {
   try {
     const r = await deviceOcr.recognize(file, f => { $('#ocrMsg', w) && ($('#ocrMsg', w).textContent = `辨識中 ${Math.round(f * 100)}%`); }, ctrl.signal);
     if (!r || (!r.model && !r.serial && !r.imei)) { $('#ocrMsg', w).textContent = '沒有辨識到型號或序號，請拍清楚「設定 → 一般 → 關於本機」畫面，或手動輸入。'; return; }
-    close(); confirmOcr(it, r, null);
+    close(); confirmOcr(it, r, null, onDone);
   } catch (e) { if ($('#ocrMsg', w)) $('#ocrMsg', w).textContent = e.message || '辨識失敗，請手動輸入'; }
 }
 
@@ -1022,7 +1024,9 @@ async function reportPage(refresh) {
       const [st, it] = await Promise.all([api('stockList'), api('intakeList')]);
       let ords = orders;
       if (!ords.length) { try { ords = (await api('adminList')).orders; } catch (e) { ords = []; } }
-      rpData = { stock: st.items, intakes: it.intakes, orders: ords };
+      let reps = [];
+      try { reps = (await api('repairList')).repairs; } catch (e) { reps = []; }
+      rpData = { stock: st.items, intakes: it.intakes, orders: ords, repairs: reps };
       stockCache = st.items; intakes = it.intakes;
     } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('report') + `<div class="card empty">${esc(e.message)}</div>`; return; }
     if (refresh) toast('已更新');
@@ -1062,10 +1066,12 @@ function rpCompute() {
     const o = ords.find(x => x.id === t.ref) || {};
     return { ...t, seller: o.name || '', payment: '轉帳', staff: t.items[0].updatedBy || '', remit: '已付款' };
   }).sort((a, b) => a.time.localeCompare(b.time));
-  return { buys, sales, tx };
+  const fixes = (rpData.repairs || []).filter(o => o.status === '已取件' && inR(dayOf(o.pickupAt))).sort((a, b) => a.pickupAt.localeCompare(b.pickupAt));
+  return { buys, sales, tx, fixes };
 }
 function drawRpt() {
-  const { buys, sales, tx } = rpCompute();
+  const { buys, sales, tx, fixes } = rpCompute();
+  const fixProfit = o => (o.fee || 0) - (o.partsCost || 0);
   const box = $('#rpBody');
   const range = rpFrom === rpTo ? rpFrom : `${rpFrom} ～ ${rpTo}`;
   const sum = (a, f) => a.reduce((t, x) => t + (f(x) || 0), 0);
@@ -1075,7 +1081,9 @@ function drawRpt() {
       <div class="stat" style="--c:#30D158"><div class="n num">${nt(sum(buys, r => r.cost))}</div><div class="l">收購金額</div></div>
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${sales.length}</div><div class="l">售出件數</div></div>
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${nt(sum(sales, r => r.salePrice))}</div><div class="l">銷售金額</div></div>
-      <div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">毛利</div></div>
+      <div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">銷售毛利</div></div>
+      <div class="stat" style="--c:#64D2FF"><div class="n num">${nt(sum(fixes, o => o.fee))}</div><div class="l">維修收入（${fixes.length} 件）</div></div>
+      <div class="stat" style="--c:#FF375F"><div class="n num">${nt(sum(fixes, fixProfit))}</div><div class="l">維修毛利</div></div>
     </div><p class="small muted" style="margin:-6px 4px 10px">期間：${esc(range)}・收購以入庫時間計（宅配為付款入庫日），銷售以銷售日期計</p>`;
   let html = '', csv = null;
   if (rpView === 'daily') {
@@ -1083,19 +1091,20 @@ function drawRpt() {
     const n = Math.round((new Date(rpTo) - new Date(rpFrom)) / 864e5);
     for (let i = n; i >= 0; i--) days.push(addDays(rpFrom, i));
     const rows = days.map(d => {
-      const b = buys.filter(r => dayOf(r.inAt) === d), t = tx.filter(x => dayOf(x.time) === d), s = sales.filter(r => dayOf(r.saleDate) === d);
+      const b = buys.filter(r => dayOf(r.inAt) === d), t = tx.filter(x => dayOf(x.time) === d), s = sales.filter(r => dayOf(r.saleDate) === d), f = fixes.filter(o => dayOf(o.pickupAt) === d);
       return { d, tx: t.length, items: b.length, store: sum(b.filter(r => r.source === '門市'), r => r.cost), home: sum(b.filter(r => r.source !== '門市'), r => r.cost),
         cash: sum(t.filter(x => x.payment === '現金'), x => x.amount), transfer: sum(t.filter(x => x.payment !== '現金'), x => x.amount),
-        sold: s.length, rev: sum(s, r => r.salePrice), profit: sum(s, r => (r.salePrice || 0) - (r.cost || 0)) };
-    }).filter(r => n <= 62 || r.tx || r.sold);
+        sold: s.length, rev: sum(s, r => r.salePrice), profit: sum(s, r => (r.salePrice || 0) - (r.cost || 0)),
+        fix: f.length, fixRev: sum(f, o => o.fee), fixProfit: sum(f, fixProfit) };
+    }).filter(r => n <= 62 || r.tx || r.sold || r.fix);
     const T = rows.reduce((a, r) => { Object.keys(r).forEach(k => { if (k !== 'd') a[k] = (a[k] || 0) + r[k]; }); return a; }, {});
     const m = v => v ? money(v) : '—';
-    html = `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>日期</th><th class="r">收購筆數</th><th class="r">件數</th><th class="r">門市收購</th><th class="r">宅配收購</th><th class="r">收購合計</th><th class="r">現金</th><th class="r">轉帳</th><th class="r">售出</th><th class="r">銷售金額</th><th class="r">毛利</th></tr></thead><tbody>
-      ${rows.map(r => `<tr data-day="${r.d}" class="${r.tx || r.sold ? '' : 'zero'}"><td><b>${r.d.slice(5)}</b> <span class="sub">${'日一二三四五六'[new Date(r.d + 'T00:00:00').getDay()]}</span></td><td class="r num">${r.tx || '—'}</td><td class="r num">${r.items || '—'}</td><td class="r num">${m(r.store)}</td><td class="r num">${m(r.home)}</td><td class="r num"><b>${m(r.store + r.home)}</b></td><td class="r num">${m(r.cash)}</td><td class="r num">${m(r.transfer)}</td><td class="r num">${r.sold || '—'}</td><td class="r num">${m(r.rev)}</td><td class="r num">${m(r.profit)}</td></tr>`).join('')}
-      <tr class="st-tot"><td><b>合計</b></td><td class="r num"><b>${T.tx || 0}</b></td><td class="r num">${T.items || 0}</td><td class="r num">${money(T.store || 0)}</td><td class="r num">${money(T.home || 0)}</td><td class="r num"><b>${money((T.store || 0) + (T.home || 0))}</b></td><td class="r num">${money(T.cash || 0)}</td><td class="r num">${money(T.transfer || 0)}</td><td class="r num">${T.sold || 0}</td><td class="r num">${money(T.rev || 0)}</td><td class="r num"><b>${money(T.profit || 0)}</b></td></tr>
+    html = `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>日期</th><th class="r">收購筆數</th><th class="r">件數</th><th class="r">門市收購</th><th class="r">宅配收購</th><th class="r">收購合計</th><th class="r">現金</th><th class="r">轉帳</th><th class="r">售出</th><th class="r">銷售金額</th><th class="r">銷售毛利</th><th class="r">維修件數</th><th class="r">維修收入</th><th class="r">維修毛利</th></tr></thead><tbody>
+      ${rows.map(r => `<tr data-day="${r.d}" class="${r.tx || r.sold || r.fix ? '' : 'zero'}"><td><b>${r.d.slice(5)}</b> <span class="sub">${'日一二三四五六'[new Date(r.d + 'T00:00:00').getDay()]}</span></td><td class="r num">${r.tx || '—'}</td><td class="r num">${r.items || '—'}</td><td class="r num">${m(r.store)}</td><td class="r num">${m(r.home)}</td><td class="r num"><b>${m(r.store + r.home)}</b></td><td class="r num">${m(r.cash)}</td><td class="r num">${m(r.transfer)}</td><td class="r num">${r.sold || '—'}</td><td class="r num">${m(r.rev)}</td><td class="r num">${m(r.profit)}</td><td class="r num">${r.fix || '—'}</td><td class="r num">${m(r.fixRev)}</td><td class="r num">${m(r.fixProfit)}</td></tr>`).join('')}
+      <tr class="st-tot"><td><b>合計</b></td><td class="r num"><b>${T.tx || 0}</b></td><td class="r num">${T.items || 0}</td><td class="r num">${money(T.store || 0)}</td><td class="r num">${money(T.home || 0)}</td><td class="r num"><b>${money((T.store || 0) + (T.home || 0))}</b></td><td class="r num">${money(T.cash || 0)}</td><td class="r num">${money(T.transfer || 0)}</td><td class="r num">${T.sold || 0}</td><td class="r num">${money(T.rev || 0)}</td><td class="r num"><b>${money(T.profit || 0)}</b></td><td class="r num">${T.fix || 0}</td><td class="r num">${money(T.fixRev || 0)}</td><td class="r num"><b>${money(T.fixProfit || 0)}</b></td></tr>
       </tbody></table></div><p class="small muted" style="margin:8px 4px">點日期可看當天的收購單</p>`;
-    csv = [`日報表_${rpFrom}_${rpTo}.csv`, ['日期', '收購筆數', '收購件數', '門市收購', '宅配收購', '收購合計', '現金', '轉帳', '售出件數', '銷售金額', '毛利'],
-      rows.slice().reverse().map(r => [r.d, r.tx, r.items, r.store, r.home, r.store + r.home, r.cash, r.transfer, r.sold, r.rev, r.profit])];
+    csv = [`日報表_${rpFrom}_${rpTo}.csv`, ['日期', '收購筆數', '收購件數', '門市收購', '宅配收購', '收購合計', '現金', '轉帳', '售出件數', '銷售金額', '銷售毛利', '維修件數', '維修收入', '維修毛利'],
+      rows.slice().reverse().map(r => [r.d, r.tx, r.items, r.store, r.home, r.store + r.home, r.cash, r.transfer, r.sold, r.rev, r.profit, r.fix, r.fixRev, r.fixProfit])];
   } else if (rpView === 'tx') {
     const days = [...new Set(tx.map(x => dayOf(x.time)))].sort().reverse();
     html = days.length ? days.map(d => { const list = tx.filter(x => dayOf(x.time) === d).reverse(); return `<div class="rp-day"><div class="rp-dh"><b>${d}</b><span>${list.length} 筆・${list.reduce((t, x) => t + x.items.length, 0)} 件・NT$ ${money(sum(list, x => x.amount))}</span></div>
@@ -1106,8 +1115,14 @@ function drawRpt() {
     csv = [`日收購表_${rpFrom}_${rpTo}.csv`, ['日期時間', '單號', '來源', '出售人', '商品', '件數', '金額', '付款方式', '匯款狀態', '經手人'],
       tx.map(x => [x.time, x.ref, x.source, x.seller, x.items.map(r => [r.model, r.capacity, r.color].filter(Boolean).join(' ')).join('；'), x.items.length, x.amount, x.payment, x.remit, x.staff])];
   } else {
-    html = `<div class="tabs" style="margin-bottom:10px">${[['buy', `收購明細（${buys.length}）`], ['sale', `銷售明細（${sales.length}）`]].map(([k, l]) => `<button data-rd="${k}" class="${rpDetail === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-    if (rpDetail === 'buy') {
+    html = `<div class="tabs" style="margin-bottom:10px">${[['buy', `收購明細（${buys.length}）`], ['sale', `銷售明細（${sales.length}）`], ['fix', `維修明細（${fixes.length}）`]].map(([k, l]) => `<button data-rd="${k}" class="${rpDetail === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    if (rpDetail === 'fix') {
+      html += fixes.length ? `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>取件時間</th><th>維修單</th><th>客戶</th><th>機型</th><th>維修項目</th><th class="r">實收</th><th>付款</th><th class="r">零件成本</th><th class="r">毛利</th></tr></thead><tbody>
+        ${fixes.slice().reverse().map(o => `<tr data-fix="${esc(o.id)}"><td class="num">${esc(o.pickupAt)}</td><td class="num">${esc(o.id)}</td><td>${esc(o.customer)}</td><td><b>${esc(o.model)}</b></td><td class="sub">${esc(o.items.map(x => x.name).join('、'))}</td><td class="r num">${money(o.fee)}</td><td>${esc(o.payment || '—')}</td><td class="r num">${money(o.partsCost)}</td><td class="r num"><b>${money(fixProfit(o))}</b></td></tr>`).join('')}
+        <tr class="st-tot"><td colspan="5"><b>合計 ${fixes.length} 件</b></td><td class="r num">${money(sum(fixes, o => o.fee))}</td><td></td><td class="r num">${money(sum(fixes, o => o.partsCost))}</td><td class="r num"><b>${money(sum(fixes, fixProfit))}</b></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有完成取件的維修</div>';
+      csv = [`維修明細_${rpFrom}_${rpTo}.csv`, ['取件時間', '維修單號', '客戶', '電話', '機型', 'IMEI序號', '維修項目', '實收', '付款方式', '零件', '零件成本', '毛利', '保固到期'],
+        fixes.map(o => [o.pickupAt, o.id, o.customer, o.phone, [o.model, o.capacity, o.color].filter(Boolean).join(' '), o.serial, o.items.map(x => `${x.name} ${x.amount}`).join('；'), o.fee, o.payment, o.parts.map(p => p.name).join('；'), o.partsCost, fixProfit(o), o.warrantyEnd])];
+    } else if (rpDetail === 'buy') {
       html += buys.length ? `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>入庫時間</th><th>單號</th><th>來源</th><th>型號</th><th>規格</th><th>IMEI／序號</th><th>狀況</th><th class="r">成本</th><th>目前狀態</th></tr></thead><tbody>
         ${buys.slice().reverse().map(r => `<tr data-sku="${esc(r.sku)}"><td class="num">${esc(r.inAt)}</td><td class="num">${esc(r.ref)}</td><td>${esc(r.source)}</td><td><b>${esc(r.model)}</b></td><td class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</td><td class="num sub">${esc(r.serial || '—')}</td><td class="sub">${esc(r.notes || '')}</td><td class="r num">${money(r.cost)}</td><td>${stockBadge(r)}</td></tr>`).join('')}
         <tr class="st-tot"><td colspan="7"><b>合計 ${buys.length} 件</b></td><td class="r num"><b>${money(sum(buys, r => r.cost))}</b></td><td></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有收購</div>';
@@ -1126,6 +1141,7 @@ function drawRpt() {
   $$('[data-rd]', box).forEach(b => b.onclick = () => { rpDetail = b.dataset.rd; drawRpt(); });
   $$('tr[data-day]', box).forEach(tr => tr.onclick = () => { rpFrom = rpTo = tr.dataset.day; rpView = 'tx'; reportPage(); });
   $$('tr[data-sku]', box).forEach(tr => tr.onclick = () => stockDrawer(rpData.stock.find(r => r.sku === tr.dataset.sku)));
+  $$('tr[data-fix]', box).forEach(tr => tr.onclick = () => repairDrawer(rpData.repairs.find(o => o.id === tr.dataset.fix)));
   $$('tr[data-ref]', box).forEach(tr => tr.onclick = () => {
     if (tr.dataset.src === '門市') { const o = rpData.intakes.find(x => x.id === tr.dataset.ref); if (o) intakeDrawer(o); }
     else { window.openAfterLoad = tr.dataset.ref; location.hash = ''; }
