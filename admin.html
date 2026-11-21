@@ -150,6 +150,13 @@
   .est-box .chips { flex-wrap: wrap; }
   .ded-reason { flex: 1; display: grid; gap: 6px; min-width: 0; }
   .st-view { margin: 0 0 10px; }
+  .rp-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px; }
+  .rp-dates { display: flex; gap: 8px; align-items: center; } .rp-dates .input { width: auto; padding: 8px 10px; }
+  .rp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; }
+  .rp-tbl { min-width: 760px; } .rp-tbl th.r, .rp-tbl td.r { text-align: right; } .rp-tbl td { vertical-align: top; }
+  .rp-tbl tr.zero td { color: var(--muted); } .rp-tbl tbody tr[data-day], .rp-tbl tbody tr[data-ref], .rp-tbl tbody tr[data-sku] { cursor: pointer; }
+  .rp-tbl tbody tr[data-day]:hover, .rp-tbl tbody tr[data-ref]:hover, .rp-tbl tbody tr[data-sku]:hover { background: #f8f8fa; }
+  .rp-day { margin-bottom: 18px; } .rp-dh { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 8px; } .rp-dh span { color: var(--muted); font-size: 13px; }
   .st-model { max-width: 300px; }
   .st-sum { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); font-size: 14px; }
   .st-sum th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 11px 12px; background: #fafafa; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -268,7 +275,7 @@
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261122e"></script>
-<script src="store.js?v=20261122p"></script>
+<script src="store.js?v=20261122r"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -348,7 +355,7 @@ function pagesNav(cur) {
     return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
   }
   const items = [['', '宅配收購'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
-    P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
+    P('edit_payment') && ['remit', '匯款'], P('view_cost') && ['report', '報表'], P('edit_prices') && ['prices', '估價表'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
   return `<nav class="pages">${items.map(([k, l]) => k === 'shopLink' ? `<a href="admin.html?shop=1#intake/new" style="order:99;margin-left:auto">${l}</a>` : `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 

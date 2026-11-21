@@ -35,7 +35,7 @@ const IN_NOTICE = [
   ['您的權利', '您可依個資法第 3 條請求查詢、閱覽、製給複本、補充更正、停止利用或刪除，請洽門市或客服。'],
 ];
 
-const isStoreRoute = page => ['intake', 'intake/new', 'stock', 'remit', 'prices'].includes(page);
+const isStoreRoute = page => ['intake', 'intake/new', 'stock', 'remit', 'prices', 'report'].includes(page);
 function storeRoute(page) {
   $('#refresh').hidden = page === 'intake/new';
   if (page === 'intake/new' && P('create_intake')) return intakeForm();
@@ -43,8 +43,11 @@ function storeRoute(page) {
   if (page === 'stock' && canStoreView()) { $('#refresh').onclick = () => stockPage(true); return stockPage(); }
   if (page === 'prices' && P('edit_prices')) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
   if (page === 'remit' && P('edit_payment')) { $('#refresh').onclick = () => remitPage(true); return remitPage(); }
+  if (page === 'report' && showCost()) { $('#refresh').onclick = () => reportPage(true); return reportPage(); }
   location.hash = '';
 }
+/** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
+const showCost = () => P('view_cost') && !SHOP;
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
 const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
 const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-US');
@@ -867,9 +870,9 @@ async function stockPage(refresh) {
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
       <div class="stat" style="--c:#0A84FF"><div class="n num">${active.length}</div><div class="l">在庫（含整理中）</div></div>
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${stockCache.filter(r => r.status === '整理中').length}</div><div class="l">整理中</div></div>
-      ${P('view_cost') ? `<div class="stat" style="--c:#30D158"><div class="n num">${nt(active.reduce((t, r) => t + (r.cost || 0), 0))}</div><div class="l">在庫成本</div></div>` : ''}
+      ${showCost() ? `<div class="stat" style="--c:#30D158"><div class="n num">${nt(active.reduce((t, r) => t + (r.cost || 0), 0))}</div><div class="l">在庫成本</div></div>` : ''}
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${soldM.length}</div><div class="l">本月售出</div></div>
-      ${P('view_cost') ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
+      ${showCost() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
     </div>
     <div class="tabs st-view">${[['list', '📋 明細'], ['model', '📊 依型號總清單']].map(([k, l]) => `<button data-view="${k}" class="${stView === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="toolbar">
@@ -910,7 +913,7 @@ function drawModelSummary() {
     if (r.status !== '已售出') { x.cost += r.cost || 0; const c = r.capacity || '—'; x.caps[c] = (x.caps[c] || 0) + 1; }
   });
   const rows = Object.values(g).sort((a, b) => byName(a.cat, b.cat) || byName(a.model, b.model));
-  const cost = P('view_cost');
+  const cost = showCost();
   const tot = rows.reduce((t, x) => ({ a: t.a + x.a, p: t.p + x.p, s: t.s + x.s, cost: t.cost + x.cost }), { a: 0, p: 0, s: 0, cost: 0 });
   $('#stTbl').innerHTML = rows.length ? `<table class="st-sum"><thead><tr><th>型號</th><th class="hide-m">在庫規格</th><th class="c">在庫</th><th class="c">整理中</th><th class="c">已售出</th>${cost ? '<th class="hide-m" style="text-align:right">在庫成本</th>' : ''}</tr></thead><tbody>
     ${rows.map(x => `<tr data-model="${esc(x.model)}"><td><b>${esc(x.model)}</b><div class="sub">${esc(x.cat)}</div></td>
@@ -924,11 +927,11 @@ function drawModelSummary() {
 function drawStock() {
   if (stView === 'model') return drawModelSummary();
   const list = stockVisible();
-  $('#stTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>商品</th><th class="hide-m">IMEI／序號</th><th>來源</th><th class="hide-m">成本</th><th>狀態</th></tr></thead><tbody>
+  $('#stTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>商品</th><th class="hide-m">IMEI／序號</th><th>來源</th>${showCost() ? '<th class="hide-m">成本</th>' : ''}<th>狀態</th></tr></thead><tbody>
     ${list.map(r => `<tr data-sku="${esc(r.sku)}"><td><b>${esc(r.model)}</b> <span class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</span><div class="sub">${esc(r.sku)}・入庫 ${esc(r.inAt.slice(0, 10))}</div></td>
       <td class="num sub hide-m">${esc(r.serial || '—')}</td>
       <td><span class="pill ${r.source === '宅配' ? '' : 'off'}">${esc(r.source)}</span></td>
-      <td class="num hide-m">${nt(r.cost)}</td>
+      ${showCost() ? `<td class="num hide-m">${nt(r.cost)}</td>` : ''}
       <td>${stockBadge(r)}${r.status === '已售出' ? `<div class="sub">${esc(r.saleDate)} ${esc(r.channel)}${r.salePrice != null && r.salePrice !== '' ? ' NT$' + money(r.salePrice) : ''}</div>` : ''}</td></tr>`).join('')}
     </tbody></table>` : '<div class="card empty">沒有符合的庫存</div>';
   $$('[data-sku]').forEach(tr => tr.onclick = () => stockDrawer(stockCache.find(r => r.sku === tr.dataset.sku)));
@@ -941,7 +944,7 @@ function stockDrawer(r) {
     <div class="d-body">
       <div class="card"><dl class="kv"><dt>庫存編號</dt><dd class="num">${esc(r.sku)}</dd><dt>來源</dt><dd>${esc(r.source)}・<a href="${r.source === '宅配' ? '#' : '#intake'}" data-ref="${esc(r.ref)}">${esc(r.ref)}</a></dd>
         <dt>規格</dt><dd>${esc([r.category, r.capacity, r.color].filter(Boolean).join('・'))}</dd><dt>IMEI／序號</dt><dd class="num">${esc(r.serial || '—')}</dd>
-        <dt>狀況</dt><dd>${esc(r.notes || '—')}</dd><dt>收購成本</dt><dd class="num">${nt(r.cost)}</dd><dt>入庫</dt><dd>${esc(r.inAt)}</dd>
+        <dt>狀況</dt><dd>${esc(r.notes || '—')}</dd>${showCost() ? `<dt>收購成本</dt><dd class="num">${nt(r.cost)}</dd>` : ''}<dt>入庫</dt><dd>${esc(r.inAt)}</dd>
         <dt>最後更新</dt><dd>${esc(r.updatedAt)}・${esc(r.updatedBy)}</dd></dl>
         ${r.photos.length ? `<div class="ph-grid" style="margin-top:10px">${r.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="商品照片"></div>`).join('')}</div>` : ''}</div>
       ${can ? `<div class="card"><h3>庫存狀態</h3>
@@ -984,12 +987,149 @@ function stockDrawer(r) {
 }
 function exportCsv() {
   const cell = v => { const s = String(v ?? ''); return '"' + (/^[=+\-@]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"'; };
-  const cost = P('view_cost');
+  const cost = showCost();
   const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本'] : []), '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
   const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost] : []), r.status, r.saleDate, r.channel, r.salePrice ?? '']);
   const blob = new Blob(['﻿' + [head, ...rows].map(x => x.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `庫存盤點-${localDay()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ============================== 報表（日報表／日收購表／明細） ============================== */
+let rpFrom = '', rpTo = '', rpView = 'daily', rpDetail = 'buy', rpData = null;
+const dayOf = s => String(s || '').slice(0, 10);
+const ymd = t => t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+const addDays = (d, n) => { const t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); return ymd(t); };
+function rpPreset(k) {
+  const t = localDay();
+  if (k === 'yday') { const y = addDays(t, -1); return [y, y]; }
+  if (k === 'week') { const dow = (new Date(t + 'T00:00:00').getDay() + 6) % 7; return [addDays(t, -dow), t]; }
+  if (k === 'month') return [t.slice(0, 8) + '01', t];
+  if (k === 'lmonth') { const last = addDays(t.slice(0, 8) + '01', -1); return [last.slice(0, 8) + '01', last]; }
+  return [t, t];
+}
+function csvDownload(name, head, rows) {
+  const cell = v => { const s = String(v ?? ''); return '"' + (/^[=+\-@]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"'; };
+  const blob = new Blob(['﻿' + [head, ...rows].map(x => x.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function reportPage(refresh) {
+  if (!rpFrom) [rpFrom, rpTo] = rpPreset('today');
+  if (refresh || !rpData) {
+    app.innerHTML = pagesNav('report') + '<div class="spinner"></div>';
+    try {
+      const [st, it] = await Promise.all([api('stockList'), api('intakeList')]);
+      let ords = orders;
+      if (!ords.length) { try { ords = (await api('adminList')).orders; } catch (e) { ords = []; } }
+      rpData = { stock: st.items, intakes: it.intakes, orders: ords };
+      stockCache = st.items; intakes = it.intakes;
+    } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('report') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+    if (refresh) toast('已更新');
+  }
+  const presets = [['today', '今天'], ['yday', '昨天'], ['week', '本週'], ['month', '本月'], ['lmonth', '上月']];
+  const on = k => { const [f, t] = rpPreset(k); return f === rpFrom && t === rpTo; };
+  app.innerHTML = `${pagesNav('report')}
+    <div class="card rp-bar">
+      <div class="tabs">${presets.map(([k, l]) => `<button data-pre="${k}" class="${on(k) ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="rp-dates"><input class="input" type="date" id="rpFrom" value="${rpFrom}"><span>至</span><input class="input" type="date" id="rpTo" value="${rpTo}"></div>
+    </div>
+    <div class="tabs st-view">${[['daily', '📅 日報表'], ['tx', '🧾 日收購表'], ['detail', '📋 明細']].map(([k, l]) => `<button data-rv="${k}" class="${rpView === k ? 'on' : ''}">${l}</button>`).join('')}
+      <button id="rpCsv" style="margin-left:auto">⬇ 匯出 CSV</button></div>
+    <div id="rpBody"></div>`;
+  $$('[data-pre]').forEach(b => b.onclick = () => { [rpFrom, rpTo] = rpPreset(b.dataset.pre); reportPage(); });
+  const setRange = () => { const f = $('#rpFrom').value, t = $('#rpTo').value; if (!f || !t) return; [rpFrom, rpTo] = f <= t ? [f, t] : [t, f]; reportPage(); };
+  $('#rpFrom').onchange = setRange; $('#rpTo').onchange = setRange;
+  $$('[data-rv]').forEach(b => b.onclick = () => { rpView = b.dataset.rv; reportPage(); });
+  drawRpt();
+}
+/** 依期間整理：收購（依入庫日）、交易（依單號）、銷售（依銷售日） */
+function rpCompute() {
+  const { stock, intakes: ins, orders: ords } = rpData;
+  const inR = d => d && d >= rpFrom && d <= rpTo;
+  const buys = stock.filter(r => inR(dayOf(r.inAt))).sort((a, b) => a.inAt.localeCompare(b.inAt));
+  const sales = stock.filter(r => r.status === '已售出' && inR(dayOf(r.saleDate))).sort((a, b) => String(a.saleDate).localeCompare(String(b.saleDate)));
+  const txm = {};
+  buys.forEach(r => {
+    const t = txm[r.ref] = txm[r.ref] || { ref: r.ref, source: r.source, time: r.inAt, items: [], amount: 0 };
+    t.items.push(r); t.amount += r.cost || 0; if (r.inAt < t.time) t.time = r.inAt;
+  });
+  const tx = Object.values(txm).map(t => {
+    if (t.source === '門市') {
+      const o = ins.find(x => x.id === t.ref) || {};
+      return { ...t, seller: o.seller || '', payment: o.payment || '', staff: o.staff || '', remit: o.payment === '轉帳' ? o.remit : '' };
+    }
+    const o = ords.find(x => x.id === t.ref) || {};
+    return { ...t, seller: o.name || '', payment: '轉帳', staff: t.items[0].updatedBy || '', remit: '已付款' };
+  }).sort((a, b) => a.time.localeCompare(b.time));
+  return { buys, sales, tx };
+}
+function drawRpt() {
+  const { buys, sales, tx } = rpCompute();
+  const box = $('#rpBody');
+  const range = rpFrom === rpTo ? rpFrom : `${rpFrom} ～ ${rpTo}`;
+  const sum = (a, f) => a.reduce((t, x) => t + (f(x) || 0), 0);
+  // 總覽
+  const head = `<div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+      <div class="stat" style="--c:#0A84FF"><div class="n num">${tx.length}</div><div class="l">收購筆數（${buys.length} 件）</div></div>
+      <div class="stat" style="--c:#30D158"><div class="n num">${nt(sum(buys, r => r.cost))}</div><div class="l">收購金額</div></div>
+      <div class="stat" style="--c:#1d1d1f"><div class="n num">${sales.length}</div><div class="l">售出件數</div></div>
+      <div class="stat" style="--c:#BF5AF2"><div class="n num">${nt(sum(sales, r => r.salePrice))}</div><div class="l">銷售金額</div></div>
+      <div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">毛利</div></div>
+    </div><p class="small muted" style="margin:-6px 4px 10px">期間：${esc(range)}・收購以入庫時間計（宅配為付款入庫日），銷售以銷售日期計</p>`;
+  let html = '', csv = null;
+  if (rpView === 'daily') {
+    const days = [];
+    const n = Math.round((new Date(rpTo) - new Date(rpFrom)) / 864e5);
+    for (let i = n; i >= 0; i--) days.push(addDays(rpFrom, i));
+    const rows = days.map(d => {
+      const b = buys.filter(r => dayOf(r.inAt) === d), t = tx.filter(x => dayOf(x.time) === d), s = sales.filter(r => dayOf(r.saleDate) === d);
+      return { d, tx: t.length, items: b.length, store: sum(b.filter(r => r.source === '門市'), r => r.cost), home: sum(b.filter(r => r.source !== '門市'), r => r.cost),
+        cash: sum(t.filter(x => x.payment === '現金'), x => x.amount), transfer: sum(t.filter(x => x.payment !== '現金'), x => x.amount),
+        sold: s.length, rev: sum(s, r => r.salePrice), profit: sum(s, r => (r.salePrice || 0) - (r.cost || 0)) };
+    }).filter(r => n <= 62 || r.tx || r.sold);
+    const T = rows.reduce((a, r) => { Object.keys(r).forEach(k => { if (k !== 'd') a[k] = (a[k] || 0) + r[k]; }); return a; }, {});
+    const m = v => v ? money(v) : '—';
+    html = `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>日期</th><th class="r">收購筆數</th><th class="r">件數</th><th class="r">門市收購</th><th class="r">宅配收購</th><th class="r">收購合計</th><th class="r">現金</th><th class="r">轉帳</th><th class="r">售出</th><th class="r">銷售金額</th><th class="r">毛利</th></tr></thead><tbody>
+      ${rows.map(r => `<tr data-day="${r.d}" class="${r.tx || r.sold ? '' : 'zero'}"><td><b>${r.d.slice(5)}</b> <span class="sub">${'日一二三四五六'[new Date(r.d + 'T00:00:00').getDay()]}</span></td><td class="r num">${r.tx || '—'}</td><td class="r num">${r.items || '—'}</td><td class="r num">${m(r.store)}</td><td class="r num">${m(r.home)}</td><td class="r num"><b>${m(r.store + r.home)}</b></td><td class="r num">${m(r.cash)}</td><td class="r num">${m(r.transfer)}</td><td class="r num">${r.sold || '—'}</td><td class="r num">${m(r.rev)}</td><td class="r num">${m(r.profit)}</td></tr>`).join('')}
+      <tr class="st-tot"><td><b>合計</b></td><td class="r num"><b>${T.tx || 0}</b></td><td class="r num">${T.items || 0}</td><td class="r num">${money(T.store || 0)}</td><td class="r num">${money(T.home || 0)}</td><td class="r num"><b>${money((T.store || 0) + (T.home || 0))}</b></td><td class="r num">${money(T.cash || 0)}</td><td class="r num">${money(T.transfer || 0)}</td><td class="r num">${T.sold || 0}</td><td class="r num">${money(T.rev || 0)}</td><td class="r num"><b>${money(T.profit || 0)}</b></td></tr>
+      </tbody></table></div><p class="small muted" style="margin:8px 4px">點日期可看當天的收購單</p>`;
+    csv = [`日報表_${rpFrom}_${rpTo}.csv`, ['日期', '收購筆數', '收購件數', '門市收購', '宅配收購', '收購合計', '現金', '轉帳', '售出件數', '銷售金額', '毛利'],
+      rows.slice().reverse().map(r => [r.d, r.tx, r.items, r.store, r.home, r.store + r.home, r.cash, r.transfer, r.sold, r.rev, r.profit])];
+  } else if (rpView === 'tx') {
+    const days = [...new Set(tx.map(x => dayOf(x.time)))].sort().reverse();
+    html = days.length ? days.map(d => { const list = tx.filter(x => dayOf(x.time) === d).reverse(); return `<div class="rp-day"><div class="rp-dh"><b>${d}</b><span>${list.length} 筆・${list.reduce((t, x) => t + x.items.length, 0)} 件・NT$ ${money(sum(list, x => x.amount))}</span></div>
+      <div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>時間</th><th>單號</th><th>來源</th><th>出售人</th><th>商品</th><th class="r">金額</th><th>付款</th><th>經手人</th></tr></thead><tbody>
+      ${list.map(x => `<tr data-ref="${esc(x.ref)}" data-src="${esc(x.source)}"><td class="num">${esc(x.time.slice(11, 16))}</td><td class="num">${esc(x.ref)}</td><td><span class="pill ${x.source === '宅配' ? '' : 'off'}">${esc(x.source)}</span></td><td>${esc(x.seller || '—')}</td>
+        <td>${x.items.map(r => esc([r.model, r.capacity].filter(Boolean).join(' '))).join('<br>')}</td><td class="r num"><b>${money(x.amount)}</b></td><td>${esc(x.payment)}${x.remit && x.remit !== '已付款' ? `<div class="sub">${esc(x.remit)}</div>` : ''}</td><td>${esc(x.staff || '—')}</td></tr>`).join('')}
+      </tbody></table></div></div>`; }).join('') : '<div class="card empty">這段期間沒有收購</div>';
+    csv = [`日收購表_${rpFrom}_${rpTo}.csv`, ['日期時間', '單號', '來源', '出售人', '商品', '件數', '金額', '付款方式', '匯款狀態', '經手人'],
+      tx.map(x => [x.time, x.ref, x.source, x.seller, x.items.map(r => [r.model, r.capacity, r.color].filter(Boolean).join(' ')).join('；'), x.items.length, x.amount, x.payment, x.remit, x.staff])];
+  } else {
+    html = `<div class="tabs" style="margin-bottom:10px">${[['buy', `收購明細（${buys.length}）`], ['sale', `銷售明細（${sales.length}）`]].map(([k, l]) => `<button data-rd="${k}" class="${rpDetail === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    if (rpDetail === 'buy') {
+      html += buys.length ? `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>入庫時間</th><th>單號</th><th>來源</th><th>型號</th><th>規格</th><th>IMEI／序號</th><th>狀況</th><th class="r">成本</th><th>目前狀態</th></tr></thead><tbody>
+        ${buys.slice().reverse().map(r => `<tr data-sku="${esc(r.sku)}"><td class="num">${esc(r.inAt)}</td><td class="num">${esc(r.ref)}</td><td>${esc(r.source)}</td><td><b>${esc(r.model)}</b></td><td class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</td><td class="num sub">${esc(r.serial || '—')}</td><td class="sub">${esc(r.notes || '')}</td><td class="r num">${money(r.cost)}</td><td>${stockBadge(r)}</td></tr>`).join('')}
+        <tr class="st-tot"><td colspan="7"><b>合計 ${buys.length} 件</b></td><td class="r num"><b>${money(sum(buys, r => r.cost))}</b></td><td></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有收購</div>';
+      csv = [`收購明細_${rpFrom}_${rpTo}.csv`, ['入庫時間', '庫存編號', '單號', '來源', '類別', '型號', '容量', '顏色', 'IMEI序號', '狀況', '成本', '目前狀態'],
+        buys.map(r => [r.inAt, r.sku, r.ref, r.source, r.category, r.model, r.capacity, r.color, r.serial, r.notes, r.cost, r.status])];
+    } else {
+      html += sales.length ? `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>銷售日期</th><th>型號</th><th>規格</th><th>IMEI／序號</th><th>管道</th><th class="r">成本</th><th class="r">售價</th><th class="r">毛利</th></tr></thead><tbody>
+        ${sales.slice().reverse().map(r => { const p = (r.salePrice || 0) - (r.cost || 0); return `<tr data-sku="${esc(r.sku)}"><td class="num">${esc(r.saleDate)}</td><td><b>${esc(r.model)}</b><div class="sub">${esc(r.sku)}</div></td><td class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</td><td class="num sub">${esc(r.serial || '—')}</td><td>${esc(r.channel || '—')}</td><td class="r num">${money(r.cost)}</td><td class="r num">${money(r.salePrice)}</td><td class="r num" style="color:${p < 0 ? 'var(--red, #e5484d)' : 'inherit'}"><b>${money(p)}</b></td></tr>`; }).join('')}
+        <tr class="st-tot"><td colspan="5"><b>合計 ${sales.length} 件</b></td><td class="r num">${money(sum(sales, r => r.cost))}</td><td class="r num">${money(sum(sales, r => r.salePrice))}</td><td class="r num"><b>${money(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</b></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有銷售</div>';
+      csv = [`銷售明細_${rpFrom}_${rpTo}.csv`, ['銷售日期', '庫存編號', '型號', '容量', '顏色', 'IMEI序號', '銷售管道', '成本', '售價', '毛利', '來源', '來源單號'],
+        sales.map(r => [r.saleDate, r.sku, r.model, r.capacity, r.color, r.serial, r.channel, r.cost, r.salePrice, (r.salePrice || 0) - (r.cost || 0), r.source, r.ref])];
+    }
+  }
+  box.innerHTML = head + html;
+  $('#rpCsv').onclick = () => csv && csvDownload(...csv);
+  $$('[data-rd]', box).forEach(b => b.onclick = () => { rpDetail = b.dataset.rd; drawRpt(); });
+  $$('tr[data-day]', box).forEach(tr => tr.onclick = () => { rpFrom = rpTo = tr.dataset.day; rpView = 'tx'; reportPage(); });
+  $$('tr[data-sku]', box).forEach(tr => tr.onclick = () => stockDrawer(rpData.stock.find(r => r.sku === tr.dataset.sku)));
+  $$('tr[data-ref]', box).forEach(tr => tr.onclick = () => {
+    if (tr.dataset.src === '門市') { const o = rpData.intakes.find(x => x.id === tr.dataset.ref); if (o) intakeDrawer(o); }
+    else { window.openAfterLoad = tr.dataset.ref; location.hash = ''; }
+  });
 }
 
 /* ============================== 匯款工作區 ============================== */
