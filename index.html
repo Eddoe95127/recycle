@@ -6,7 +6,7 @@
 <title>iPhone收購中心｜宅配收購</title>
 <meta name="description" content="iPhone、iPad、Mac 宅配收購。線上預約，黑貓到府收件，專業檢測報價，同意後 2 個工作天匯款。">
 <meta name="theme-color" content="#f5f5f7">
-<link rel="stylesheet" href="style.css?v=20261121d">
+<link rel="stylesheet" href="style.css?v=20261122b">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   /* ---------- home ---------- */
@@ -121,7 +121,7 @@
   <div id="footInfo"></div>
 </footer>
 
-<script src="config.js?v=20261121d"></script>
+<script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261122b"></script>
 <script>
 const app = $('#app');
@@ -222,9 +222,11 @@ async function renderEstimate() {
   }
   drawEstimate();
 }
-function drawEstimate() {
+/** box：畫在哪裡（預設整頁）；book：預約表單裡的「選商品」模式 */
+function drawEstimate(box = app, book = false) {
   const { rows, rules } = est;
   if (!rows.length) {
+    if (book) { box.innerHTML = '<p class="small muted">價格表正在更新，請用下方「自己填寫」加入商品。</p>'; return; }
     app.innerHTML = `<div class="narrow" style="padding-top:28px"><div class="card"><h2 class="card-title">線上估價準備中</h2>
       <p class="muted">價格表正在更新，歡迎直接預約，我們收到後會專業檢測並報價。</p><button class="btn btn-dark btn-block" onclick="go('book')">直接預約收購</button></div></div>`;
     return;
@@ -251,10 +253,7 @@ function drawEstimate() {
   const accHint = !accList.length ? '' : new Set(accList.map(a => a.amount)).size === 1 ? `📦 每少一項扣 NT$ ${money(accList[0].amount)}` : '📦 ' + accList.map(a => `${a.label.replace('沒有原廠', '缺')}扣 NT$ ${money(a.amount)}`).join('、');
   // okLabel：複選題的「都沒問題」選項，沒勾任何問題時預設勾它
   const chips = (key, list, multi, okLabel) => `<div class="chips">${(okLabel ? [okLabel, ...list] : list).map(l => `<label class="chip"><input type="${multi ? 'checkbox' : 'radio'}" name="es_${key}" value="${esc(l)}" ${multi ? ((l === okLabel ? !estSel[key].length : estSel[key].includes(l)) ? 'checked' : '') : (estSel[key] === l ? 'checked' : '')}><span>${esc(l)}</span></label>`).join('')}</div>`;
-  app.innerHTML = `<div class="narrow" style="padding-top:22px">
-    <div class="card rise">
-      <h2 class="card-title" style="font-size:22px">線上估價</h2>
-      <p class="muted" style="margin:4px 0 18px">選擇型號與狀況，馬上知道大約可以賣多少</p>
+  const form = `
       ${cats.length > 1 ? `<div class="field"><span>類別</span>${chips('category', cats)}</div>` : ''}
       ${hasNew && hasUsed ? `<div class="field"><span>商品狀態</span>${chips('cond', [EST_USED, EST_NEW])}</div>` : `<p class="small muted" style="margin:-6px 0 12px">${isNew ? '此類別只收全新未拆封商品' : ''}</p>`}
       <label class="field"><span>型號</span><select class="input" id="esModel"><option value="">請選擇型號</option>${models.map(m => `<option ${estSel.model === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
@@ -266,9 +265,8 @@ function drawEstimate() {
         ${accList.length ? `<div class="field"><span>盒子與配件</span>
           <p class="small muted" style="margin:0 0 8px">${accHint}</p>
           ${chips('missing', accLabels, true, EST_ACC_OK)}</div>` : ''}
-        <div class="field"><span>功能狀況（有問題的請勾選，可複選）</span>${chips('issues', rules.issues.map(x => x.label), true, EST_FUNC_OK)}</div>` : ''}
-    </div>
-    ${res ? `<div class="card est-result rise">
+        <div class="field"><span>功能狀況（有問題的請勾選，可複選）</span>${chips('issues', rules.issues.map(x => x.label), true, EST_FUNC_OK)}</div>` : ''}`;
+  const result = res ? `<div class="card est-result rise">
       ${res.fixed != null ? `<div class="est-label">${esc(estSel.model)} ${esc(estSel.capacity)}　${isNew ? '全新收購價' : '收購價'}</div>
           <div class="est-price">NT$ ${money(res.fixed)}</div>
           <p class="est-warn">${isNew ? '⚠ 需全新未拆封、未開通。拆封、外封膜破損或國外版本會另行扣款或改以電話報價，請以門市實際確認為準。' : '⚠ 以上為 A 級良品價格，有損傷、瑕疵或缺少配件會依實際檢測扣款。'}</p>`
@@ -279,28 +277,36 @@ function drawEstimate() {
           ${res.accOff ? `<p class="small muted" style="margin:6px 0 0">已扣缺少盒子／配件 NT$ ${money(res.accOff)}</p>` : ''}
           ${res.deducted ? `<p class="est-warn">⚠ 已依「${esc(res.issues.map(i => i.label).join('、'))}」預估扣款，故障程度不同價格會有差異，請以實際檢測為準。</p>` : ''}`}
       <p class="small muted" style="margin:10px 0 16px">${esc(rules.note)}</p>
-      <button class="btn btn-dark btn-block" id="esBook">用這個估價預約宅配收購 →</button>
-    </div>` : `<p class="small muted" style="text-align:center">${row ? '選完外觀與電池健康度就會顯示預估價' : '找不到您的型號？可以直接預約，我們會檢測後報價'}</p>`}
+      <button class="btn btn-dark btn-block" id="esBook">${book ? '＋ 加入這項商品' : '直接預約收購 →'}</button>
+    </div>` : `<p class="small muted" style="text-align:center">${row ? '選完外觀與電池健康度就會顯示預估價' : book ? (estSel.model ? '請選擇規格' : '先選擇型號，會顯示預估收購價') : '找不到您的型號？可以直接預約，我們會檢測後報價'}</p>`;
+  box.innerHTML = book ? `<div class="est-inline">${form}${result}</div>` : `<div class="narrow" style="padding-top:22px">
+    <div class="card rise">
+      <h2 class="card-title" style="font-size:22px">線上估價</h2>
+      <p class="muted" style="margin:4px 0 18px">選擇型號與狀況，馬上知道大約可以賣多少</p>
+      ${form}
+    </div>
+    ${result}
     <p style="text-align:center;margin:14px 0 30px"><button class="link" onclick="go('book')">不估價，直接預約 →</button></p>
   </div>`;
-  $('#esModel').onchange = e => { estSel.model = e.target.value; estSel.capacity = ''; drawEstimate(); };
+  const redraw = () => drawEstimate(box, book);
+  $('#esModel').onchange = e => { estSel.model = e.target.value; estSel.capacity = ''; redraw(); };
   ['category', 'cond', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=es_${k}]`).forEach(r => r.onchange = () => {
     estSel[k] = r.value;
     if (k === 'category') { estSel.model = ''; estSel.cond = ''; }
     if (k === 'cond') estSel.model = '';
-    drawEstimate();
+    redraw();
   }));
   // 勾「都沒問題」＝清空；勾任何問題＝取消「都沒問題」
   const multi = (key, ok) => $$(`input[name=es_${key}]`).forEach(c => c.onchange = () => {
     estSel[key] = c.value === ok ? [] : $$(`input[name=es_${key}]:checked`).map(x => x.value).filter(v => v !== ok);
-    drawEstimate();
+    redraw();
   });
   multi('issues', EST_FUNC_OK);
   multi('missing', EST_ACC_OK);
-  if ($('#esBook')) $('#esBook').onclick = () => estToBooking(res, isNew, detail);
+  if ($('#esBook')) $('#esBook').onclick = () => book ? estAddToDraft(res, isNew, detail) : estToBooking(res, isNew, detail);
 }
 /** 把估價帶進預約表單 */
-function estToBooking(res, isNew, detail) {
+function estItem(res, isNew, detail) {
   const cat = FIELDS[estSel.category] ? estSel.category : '其他';
   const it = newItem(cat);
   const priceText = res.fixed != null ? `NT$ ${money(res.fixed)}` : res.inspect ? '需檢測' : `NT$ ${money(res.high)}–${money(res.low)}`;
@@ -319,14 +325,41 @@ function estToBooking(res, isNew, detail) {
     if (cat === 'Mac') { it.model = estSel.model; it.year = (estSel.capacity.match(/20\d\d/) || [''])[0]; it.spec = estSel.capacity; }
     if (detail) {
       if (IPHONE_APPEARANCE.includes(estSel.appearance)) it.appearance = estSel.appearance;
-      it.issues = estSel.issues.filter(l => IPHONE_ISSUES.includes(l));
-      if (!it.issues.length && !estSel.issues.length) it.issues = ['功能都完全正常'];
+      // 估價表的故障選項對應到預約表單的選項（例如「無法開機」→「無法開機運作」）
+      const ISSUE_MAP = [[/開機/, '無法開機運作'], [/螢幕.*(破|裂)|(破|裂).*螢幕/, '螢幕有破裂'], [/水/, '機身進過水'], [/按鍵|按鈕/, '按鍵功能不正常'], [/相機|鏡頭/, '相機功能不正常']];
+      const mapIssue = l => IPHONE_ISSUES.includes(l) ? l : ((ISSUE_MAP.find(([re]) => re.test(l)) || [])[1] || '');
+      it.issues = [...new Set(estSel.issues.map(mapIssue).filter(Boolean))];
+      const unmapped = estSel.issues.filter(l => !mapIssue(l));
+      if (unmapped.length) it.issues.push('其他問題');
+      if (!it.issues.length) it.issues = ['功能都完全正常'];
+      it._unmapped = unmapped;
     }
-    const extra = (cat === 'iPad' && !it.model ? `型號：${estSel.model} ${estSel.capacity}；` : '') + (detail && !IPHONE_APPEARANCE.includes(estSel.appearance) ? `外觀：${estSel.appearance}；` : '');
+    const extra = (cat === 'iPad' && !it.model ? `型號：${estSel.model} ${estSel.capacity}；` : '') + (detail && !IPHONE_APPEARANCE.includes(estSel.appearance) ? `外觀：${estSel.appearance}；` : '')
+      + (it._unmapped && it._unmapped.length ? `功能：${it._unmapped.join('、')}；` : '');
+    delete it._unmapped;
     it.issueNote = extra + note;
   }
-  const d = loadDraft(); d.items.push(it); d.step = 0; saveDraft(d);
-  toast('已把估價帶入預約表單'); go('book');
+  it.est = priceText; // 只在表單顯示用
+  return it;
+}
+/** 估價頁「直接預約收購」：帶入商品；不用再補資料就直接跳到聯絡資料 */
+function estToBooking(res, isNew, detail) {
+  const it = estItem(res, isNew, detail);
+  const d = loadDraft(); d.items.push(it); d.step = 0; d.adding = false; saveDraft(d);
+  draft = d;
+  const ok = !validateStep(0);
+  if (ok) { d.step = 1; saveDraft(d); toast('已帶入商品，請填寫聯絡與取件資料'); }
+  else toast('已帶入商品，請補上 ' + (it.category === 'iPhone' ? 'IMEI 等' : '') + '必填資料');
+  go('book');
+}
+/** 預約表單裡選好的商品 */
+function estAddToDraft(res, isNew, detail) {
+  syncItems();
+  draft.items.push(estItem(res, isNew, detail));
+  draft.adding = false; saveDraft(draft);
+  Object.assign(estSel, { model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] });
+  renderBook();
+  setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
 }
 
 /* ============================== 預約流程 ============================== */
@@ -361,7 +394,7 @@ const FIELDS = {
   ],
 };
 const newItem = cat => ({ category: cat, issues: [] });
-const loadDraft = () => { const d = store.get('draft') || {}; return { step: d.step || 0, items: d.items || [], contact: d.contact || {}, bank: d.bank || {} }; };
+const loadDraft = () => { const d = store.get('draft') || {}; return { step: d.step || 0, items: d.items || [], contact: d.contact || {}, bank: d.bank || {}, adding: !!d.adding }; };
 const saveDraft = d => store.set('draft', d);
 let draft;
 
@@ -380,7 +413,13 @@ function fieldHTML(f, it, i) {
 }
 
 function itemCardHTML(it, i) {
-  const fs = FIELDS[it.category];
+  const EXTRA = ['color', 'imei', 'serial', 'issueNote'];
+  const fs = it.est ? FIELDS[it.category].filter(f => EXTRA.includes(f.k) || (f.req && !(Array.isArray(it[f.k]) ? it[f.k].length : it[f.k]))) : FIELDS[it.category];
+  if (it.est) return `<div class="item-card rise" data-i="${i}">
+    <div class="item-head">${CATEGORY_INFO[it.category].icon}<b>商品 ${i + 1}・${esc(itemTitle(it))}</b><button type="button" class="link" style="color:var(--red)" data-del="${i}">移除</button></div>
+    <div class="est-chip"><span>${esc([it.category === '其他' ? '' : it.newOrUsed, it.appearance, (it.issues || []).join('、')].filter(Boolean).join('｜'))}</span><b>預估 ${esc(it.est)}</b></div>
+    ${fs.map(f => fieldHTML(f, it, i)).join('')}
+  </div>`;
   const halves = fs.filter(f => f.half), rest = fs.filter(f => !f.half);
   return `<div class="item-card rise" data-i="${i}">
     <div class="item-head">${CATEGORY_INFO[it.category].icon}<b>商品 ${i + 1}・${esc(it.category)}</b><button type="button" class="link" style="color:var(--red)" data-del="${i}">移除</button></div>
@@ -439,15 +478,18 @@ function renderBook() {
   const s = draft.step;
   let body = '';
   if (s === 0) {
+    const adding = !draft.items.length || draft.adding;
     body = `<div class="card">
       <h2 class="card-title">要回收哪些商品？</h2>
       <p class="card-sub">一次可預約多項，同一箱寄出即可</p>
       <div id="items">${draft.items.map(itemCardHTML).join('')}</div>
-      <div id="picker" ${draft.items.length ? 'hidden' : ''}>
-        ${draft.items.length ? '<p class="small muted" style="margin:4px 0 10px">選擇要加入的商品類別</p>' : ''}
-        <div class="tiles">${Object.entries(CATEGORY_INFO).map(([k, c]) => `<button type="button" class="tile" data-add="${esc(k)}">${c.icon}<div><b>${esc(c.title)}</b><small>${esc(c.sub)}</small></div></button>`).join('')}</div>
-      </div>
-      ${draft.items.length ? `<button type="button" class="btn btn-ghost btn-block" id="showPicker" style="margin-top:4px">＋ 再加一項商品</button>` : ''}
+      ${adding ? `<div class="add-box">
+        <div class="add-h"><b>${draft.items.length ? '加入下一項商品' : '選擇商品型號與狀態'}</b>${draft.items.length ? '<button type="button" class="link" id="cancelAdd">取消</button>' : ''}</div>
+        <div id="estBox"><div class="spinner"></div></div>
+        <p class="small" style="text-align:center;margin:12px 0 0"><button type="button" class="link" id="manualPick">找不到型號？自己填寫 →</button></p>
+        <div id="picker" hidden><p class="small muted" style="margin:10px 0">選擇要加入的商品類別</p>
+          <div class="tiles">${Object.entries(CATEGORY_INFO).map(([k, c]) => `<button type="button" class="tile" data-add="${esc(k)}">${c.icon}<div><b>${esc(c.title)}</b><small>${esc(c.sub)}</small></div></button>`).join('')}</div></div>
+      </div>` : `<button type="button" class="btn btn-ghost btn-block" id="showPicker" style="margin-top:4px">＋ 再加一項商品</button>`}
     </div>`;
   } else if (s === 1) {
     const c = draft.contact;
@@ -516,9 +558,15 @@ function renderBook() {
   </div>`;
 
   if (s === 0) {
-    $$('[data-add]').forEach(b => b.onclick = () => { syncItems(); draft.items.push(newItem(b.dataset.add)); saveDraft(draft); renderBook(); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); });
+    $$('[data-add]').forEach(b => b.onclick = () => { syncItems(); draft.items.push(newItem(b.dataset.add)); draft.adding = false; saveDraft(draft); renderBook(); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); });
     $$('[data-del]').forEach(b => b.onclick = () => { syncItems(); draft.items.splice(+b.dataset.del, 1); saveDraft(draft); renderBook(); });
-    $('#showPicker') && ($('#showPicker').onclick = () => { $('#picker').hidden = false; $('#showPicker').remove(); });
+    $('#showPicker') && ($('#showPicker').onclick = () => { syncItems(); draft.adding = true; saveDraft(draft); renderBook(); setTimeout(() => $('.add-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); });
+    $('#cancelAdd') && ($('#cancelAdd').onclick = () => { syncItems(); draft.adding = false; saveDraft(draft); renderBook(); });
+    $('#manualPick') && ($('#manualPick').onclick = () => { $('#picker').hidden = false; $('#manualPick').parentElement.remove(); });
+    if ($('#estBox')) (async () => {
+      if (!est) { try { est = await api('priceTable'); } catch (e) { $('#estBox').innerHTML = `<p class="small muted">估價表載入失敗，請用下方「自己填寫」。</p>`; return; } }
+      if ($('#estBox')) drawEstimate($('#estBox'), true);
+    })();
     $('#items').addEventListener('change', () => { syncItems(); saveDraft(draft); });
   } else if (s === 1 || s === 2) {
     $(s === 1 ? '#contact' : '#bank').addEventListener('input', () => syncAll());
@@ -536,7 +584,7 @@ function renderBook() {
       const c = draft.contact;
       const { order } = await api('createOrder', { order: {
         ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: undefined, slot: c.slot || '不指定',
-        items: draft.items, bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
+        items: draft.items.map(({ est: _e, ...it }) => it), bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
       store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
       renderSuccess(order);
     } catch (e) {
@@ -715,7 +763,17 @@ function drawDetail(o) {
 /* ============================== 啟動 ============================== */
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
-  $('#footInfo').innerHTML = `${esc(CFG.SHOP_NAME)}・宅配收購<br><a href="${esc(CFG.OA_URL)}">LINE 官方帳號</a>　·　<a href="tel:${esc(CFG.PHONE)}">${esc(CFG.PHONE)}</a><br><a href="shop.html" style="opacity:.55;font-size:12px">門市人員入口</a>`;
+  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((CFG.COMPANY || '') + ' ' + (CFG.STORE_ADDRESS || ''));
+  $('#footInfo').innerHTML = `${CFG.STORE_ADDRESS ? `<div class="foot-store">
+      <b>也可以直接到門市收購</b>
+      <p>不用寄送，現場檢測、當場報價，現金或轉帳付款</p>
+      <div class="foot-addr">📍 ${esc(CFG.STORE_NAME || '門市')}：${esc(CFG.STORE_ADDRESS)}${CFG.STORE_NEAR ? `<small>（${esc(CFG.STORE_NEAR)}）</small>` : ''}</div>
+      <div>🕘 ${esc(CFG.STORE_HOURS || '')}</div>
+      <div class="foot-btns"><a class="btn btn-ghost btn-sm" href="${map}" target="_blank" rel="noopener">Google 地圖</a><a class="btn btn-ghost btn-sm" href="tel:${esc(CFG.PHONE)}">撥打 ${esc(CFG.PHONE)}</a></div>
+    </div>` : ''}
+    ${esc(CFG.SHOP_NAME)}・宅配收購・門市收購<br><a href="${esc(CFG.OA_URL)}">LINE 官方帳號</a>　·　<a href="tel:${esc(CFG.PHONE)}">${esc(CFG.PHONE)}</a>
+    ${CFG.COMPANY ? `<br>${esc(CFG.COMPANY)}　${esc(CFG.STORE_ADDRESS || '')}` : ''}
+    <br><a href="shop.html" style="opacity:.55;font-size:12px">門市人員入口</a>`;
   try { await initLine(); }
   catch (e) { app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">LINE 初始化失敗：${esc(e.message)}</div></div>`; return; }
   // LIFF / 通知信連結使用 ?page=…&id=…，轉成站內路由

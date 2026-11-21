@@ -182,3 +182,16 @@ textarea.input { min-height: 84px; resize: vertical; }
 .est-price.small-price { font-size: 26px; }
 .est-warn { background: #fff4e5; color: #8a5300; border-radius: 12px; padding: 10px 12px; font-size: 13px; text-align: left; margin: 12px 0 0; }
 @media (max-width: 480px) { .est-price { font-size: 30px; } .nav-links button { padding: 8px 8px; font-size: 13px; } }
+/* 預約表單：估價式選商品 */
+.add-box { border: 1.5px dashed var(--line-2, #d2d2d7); border-radius: 16px; padding: 16px; margin-top: 6px; }
+.add-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.est-inline .est-result { box-shadow: none; border: 1px solid var(--line, #e5e5ea); margin: 6px 0 0; padding: 18px 14px; }
+.est-inline .est-price { font-size: 30px; }
+.est-chip { display: flex; justify-content: space-between; gap: 10px; align-items: center; background: #f5f5f7; border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; font-size: 13px; }
+.est-chip b { white-space: nowrap; }
+/* 頁尾：門市資訊 */
+.foot-store { max-width: 460px; margin: 0 auto 26px; padding: 18px 18px 16px; border-radius: 18px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06); color: var(--ink-2); font-size: 14px; line-height: 1.7; }
+.foot-store b { display: block; color: var(--ink); font-size: 16px; }
+.foot-store p { margin: 2px 0 10px; }
+.foot-addr { color: var(--ink); font-weight: 600; } .foot-addr small { font-weight: 400; color: var(--muted); }
+.foot-btns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
