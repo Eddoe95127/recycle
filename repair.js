@@ -304,7 +304,7 @@ function repairDocHTML(o, kind) {
     <ol class="terms-ol small">${REPAIR_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
     <p class="small">✓ 客人已確認故障描述、報價與上述維修條款（${esc(o.terms || '')}）</p>
     <div class="rc-sign"><div><img data-photo="${esc(o.dropSign)}" alt="送修簽名"><span>送修簽名 ${esc(o.customer)}</span></div>
-      <div>${pick ? `<img data-photo="${esc(o.pickSign)}" alt="取件簽名"><span>取件簽名 ${esc(o.customer)}</span>` : `<div class="rc-staff">${esc(o.staff)}</div><span>收件人員</span>`}</div></div>
+      <div>${pick ? `<img data-photo="${esc(o.pickSign)}" alt="取件簽名"><span>取件簽名 ${esc(o.customer)}</span>` : `<div class="rc-staff-sm">${esc(o.staff)}</div><span>收件人員</span>`}</div></div>
   </div>`;
 }
 function rpPreview(o, kind) {
@@ -360,6 +360,7 @@ function rpProgressHTML(o, can) {
 function repairDrawer(o) {
   if (!o) return;
   const can = P('repair'), d = $('#drawer');
+  d.classList.add('wide'); // 維修單比較長、要簽名：抽屜加寬
   const ed = { items: o.items.map(x => ({ ...x })), parts: o.parts.map(x => ({ ...x })), note: o.note || '' };
   const pickable = ['待取件', '無法維修', '維修中', '待維修'].includes(o.status);
   const draw = () => {
@@ -398,7 +399,7 @@ function repairDrawer(o) {
         <div class="grid2"><label class="field"><span>實收金額（NT$）</span><input class="input num" id="pkFee" inputmode="numeric" value="${o.inspect && !quote ? (o.inspectFee || 0) : quote}"></label>
           <div class="field"><span>付款方式</span><div class="chips">${REPAIR_PAY.map(p => `<label class="chip"><input type="radio" name="pkpay" value="${p}" ${p === '現金' ? 'checked' : ''}><span>${p}</span></label>`).join('')}</div></div></div>
         <div style="display:flex;justify-content:space-between;align-items:center"><b>客人取件簽名</b><button type="button" class="link" id="pkClear" style="font-size:14px">清除重簽</button></div>
-        <canvas class="sig-pad sig-mid" id="pkSign" width="1200" height="520"></canvas>
+        <canvas class="sig-pad sig-big" id="pkSign" width="1200" height="520"></canvas>
         <button class="btn btn-dark btn-block" id="pkDo" style="margin-top:12px">完成取件${o.email ? '（寄取件單與保固）' : ''}</button><p class="err" id="pkErr"></p></div>` : ''}
       <div class="card"><h3>紀錄</h3><ul class="small muted" style="margin:0;padding-left:18px">${o.history.map(h => `<li>${esc(h.replace(/｜/g, '・'))}</li>`).join('')}${o.mailLog ? o.mailLog.split('\n').map(l => `<li>✉️ ${esc(l)}</li>`).join('') : ''}</ul></div>
       <div class="card"><h3>簽名</h3><div class="grid2"><div><div class="small muted">送修簽名</div><img class="sig-img" data-photo="${esc(o.dropSign)}" alt="送修簽名"></div>
