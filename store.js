@@ -110,7 +110,7 @@ function intakeDrawer(o) {
         <dt>合計</dt><dd class="num"><b>${nt(o.total)}</b></dd></dl></div>
       <div class="card"><h3>商品（${o.items.length}）</h3>
         ${o.items.map((it, i) => `<div style="padding:10px 0;border-top:${i ? '1px solid var(--line)' : '0'}">
-          <b>${i + 1}. ${esc([it.model, it.capacity, it.color].filter(Boolean).join(' '))}</b> <span class="num" style="float:right">${nt(it.price)}</span>
+          <b>${i + 1}. ${esc(itemName(it))}</b> <span class="num" style="float:right">${nt(it.price)}</span>
           <div class="small muted">${esc(it.category)}${it.serial ? '・' + esc(it.serial) : ''}${it.notes ? '・' + esc(it.notes) : ''}</div>
           <div class="ph-grid" style="margin-top:8px">${it.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="商品照片"></div>`).join('')}</div></div>`).join('')}</div>
       ${intakeEvalHTML(o) ? `<div class="card">${intakeEvalHTML(o)}</div>` : ''}
@@ -190,7 +190,11 @@ function bindRemit(root, o, redraw) {
 
 /* ============================== 新增收購單（三步驟） ============================== */
 let dr = null, drStep = 1, drBusy = false, drDone = null;
-const newItem = () => ({ category: '手機', model: '', capacity: '', color: '', serial: '', base: '', price: '', notes: '', photos: [],
+const IN_NEW = '全新未拆封', IN_USED = '二手';
+const isNewItem = it => it.cond === IN_NEW;
+/** 商品名稱（全新機加註） */
+const itemName = it => [it.model, it.capacity, it.color].filter(Boolean).join(' ') + (isNewItem(it) ? '（全新未拆封）' : '');
+const newItem = () => ({ category: '手機', cond: IN_USED, model: '', capacity: '', color: '', serial: '', base: '', price: '', notes: '', photos: [],
   grade: '', battery: '', checks: CHECK_ITEMS.map(c => ({ k: c.k, label: c.label, r: 'ok', note: '' })), deductions: [] });
 /** 收購金額 = 基本收購價 − 扣減 */
 const itemPrice = it => Math.max(0, numv(it.base) - (it.deductions || []).reduce((s, d) => s + numv(d.amount), 0));
@@ -198,20 +202,21 @@ const itemPrice = it => Math.max(0, numv(it.base) - (it.deductions || []).reduce
 /** 表單裡的「檢測評估」區塊（同宅配檢測報告） */
 function evalBlock(it, i) {
   const bad = it.checks.filter(c => c.r === 'bad').length, na = it.checks.filter(c => c.r === 'na').length;
+  const fresh = isNewItem(it);
   return `<div class="eval-box">
-    <div class="eval-h">檢測評估</div>
-    <div class="grid2">
+    <div class="eval-h">${fresh ? '全新未拆封・估價' : '檢測評估'}</div>
+    ${fresh ? '<p class="small muted" style="margin:0 0 8px">全新未拆封不需外觀、電池與功能檢測；請確認外盒、封膜完整，未開通。拆封或外封膜破損請改選「二手機」或加扣款。</p>' : `<div class="grid2">
       <div class="field"><span>外觀等級</span><div class="chips">${['A', 'B', 'C', 'D'].map(g => `<label class="chip"><input type="radio" name="g${i}" data-grade value="${g}" ${it.grade === g ? 'checked' : ''}><span>${g} ${GRADE_TEXT[g]}</span></label>`).join('')}</div></div>
       <label class="field"><span>電池健康度（%）</span><input class="input num" data-f="battery" inputmode="numeric" maxlength="3" value="${esc(it.battery)}" placeholder="例：86"></label>
     </div>
-    <details class="ck-wrap" data-ckwrap ${it._open ? 'open' : ''}><summary><b>功能檢測 ${it.checks.length} 項</b><span data-cksum class="tag ${bad ? 'bad' : 'ok'}">${bad ? bad + ' 項異常' : '全部正常'}${na ? `・${na} 項未檢測` : ''}</span></summary>
+    <details class="ck-wrap" data-ckwrap ${it._open !== false ? 'open' : ''}><summary><b>功能檢測 ${it.checks.length} 項</b><span data-cksum class="tag ${bad ? 'bad' : 'ok'}">${bad ? bad + ' 項異常' : '全部正常'}${na ? `・${na} 項未檢測` : ''}</span></summary>
       <div style="text-align:right"><button type="button" class="link" data-allok style="font-size:13px">全部設為正常</button></div>
       ${it.checks.map((c, j) => `<div class="ck-row ${c.r}">
         <div class="ck-lbl">${esc(c.label)}</div>
         <div class="seg">${['ok', 'bad', 'na'].map(r => `<button type="button" class="${c.r === r ? 'on' : ''}" data-ck="${j}" data-r="${r}">${RES[r][0]}</button>`).join('')}</div>
         <input class="input ck-note" data-cknote="${j}" value="${esc(c.note)}" placeholder="${c.k === 'water' ? '例：泡水指示貼片正常（白色）' : '說明（選填）'}">
       </div>`).join('')}
-    </details>
+    </details>`}
     <div class="field" style="margin-top:12px"><span>估價</span>
       <div class="price-row"><span>基本收購價 *</span><input class="input num" data-f="base" inputmode="numeric" value="${esc(it.base)}" placeholder="例：13800"></div>
       ${it.deductions.map((d, j) => { const manual = d._other || (d.reason && !DEDUCT_SUGGEST.includes(d.reason)); return `<div class="price-row minus"><div class="ded-reason">
@@ -227,7 +232,7 @@ function evalBlock(it, i) {
 
 /** 收購單上的檢測評估報告（抽屜、列印、模擬共用）。compact：列印用 */
 function intakeEvalHTML(o, compact) {
-  const items = o.items.filter(it => Array.isArray(it.checks) && it.checks.length);
+  const items = o.items.filter(it => (Array.isArray(it.checks) && it.checks.length) || isNewItem(it));
   if (!items.length) return '';
   return `<div class="in-eval${compact ? ' compact' : ''}"><h3 style="margin:${compact ? '14px 0 6px' : '0 0 8px'}">檢測評估報告</h3>
     ${items.map(it => {
@@ -236,12 +241,12 @@ function intakeEvalHTML(o, compact) {
       return `<div class="rep-item">
         <div class="rep-title">${o.items.length > 1 ? n + '. ' : ''}${esc([it.model, it.capacity, it.color].filter(Boolean).join(' '))}</div>
         <div class="rep-sn">IMEI／序號：<b class="num">${esc(it.serial || '未填')}</b></div>
-        <div class="rep-tags">
+        ${isNewItem(it) ? '<div class="rep-tags"><span class="tag ok">全新未拆封</span><span class="tag">外盒、封膜完整，未開通</span></div>' : `<div class="rep-tags">
           ${it.grade ? `<span class="tag">外觀 ${esc(it.grade)}・${esc(GRADE_TEXT[it.grade] || '')}</span>` : ''}
           ${it.battery ? `<span class="tag">電池 ${esc(it.battery)}%</span>` : ''}
           <span class="tag ${bad ? 'bad' : 'ok'}">${bad ? bad + ' 項異常' : '功能檢測皆正常'}</span>
         </div>
-        <div class="rep-checks">${it.checks.map(c => `<div class="chk ${c.r}"><span class="ico">${RES[c.r][2]}</span><span class="lbl">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ''}</span><span class="res">${RES[c.r][0]}</span></div>`).join('')}</div>
+        <div class="rep-checks">${it.checks.map(c => `<div class="chk ${c.r}"><span class="ico">${RES[c.r][2]}</span><span class="lbl">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ''}</span><span class="res">${RES[c.r][0]}</span></div>`).join('')}</div>`}
         ${it.price == null ? '' : `<table class="rep-price">
           <tr><td>基本收購價</td><td>NT$ ${money(it.base ?? it.price)}</td></tr>
           ${(it.deductions || []).map(d => `<tr class="minus"><td>${esc(d.reason)}</td><td>− NT$ ${money(d.amount)}</td></tr>`).join('')}
@@ -306,6 +311,7 @@ function stepItems() {
       <h3 style="display:flex;justify-content:space-between">商品 ${i + 1}${dr.items.length > 1 ? `<button class="link" data-del-item="${i}" style="font-size:13px">移除</button>` : ''}</h3>
       <button type="button" class="btn ${it.model ? 'btn-ghost' : 'btn-dark'} btn-block est-open" data-est>🧮 用估價表填寫（同線上估價）${it._est ? `<small>已帶入：${esc(it._est)}</small>` : ''}</button>
       <div class="chips" style="margin-bottom:10px">${Object.keys(IN_CATS).map(c => `<label class="chip"><input type="radio" name="cat${i}" data-cat value="${c}" ${it.category === c ? 'checked' : ''}><span>${c}</span></label>`).join('')}</div>
+      <div class="field"><span>商品狀態 *</span><div class="chips cond-chips">${[[IN_USED, '二手機'], [IN_NEW, '全新未拆封']].map(([v, l]) => `<label class="chip"><input type="radio" name="cond${i}" data-cond value="${v}" ${(it.cond || IN_USED) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
       <div class="grid2">
         ${IN_CATS[it.category].length ? pickField('品名／型號 *', 'data-f="model"', it.model, IN_CATS[it.category], it._m && it._m.model, '輸入完整型號') : `<label class="field"><span>品名／型號 *</span><input class="input" data-f="model" value="${esc(it.model)}" placeholder="例：Switch 主機、相機"></label>`}
         ${pickField(it.category === '筆電' ? '年份／規格' : '容量／規格', 'data-f="capacity"', it.capacity, it.category === '筆電' ? [] : IN_CAPS, it._m && it._m.capacity, it.category === '筆電' ? '例：2023 M3 / 16GB / 512GB' : '')}
@@ -346,15 +352,15 @@ function stepSign() {
       <dt>出售人</dt><dd>${esc(dr.seller)}${dr.phone ? '　' + esc(dr.phone) : ''}</dd>
       ${dr.email ? `<dt>寄送收購單</dt><dd>${esc(dr.email)}</dd>` : ''}
       <dt>付款</dt><dd>${esc(dr.payment)}${dr.payment === '轉帳' ? `　${esc(dr.bank)} ${esc(dr.account)}（${esc(dr.period === '指定日期' ? dr.payDate : dr.period)}）` : ''}</dd>
-      ${dr.items.map((it, i) => { const bad = it.checks.filter(c => c.r === 'bad'); return `<dt>商品 ${i + 1}</dt><dd>${esc([it.model, it.capacity, it.color].filter(Boolean).join(' '))}${it.serial ? `<br><span class="small muted">${esc(it.serial)}</span>` : ''}<span class="num" style="float:right">NT$ ${money(it.price)}</span>
-        <div class="small muted" style="margin-top:2px">${[it.grade && '外觀 ' + it.grade + ' ' + GRADE_TEXT[it.grade], it.battery && '電池 ' + it.battery + '%', bad.length ? '異常：' + bad.map(c => c.label).join('、') : '功能檢測皆正常', it.deductions.filter(d => numv(d.amount)).map(d => `${d.reason} −${money(d.amount)}`).join('、')].filter(Boolean).map(esc).join('｜')}</div></dd>`; }).join('')}
+      ${dr.items.map((it, i) => { const bad = it.checks.filter(c => c.r === 'bad'); return `<dt>商品 ${i + 1}</dt><dd>${esc(itemName(it))}${it.serial ? `<br><span class="small muted">${esc(it.serial)}</span>` : ''}<span class="num" style="float:right">NT$ ${money(it.price)}</span>
+        <div class="small muted" style="margin-top:2px">${[...(isNewItem(it) ? ['全新未拆封'] : [it.grade && '外觀 ' + it.grade + ' ' + GRADE_TEXT[it.grade], it.battery && '電池 ' + it.battery + '%', bad.length ? '異常：' + bad.map(c => c.label).join('、') : '功能檢測皆正常']), it.deductions.filter(d => numv(d.amount)).map(d => `${d.reason} −${money(d.amount)}`).join('、')].filter(Boolean).map(esc).join('｜')}</div></dd>`; }).join('')}
       <dt>合計</dt><dd class="num"><b style="font-size:18px">NT$ ${money(sumDraft())}</b></dd></dl></div>
     <div class="card"><h3>二手商品收購條款</h3><ol class="terms-ol">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
       <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 雙方已核對商品、金額與付款方式，同意上述條款，並以電子方式簽署 *</label></div>
     <div class="card"><h3>簽名</h3><div>
       <div><div style="display:flex;justify-content:space-between;align-items:center"><b>出售人簽名（請出售人在框內簽名）</b><button type="button" class="link" data-clear="sellerSign" style="font-size:14px">清除重簽</button></div>
         <canvas class="sig-pad sig-big" data-sig="sellerSign" width="1200" height="480"></canvas></div>
-      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b>（依登入帳號自動記錄，不需簽名）</p></div>`;
+      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b></p></div>`;
 }
 
 function bindForm() {
@@ -386,13 +392,22 @@ function bindForm() {
       s.className = 'tag ' + (bad ? 'bad' : 'ok'); s.textContent = (bad ? bad + ' 項異常' : '全部正常') + (na ? `・${na} 項未檢測` : '');
     };
     $$('[data-ck]', card).forEach(b => b.onclick = () => {
-      it.checks[+b.dataset.ck].r = b.dataset.r;
+      const c = it.checks[+b.dataset.ck];
+      c.r = b.dataset.r;
+      const idx = it.deductions.findIndex(d => d._auto === c.k);
+      if (c.r === 'bad' && idx < 0) { // 異常：自動加一筆扣款，金額由人員填
+        it.deductions.push({ reason: CHECK_DEDUCT[c.k] || c.label + '異常', amount: '', _auto: c.k });
+        it.price = String(itemPrice(it)); drawForm();
+        $(`[data-i="${card.dataset.i}"] [data-da="${it.deductions.length - 1}"]`)?.focus({ preventScroll: true });
+        return;
+      }
+      if (c.r !== 'bad' && idx >= 0) { it.deductions.splice(idx, 1); it.price = String(itemPrice(it)); drawForm(); return; }
       const row = b.closest('.ck-row'); row.className = 'ck-row ' + b.dataset.r; $$('button', row).forEach(x => x.classList.toggle('on', x === b));
       ckSum();
     });
     $$('[data-cknote]', card).forEach(el => el.oninput = () => { it.checks[+el.dataset.cknote].note = el.value; });
-    $('[data-allok]', card).onclick = () => { it.checks.forEach(c => { c.r = 'ok'; }); it._open = true; drawForm(); };
-    $('[data-ckwrap]', card).ontoggle = e => { it._open = e.target.open; };
+    if ($('[data-allok]', card)) $('[data-allok]', card).onclick = () => { it.checks.forEach(c => { c.r = 'ok'; }); it.deductions = it.deductions.filter(d => !d._auto); it.price = String(itemPrice(it)); it._open = true; drawForm(); };
+    if ($('[data-ckwrap]', card)) $('[data-ckwrap]', card).ontoggle = e => { it._open = e.target.open; };
     $$('[data-dr]', card).forEach(el => el.oninput = () => { it.deductions[+el.dataset.dr].reason = el.value; });
     $$('[data-drs]', card).forEach(el => el.onchange = () => {
       const d = it.deductions[+el.dataset.drs], inp = el.parentElement.querySelector('[data-dr]');
@@ -405,6 +420,12 @@ function bindForm() {
     $$('[data-da]', card).forEach(el => el.oninput = () => { it.deductions[+el.dataset.da].amount = el.value; updPrice(); });
     $('[data-addd]', card).onclick = () => { it.deductions.push({ reason: '', amount: '' }); drawForm(); $$(`[data-i="${card.dataset.i}"] [data-drs]`).pop()?.focus({ preventScroll: true }); };
     $$('[data-deld]', card).forEach(b => b.onclick = () => { it.deductions.splice(+b.dataset.deld, 1); it.price = String(itemPrice(it)); drawForm(); });
+    $$('[data-cond]', card).forEach(r => r.onchange = () => {
+      it.cond = r.value;
+      if (isNewItem(it)) { it.grade = 'A'; it.battery = ''; it.checks.forEach(c => { c.r = 'na'; c.note = ''; }); it.deductions = it.deductions.filter(d => !d._auto); }
+      else { it.grade = ''; it.checks.forEach(c => { c.r = 'ok'; }); }
+      drawForm();
+    });
     $$('[data-cat]', card).forEach(r => r.onchange = () => { it.category = r.value; it.model = ''; it.capacity = ''; it._m = {}; drawForm(); });
     $$('[data-note]', card).forEach(b => b.onclick = () => { if (!it.notes.includes(b.dataset.note)) it.notes = (it.notes ? it.notes + '、' : '') + b.dataset.note; $('[data-f=notes]', card).value = it.notes; });
     $$('[data-delph]', card).forEach(b => b.onclick = () => { it.photos.splice(+b.dataset.delph, 1); drawForm(); });
@@ -449,6 +470,8 @@ function nextStep(err) {
       it.price = String(itemPrice(it));
       if (!(numv(it.base) > 0)) return err(`請填寫商品 ${i + 1} 的基本收購價`);
       if (it.deductions.some(d => numv(d.amount) > 0 && !d.reason.trim())) return err(`請填寫商品 ${i + 1} 的扣減原因`);
+      const noAmt = it.deductions.find(d => d.reason.trim() && String(d.amount).trim() === '');
+      if (noAmt) return err(`請填寫商品 ${i + 1}「${noAmt.reason}」的扣款金額（不扣款請填 0）`);
       if (!(Number(it.price) > 0)) return err(`商品 ${i + 1} 扣減後的收購金額需大於 0`);
       if (!it.photos.length) return err(`請拍攝商品 ${i + 1} 的外觀照片`);
     }
@@ -464,7 +487,7 @@ async function submitIntake(err) {
   drBusy = true;
   const btn = $('#inNext'); btn.disabled = true; btn.textContent = '上傳中，請勿關閉…';
   try {
-    const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => ({ ...it, deductions: (it.deductions || []).map(({ _other, ...d }) => d) }));
+    const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => ({ ...it, deductions: (it.deductions || []).map(({ _other, _auto, ...d }) => d) }));
     const r = await api('intakeCreate', { ...dr, items, account: dr.account.replace(/[\s-]/g, '') });
     drDone = r.intake;
     drDone._local = { items: dr.items.map(it => it.photos), ids: dr.idPhotos, sellerSign: dr.sellerSign, staffSign: dr.staffSign };
@@ -618,8 +641,9 @@ function estApply(it, sel, row, plan, isNew, rules) {
   it.deductions = plan.deductions.map(d => ({ reason: d.reason, amount: d.amount === '' ? '' : String(d.amount) }));
   it.price = String(itemPrice(it));
   const apIdx = rules.appearance.findIndex(x => x.label === sel.appearance);
+  it.cond = isNew ? IN_NEW : IN_USED;
   it.grade = isNew ? 'A' : apIdx >= 0 ? 'ABCD'[Math.min(apIdx, 3)] : it.grade;
-  it.checks.forEach(c => { c.r = 'ok'; c.note = ''; });
+  it.checks.forEach(c => { c.r = isNew ? 'na' : 'ok'; c.note = ''; });
   sel.issues.forEach(l => {
     const hit = EST_ISSUE_CHECK.find(([re]) => re.test(l));
     const c = hit && it.checks.find(x => x.k === hit[1]);
@@ -787,7 +811,7 @@ async function showReceipt(o, kind) {
       <tr><th>出售人</th><td>${esc(o.seller)}</td><th>電話</th><td class="num">${esc(phone || '—')}</td></tr>
       <tr><th>付款方式</th><td colspan="3">${esc(o.payment)}${o.payment === '轉帳' ? `　${esc(o.bank)} ${esc(account)}　${esc(o.period)}${o.payDate ? ' ' + esc(o.payDate) : ''}` : ''}</td></tr></table>
     <table class="rc-items"><thead><tr><th>#</th><th>商品</th><th>IMEI／序號</th><th>狀況</th><th style="text-align:right">金額</th></tr></thead><tbody>
-      ${o.items.map((it, i) => `<tr><td>${i + 1}</td><td>${esc([it.model, it.capacity, it.color].filter(Boolean).join(' '))}</td><td class="num">${esc(it.serial || '—')}</td><td>${esc(it.notes || '')}</td><td class="num" style="text-align:right">${it.price == null ? '—' : 'NT$ ' + money(it.price)}</td></tr>`).join('')}
+      ${o.items.map((it, i) => `<tr><td>${i + 1}</td><td>${esc(itemName(it))}</td><td class="num">${esc(it.serial || '—')}</td><td>${esc(it.notes || '')}</td><td class="num" style="text-align:right">${it.price == null ? '—' : 'NT$ ' + money(it.price)}</td></tr>`).join('')}
       <tr class="rc-total"><td colspan="4">合計</td><td class="num" style="text-align:right">${o.total == null ? '—' : 'NT$ ' + money(o.total)}</td></tr></tbody></table>
     ${intakeEvalHTML(o, true)}
     <ol class="terms-ol small">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
