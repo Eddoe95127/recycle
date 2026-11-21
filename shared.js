@@ -294,17 +294,22 @@ function progressPct(status) {
 }
 
 /* ---------- 線上估價 ---------- */
-/** 預估價：最高收購價 × 外觀% × 電池% × Π(1 − 故障扣%)；有需檢測的故障就不給數字 */
-function estimatePrice(price, sel, rules) {
+/** 型號的電池要求：價格表的「電池要求」，空白用預設（0＝不限） */
+const batteryReq = (row, rules) => row && row.battery !== '' && row.battery != null ? Number(row.battery) : Number(rules.batteryDefault ?? 90);
+/** 預估價：最高收購價 × 外觀% × 電池% × Π(1 − 故障扣%)；電池達到型號要求不扣；有需檢測的故障就不給數字 */
+function estimatePrice(price, sel, rules, req = 0, acc = 0) {
   const find = (list, label) => (list || []).find(x => x.label === label);
   const ap = find(rules.appearance, sel.appearance), bt = find(rules.battery, sel.battery);
   const issues = (sel.issues || []).map(l => find(rules.issues, l)).filter(Boolean);
   if (issues.some(i => i.inspect)) return { inspect: true, issues };
-  let v = price * (ap ? ap.pct : 100) / 100 * (bt ? bt.pct : 100) / 100;
+  const btPct = !bt ? 100 : (bt.min != null && bt.min >= req) ? 100 : bt.pct;
+  let v = price * (ap ? ap.pct : 100) / 100 * btPct / 100;
   issues.forEach(i => { v *= (100 - i.pct) / 100; });
+  const missing = (sel.missing || []).length;
+  v = Math.max(0, v - missing * acc); // 缺盒子／配件：每項扣固定金額
   const high = Math.max(0, Math.floor(v / 100) * 100);
   const low = Math.max(0, Math.floor(high * (100 - (rules.spread || 0)) / 100 / 100) * 100);
-  return { low, high, issues, deducted: issues.length > 0 };
+  return { low, high, issues, deducted: issues.length > 0, accOff: missing * acc };
 }
 
 /* ---------- 登入（LINE / Google / Email 驗證碼）+ API ---------- */
@@ -479,11 +484,13 @@ const mockUsers = [
 let mockMe = ''; // 目前預覽登入的員工帳號；空白 = 老闆
 const mockPriceRules = { spread: 8,
   appearance: [{ label: '完全無刮傷', pct: 100 }, { label: '外觀小刮傷', pct: 92 }, { label: '外觀有凹撞傷', pct: 75 }],
-  battery: [{ label: '90% 以上', pct: 100 }, { label: '85–89%', pct: 96 }, { label: '80–84%', pct: 92 }, { label: '低於 80% 或顯示「維修」', pct: 85 }],
+  battery: [{ label: '95% 以上', min: 95, pct: 100 }, { label: '90–94%', min: 90, pct: 95 }, { label: '85–89%', min: 85, pct: 92 }, { label: '80–84%', min: 80, pct: 88 }, { label: '低於 80% 或顯示「維修」', min: 0, pct: 82 }],
+  batteryDefault: 90,
+  accessories: [{ label: '沒有原廠盒子' }, { label: '沒有原廠充電線' }],
   issues: [{ label: '螢幕有破裂', pct: 30 }, { label: '按鍵功能不正常', pct: 10 }, { label: '相機功能不正常', pct: 15 }, { label: '無法開機運作', inspect: true }, { label: '機身進過水', inspect: true }, { label: '其他問題', inspect: true }],
   note: '以上為預估價格，實際收購價以收到商品後的檢測結果為準；價格會隨市場行情調整。' };
-let mockPrices = [['iPhone 13', '128GB', 9000], ['iPhone 13', '256GB', 10500], ['iPhone 14 Pro', '128GB', 15500], ['iPhone 14 Pro', '256GB', 17000], ['iPhone 15 Pro', '256GB', 21000], ['iPhone 15 Pro Max', '256GB', 24500], ['iPhone 16', '128GB', 0]]
-  .map(([model, capacity, price]) => ({ category: 'iPhone', model, capacity, price, note: '' }));
+let mockPrices = [['iPhone 11', '64GB', 2000, 0, 300], ['iPhone 13', '128GB', 5000, 80, 300], ['iPhone 15 Pro', '256GB', 14000, 85, 300], ['iPhone 16 Pro', '256GB', 18000, 90, 500], ['iPhone 17 Pro', '256GB', 24000, 95, 500], ['iPhone 16', '128GB', 0, '', '']]
+  .map(([model, capacity, price, battery, acc]) => ({ category: 'iPhone', model, capacity, price, battery, acc, note: '' }));
 const mockIntakes = [], mockStock = [
   { sku: 'AR261112001-1', source: '宅配', ref: 'AR261112001', inAt: '2026-11-15 11:00', category: '手機', model: 'iPhone 15 Pro', capacity: '256GB', color: '原色鈦金屬', serial: '356789012345678', notes: '外觀 A', cost: 18800, status: '已售出', saleDate: '2026-11-18', channel: '蝦皮', salePrice: 21500, updatedAt: '2026-11-18 14:00', updatedBy: '老闆', photos: [] },
 ];

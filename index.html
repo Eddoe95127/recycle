@@ -122,7 +122,7 @@
 </footer>
 
 <script src="config.js?v=20261121d"></script>
-<script src="shared.js?v=20261121e"></script>
+<script src="shared.js?v=20261121f"></script>
 <script>
 const app = $('#app');
 
@@ -210,7 +210,7 @@ function renderHome() {
 
 /* ============================== 線上估價 ============================== */
 let est = null; // { rows, rules }
-const estSel = { category: '', model: '', capacity: '', appearance: '', battery: '', issues: [] };
+const estSel = { category: '', model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] };
 async function renderEstimate() {
   if (!est) {
     app.innerHTML = '<div class="spinner"></div>';
@@ -235,7 +235,9 @@ function drawEstimate() {
   if (!caps.some(r => r.capacity === estSel.capacity)) estSel.capacity = '';
   const row = caps.find(r => r.capacity === estSel.capacity);
   const ok = row && estSel.appearance && estSel.battery;
-  const res = ok ? estimatePrice(row.price, estSel, rules) : null;
+  const req = row ? batteryReq(row, rules) : 0;
+  const acc = row ? Number(row.acc) || 0 : 0;
+  const res = ok ? estimatePrice(row.price, estSel, rules, req, acc) : null;
   const chips = (key, list, multi) => `<div class="chips">${list.map(l => `<label class="chip"><input type="${multi ? 'checkbox' : 'radio'}" name="es_${key}" value="${esc(l)}" ${multi ? (estSel[key].includes(l) ? 'checked' : '') : (estSel[key] === l ? 'checked' : '')}><span>${esc(l)}</span></label>`).join('')}</div>`;
   app.innerHTML = `<div class="narrow" style="padding-top:22px">
     <div class="card rise">
@@ -245,7 +247,12 @@ function drawEstimate() {
       <label class="field"><span>型號</span><select class="input" id="esModel"><option value="">請選擇型號</option>${models.map(m => `<option ${estSel.model === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
       ${estSel.model ? `<div class="field"><span>容量</span>${chips('capacity', caps.map(r => r.capacity))}</div>` : ''}
       ${estSel.capacity ? `<div class="field"><span>外觀</span>${chips('appearance', rules.appearance.map(x => x.label))}</div>
-        <div class="field"><span>電池健康度 <small class="muted" style="font-weight:400">設定 → 電池 → 電池健康度</small></span>${chips('battery', rules.battery.map(x => x.label))}</div>
+        <div class="field"><span>電池健康度 <small class="muted" style="font-weight:400">設定 → 電池 → 電池健康度</small></span>
+          <p class="small" style="margin:0 0 8px;color:${req ? '#8a5300' : 'var(--ink-2)'}">${req ? `🔋 ${esc(estSel.model)} 電池標準：<b>${req}% 以上</b>，未達會依程度扣款` : `🔋 ${esc(estSel.model)} 不看電池健康度`}</p>
+          ${chips('battery', rules.battery.map(x => x.label))}</div>
+        ${(rules.accessories || []).length ? `<div class="field"><span>盒子與配件（缺少的請勾選）</span>
+          <p class="small muted" style="margin:0 0 8px">${acc ? `📦 每少一項扣 NT$ ${money(acc)}` : '📦 本型號缺盒子或配件不扣款'}</p>
+          ${chips('missing', rules.accessories.map(x => x.label), true)}</div>` : ''}
         <div class="field"><span>有沒有以下狀況？（可複選，沒有就不用選）</span>${chips('issues', rules.issues.map(x => x.label), true)}</div>` : ''}
     </div>
     ${res ? `<div class="card est-result rise">
@@ -253,6 +260,7 @@ function drawEstimate() {
           <p class="est-warn">⚠ 您選的「${esc(res.issues.filter(i => i.inspect).map(i => i.label).join('、'))}」需要我們收到後實際檢測，才能報價。</p>`
         : `<div class="est-label">${esc(estSel.model)} ${esc(estSel.capacity)}　預估收購價</div>
           <div class="est-price">NT$ ${money(res.low)} <span>–</span> ${money(res.high)}</div>
+          ${res.accOff ? `<p class="small muted" style="margin:6px 0 0">已扣缺少盒子／配件 NT$ ${money(res.accOff)}</p>` : ''}
           ${res.deducted ? `<p class="est-warn">⚠ 已依「${esc(res.issues.map(i => i.label).join('、'))}」預估扣款，故障程度不同價格會有差異，請以實際檢測為準。</p>` : ''}`}
       <p class="small muted" style="margin:10px 0 16px">${esc(rules.note)}</p>
       <button class="btn btn-dark btn-block" id="esBook">用這個估價預約宅配收購 →</button>
@@ -262,10 +270,11 @@ function drawEstimate() {
   $('#esModel').onchange = e => { estSel.model = e.target.value; estSel.capacity = ''; drawEstimate(); };
   ['category', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=es_${k}]`).forEach(r => r.onchange = () => { estSel[k] = r.value; if (k === 'category') estSel.model = ''; drawEstimate(); }));
   $$('input[name=es_issues]').forEach(c => c.onchange = () => { estSel.issues = $$('input[name=es_issues]:checked').map(x => x.value); drawEstimate(); });
+  $$('input[name=es_missing]').forEach(c => c.onchange = () => { estSel.missing = $$('input[name=es_missing]:checked').map(x => x.value); drawEstimate(); });
   if ($('#esBook')) $('#esBook').onclick = () => {
     const cat = FIELDS[estSel.category] ? estSel.category : '其他';
     const it = newItem(cat);
-    const note = `電池健康度 ${estSel.battery}；線上估價 ${res.inspect ? '需檢測' : 'NT$ ' + money(res.low) + '–' + money(res.high)}`;
+    const note = `電池健康度 ${estSel.battery}；${estSel.missing.length ? estSel.missing.join('、') + '；' : ''}線上估價 ${res.inspect ? '需檢測' : 'NT$ ' + money(res.low) + '–' + money(res.high)}`;
     if (cat === '其他') it.name = `${estSel.model} ${estSel.capacity}，外觀：${estSel.appearance}，${note}`;
     else {
       it.model = estSel.model; it.capacity = estSel.capacity; it.newOrUsed = '二手機(使用過)';

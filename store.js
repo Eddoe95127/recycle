@@ -553,32 +553,38 @@ async function pricesPage(refresh) {
 function drawPrices() {
   const q = prFilter.trim().toLowerCase();
   const filled = pr.rows.filter(r => Number(r.price) > 0).length;
+  pr.rules.accessories = pr.rules.accessories || [];
   const ruleRows = (key, withInspect) => pr.rules[key].map((x, i) => `<div class="pr-rule" data-rk="${key}" data-ri="${i}">
       <input class="input" data-rf="label" value="${esc(x.label)}" placeholder="選項名稱">
-      <label class="pr-pct"><input class="input num" data-rf="pct" inputmode="numeric" value="${esc(x.pct ?? '')}" ${x.inspect ? 'disabled' : ''}><span>${key === 'issues' ? '% 扣' : '%'}</span></label>
+      ${key === 'battery' ? `<label class="pr-pct"><span>下限</span><input class="input num" data-rf="min" inputmode="numeric" value="${esc(x.min ?? '')}"><span>%</span></label>` : ''}
+      ${key === 'accessories' ? '' : `<label class="pr-pct">${key === 'battery' ? '<span>未達標準</span>' : ''}<input class="input num" data-rf="pct" inputmode="numeric" value="${esc(x.pct ?? '')}" ${x.inspect ? 'disabled' : ''}><span>${key === 'issues' ? '% 扣' : '%'}</span></label>`}
       ${withInspect ? `<label class="check small"><input type="checkbox" data-rf="inspect" ${x.inspect ? 'checked' : ''}> 需檢測</label>` : ''}
       <button type="button" class="ph-del static" data-rdel aria-label="刪除">✕</button></div>`).join('') +
     `<button type="button" class="link" data-radd="${key}" style="font-size:13px">＋ 新增選項</button>`;
   app.innerHTML = `${pagesNav('prices')}
     <div class="card"><h3>線上估價表 <span class="small muted" style="font-weight:400">已填價格 ${filled} / ${pr.rows.length} 列（空白的不會顯示給客戶）</span></h3>
-      <p class="small muted" style="margin:0">「最高收購價」＝外觀無刮傷、電池 90% 以上、功能都正常的價格。客戶看到的預估價＝最高收購價 × 外觀% × 電池% ×（1 − 故障扣%），再往下顯示 ${esc(pr.rules.spread)}% 的區間。</p></div>
+      <p class="small muted" style="margin:0">「最高收購價」＝外觀無刮傷、電池 90% 以上、功能都正常的價格。客戶看到的預估價＝最高收購價 × 外觀% × 電池% ×（1 − 故障扣%），電池達到型號要求不扣；再往下顯示 ${esc(pr.rules.spread)}% 的區間。</p></div>
     <div class="grid2 pr-grid">
       <div class="card"><h3>價格</h3>
         <div class="toolbar" style="margin-bottom:8px"><input class="input" id="prQ" placeholder="搜尋型號" value="${esc(prFilter)}"><button class="btn btn-ghost btn-sm" id="prAdd">＋ 新增一列</button></div>
-        <table class="table pr-table"><thead><tr><th>類別</th><th>型號</th><th>容量</th><th>最高收購價</th><th></th></tr></thead><tbody>
+        <table class="table pr-table"><thead><tr><th>類別</th><th>型號</th><th>容量</th><th>最高收購價</th><th>電池要求%</th><th>配件扣款</th><th></th></tr></thead><tbody>
         ${pr.rows.map((r, i) => !q || (r.model + ' ' + r.capacity + ' ' + r.category).toLowerCase().includes(q) ? `<tr data-pi="${i}" class="${i && pr.rows[i - 1].model === r.model ? 'same' : ''}">
           <td><select class="input" data-pf="category">${['iPhone', 'iPad', 'Mac', '其他'].map(c => `<option ${r.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
           <td><input class="input" data-pf="model" value="${esc(r.model)}"></td>
           <td><input class="input" data-pf="capacity" value="${esc(r.capacity)}" style="max-width:90px"></td>
           <td><input class="input num" data-pf="price" inputmode="numeric" value="${esc(r.price || '')}" placeholder="未填" style="max-width:110px"></td>
+          <td><input class="input num" data-pf="battery" inputmode="numeric" value="${esc(r.battery ?? '')}" placeholder="${esc(pr.rules.batteryDefault ?? 90)}" title="0＝不看電池；空白＝預設" style="max-width:70px"></td>
+          <td><input class="input num" data-pf="acc" inputmode="numeric" value="${esc(r.acc || '')}" placeholder="0" title="每缺一項盒子／配件扣多少" style="max-width:80px"></td>
           <td><button type="button" class="ph-del static" data-pdel="${i}" aria-label="刪除">✕</button></td></tr>` : '').join('')}
         </tbody></table></div>
       <div>
         <div class="card"><h3>外觀</h3>${ruleRows('appearance')}</div>
-        <div class="card"><h3>電池健康度</h3>${ruleRows('battery')}</div>
+        <div class="card"><h3>電池健康度</h3><p class="small muted" style="margin:-4px 0 10px">客戶選的級距「下限」達到該型號的「電池要求%」就不扣；未達才乘「未達標準 %」。型號的電池要求填在左邊價格表（0＝不看電池，空白＝預設 ${esc(pr.rules.batteryDefault ?? 90)}%）。</p>${ruleRows('battery')}</div>
+        <div class="card"><h3>盒子與配件</h3><p class="small muted" style="margin:-4px 0 10px">客戶勾選缺少的項目，每項扣該型號的「配件扣款」金額（填在左邊價格表）。</p>${ruleRows('accessories')}</div>
         <div class="card"><h3>故障</h3><p class="small muted" style="margin:-4px 0 10px">勾「需檢測」＝不顯示價格，改顯示「需實際檢測後報價」</p>${ruleRows('issues', true)}</div>
         <div class="card"><h3>其他</h3>
-          <label class="field"><span>價格區間（%）</span><input class="input num" id="prSpread" inputmode="numeric" value="${esc(pr.rules.spread)}" style="max-width:100px"></label>
+          <div class="grid2"><label class="field"><span>價格區間（%）</span><input class="input num" id="prSpread" inputmode="numeric" value="${esc(pr.rules.spread)}" style="max-width:100px"></label>
+          <label class="field"><span>預設電池要求（%）</span><input class="input num" id="prBatDef" inputmode="numeric" value="${esc(pr.rules.batteryDefault ?? 90)}" style="max-width:100px"></label></div>
           <label class="field" style="margin:0"><span>給客戶的說明</span><textarea class="input" id="prNote">${esc(pr.rules.note)}</textarea></label></div>
       </div>
     </div>
@@ -586,19 +592,20 @@ function drawPrices() {
       <a class="btn btn-ghost" href="index.html#/estimate" target="_blank">看客戶畫面 ↗</a><button class="btn btn-dark" id="prSave">儲存並上線</button></div>`;
   const dirty = () => { prDirty = true; $('#prErr').textContent = '有尚未儲存的修改'; };
   $('#prQ').oninput = e => { prFilter = e.target.value; const pos = e.target.selectionStart; drawPrices(); const n = $('#prQ'); n.focus(); n.setSelectionRange(pos, pos); };
-  $$('[data-pi]').forEach(tr => { const r = pr.rows[+tr.dataset.pi]; $$('[data-pf]', tr).forEach(el => el.oninput = el.onchange = () => { r[el.dataset.pf] = el.dataset.pf === 'price' ? el.value.replace(/[^\d]/g, '') : el.value; dirty(); }); });
+  $$('[data-pi]').forEach(tr => { const r = pr.rows[+tr.dataset.pi]; $$('[data-pf]', tr).forEach(el => el.oninput = el.onchange = () => { r[el.dataset.pf] = ['price', 'battery', 'acc'].includes(el.dataset.pf) ? el.value.replace(/[^\d]/g, '') : el.value; dirty(); }); });
   $$('[data-pdel]').forEach(b => b.onclick = () => { pr.rows.splice(+b.dataset.pdel, 1); prDirty = true; drawPrices(); });
   $('#prAdd').onclick = () => { pr.rows.unshift({ category: 'iPhone', model: prFilter || '', capacity: '', price: '', note: '' }); prDirty = true; drawPrices(); $('[data-pi="0"] [data-pf=model]')?.focus(); };
   $$('[data-rk]').forEach(row => {
     const x = pr.rules[row.dataset.rk][+row.dataset.ri];
     $$('[data-rf]', row).forEach(el => el.oninput = el.onchange = () => {
       if (el.dataset.rf === 'inspect') { x.inspect = el.checked; prDirty = true; drawPrices(); return; }
-      x[el.dataset.rf] = el.dataset.rf === 'pct' ? el.value.replace(/[^\d]/g, '') : el.value; dirty();
+      x[el.dataset.rf] = ['pct', 'min'].includes(el.dataset.rf) ? el.value.replace(/[^\d]/g, '') : el.value; dirty();
     });
     $('[data-rdel]', row).onclick = () => { pr.rules[row.dataset.rk].splice(+row.dataset.ri, 1); prDirty = true; drawPrices(); };
   });
-  $$('[data-radd]').forEach(b => b.onclick = () => { pr.rules[b.dataset.radd].push({ label: '', pct: b.dataset.radd === 'issues' ? 10 : 90 }); prDirty = true; drawPrices(); });
+  $$('[data-radd]').forEach(b => b.onclick = () => { pr.rules[b.dataset.radd].push(b.dataset.radd === 'accessories' ? { label: '' } : b.dataset.radd === 'battery' ? { label: '', min: 0, pct: 80 } : { label: '', pct: b.dataset.radd === 'issues' ? 10 : 90 }); prDirty = true; drawPrices(); });
   $('#prSpread').oninput = e => { pr.rules.spread = e.target.value.replace(/[^\d]/g, ''); dirty(); };
+  $('#prBatDef').oninput = e => { pr.rules.batteryDefault = e.target.value.replace(/[^\d]/g, ''); dirty(); };
   $('#prNote').oninput = e => { pr.rules.note = e.target.value; dirty(); };
   $('#prSave').onclick = async () => {
     const b = $('#prSave'); b.disabled = true; $('#prErr').textContent = '儲存中…';
