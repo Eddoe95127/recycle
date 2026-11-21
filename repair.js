@@ -336,6 +336,27 @@ function rpPreview(o, kind) {
 }
 
 /* ---------- 維修單明細（進度、項目、零件、取件） ---------- */
+/** 進度：步驟條＋一個主要按鈕（下一步），其他操作收在「其他操作」裡，避免誤按 */
+function rpProgressHTML(o, can) {
+  const steps = ['待維修', '維修中', '待取件', '已取件'];
+  const side = ['無法維修', '已取消'].includes(o.status);
+  const cur = side ? (o.status === '無法維修' ? 2 : -1) : steps.indexOf(o.status);
+  const bar = `<div class="rp-steps">${steps.map((s, i) => `<div class="${i < cur ? 'done' : i === cur ? 'on' : ''}"><i>${i < cur ? '✓' : i + 1}</i><span>${i === 2 && o.status === '無法維修' ? '無法維修' : s}</span></div>`).join('')}</div>
+    ${o.status === '已取消' ? '<p class="small" style="color:var(--red, #e5484d);margin:8px 0 0;text-align:center">此維修單已取消</p>' : ''}`;
+  if (!can || ['已取件', '已取消'].includes(o.status)) return `<div class="card"><h3>維修進度</h3>${bar}</div>`;
+  const next = { '待維修': ['維修中', '🔧 開始維修'], '維修中': ['待取件', `✅ 維修完成，通知取件${o.email ? '（寄信）' : ''}`] }[o.status];
+  const back = { '維修中': '待維修', '待取件': '維修中', '無法維修': '維修中' }[o.status];
+  const others = [
+    o.status !== '無法維修' && o.status !== '待取件' && ['無法維修', '改為「無法維修」'],
+    back && [back, `退回「${back}」`],
+    ['已取消', '取消維修單'],
+  ].filter(Boolean);
+  return `<div class="card"><h3>維修進度</h3>${bar}
+    ${next ? `<button class="btn btn-dark btn-block rp-next" data-st="${next[0]}">${next[1]}</button>`
+      : `<p class="small muted" style="margin:12px 0 0;text-align:center">${o.status === '待取件' ? '等待客人取件 ↓ 在下方「取件與收款」辦理' : '可在下方「取件與收款」辦理退回裝置'}</p>`}
+    <details class="rp-more"><summary>其他操作</summary><div class="rp-more-btns">
+      ${others.map(([st, l]) => `<button class="btn btn-ghost btn-sm" data-st="${st}" ${st === '已取消' ? 'style="color:var(--red, #e5484d);border-color:#f3c2c2"' : ''}>${l}</button>`).join('')}</div></details></div>`;
+}
 function repairDrawer(o) {
   if (!o) return;
   const can = P('repair'), d = $('#drawer');
@@ -358,11 +379,7 @@ function repairDrawer(o) {
         <dt>收件</dt><dd>${esc(o.createdAt)}・${esc(o.staff)}</dd>${o.promise ? `<dt>預計完成</dt><dd>${esc(o.promise)}</dd>` : ''}
         ${o.doneAt ? `<dt>完修</dt><dd>${esc(o.doneAt)}</dd>` : ''}${o.pickupAt ? `<dt>取件</dt><dd>${esc(o.pickupAt)}・${esc(o.pickupBy)}</dd><dt>實收</dt><dd class="num">NT$ ${money(o.fee)}${o.payment ? '（' + esc(o.payment) + '）' : ''}</dd>` : ''}</dl>
         ${o.photos.length ? `<div class="ph-grid" style="margin-top:10px">${o.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="收件照片"></div>`).join('')}</div>` : ''}</div>
-      ${can && !['已取件', '已取消'].includes(o.status) ? `<div class="card"><h3>更新進度</h3><div class="rp-acts">
-        ${o.status === '待維修' ? '<button class="btn btn-dark" data-st="維修中">🔧 開始維修</button>' : ''}
-        ${['待維修', '維修中'].includes(o.status) ? `<button class="btn btn-dark" data-st="待取件">✅ 完修，通知取件${o.email ? '（寄信）' : ''}</button><button class="btn btn-ghost" data-st="無法維修">無法維修</button>` : ''}
-        ${o.status !== '待維修' ? '<button class="btn btn-ghost" data-st="待維修">退回待維修</button>' : ''}
-        <button class="btn btn-ghost" data-st="已取消" style="color:var(--red, #e5484d)">取消維修單</button></div></div>` : ''}
+      ${rpProgressHTML(o, can)}
       <div class="card"><h3>維修項目與保固</h3>
         ${o.inspect ? `<div class="rp-inspect-box" style="margin-bottom:10px"><b>檢測後另行報價</b>・檢測費 NT$ ${money(o.inspectFee || 0)}<div class="small" style="color:#8a5300">※ ${INSPECT_NOTE}</div></div>` : ''}
         ${can && o.status !== '已取件' ? rpItemsEditor(ed.items, 'd', priceListOf(o.category, o.model)) : `${o.items.length ? `<table class="rep-price">${o.items.map(x => `<tr><td>${esc(x.name)}<div class="sub">${x.warranty ? '保固 ' + x.warranty + ' 天' : '無保固'}</div></td><td>NT$ ${money(x.amount)}</td></tr>`).join('')}<tr class="sub"><td>報價合計</td><td>NT$ ${money(o.quote)}</td></tr></table>` : '<p class="small muted">尚未填寫</p>'}`}</div>
@@ -413,7 +430,15 @@ function repairDrawer(o) {
     };
     $$('[data-st]', d).forEach(b => b.onclick = async () => {
       const st = b.dataset.st;
-      if (st === '已取消' && !(await ask('取消這張維修單？', '取消維修單', '返回'))) return;
+      const msg = {
+        '維修中': o.status === '待維修' ? `開始維修 ${o.id}？\n\n狀態會改為「維修中」。` : `退回「維修中」？`,
+        '待取件': `確定已維修完成？\n\n狀態會改為「待取件」${o.email ? '，並寄信通知客人來取件' : ''}。`,
+        '無法維修': `改為「無法維修」？\n\n之後仍可在下方辦理取件（退回裝置、收檢測費）。`,
+        '待維修': `退回「待維修」？`,
+        '已取消': `取消這張維修單？\n\n取消後就不能再更新進度。`,
+      }[st] || `改為「${st}」？`;
+      const okText = { '待取件': '確定完修', '已取消': '取消維修單', '無法維修': '改為無法維修' }[st] || '確定';
+      if (!(await ask(msg, okText, '返回'))) return;
       b.disabled = true;
       try { const n = await save({ status: st }); if (n) { toast(st === '待取件' && n.email ? '已更新，並寄信通知客人取件' : '已更新為「' + st + '」'); repairDrawer(n); refreshRepairList(); } }
       catch (x) { if (x.auth) return start(); toast(x.message); b.disabled = false; }
