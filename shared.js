@@ -724,7 +724,7 @@ async function mockApiInner(action, d) {
       const day = now().slice(2, 10).replace(/-/g, ''), id = 'RP' + day + String(mockRepairs.length + 1).padStart(3, '0');
       const items = (d.items || []).map(x => ({ name: x.name, amount: Number(x.amount) || 0, warranty: Number(x.warranty) || 0 }));
       const o = { id, createdAt: now(), staff: s.name, status: '待維修', customer: d.customer, phone: d.phone, email: d.email || '', category: d.category, model: d.model, capacity: d.capacity || '', color: d.color || '',
-        serial: d.serial || '', issue: d.issue, condition: d.condition || '', items, quote: items.reduce((t, x) => t + x.amount, 0), parts: [], partsCost: 0, fee: null, payment: '', promise: d.promise || '',
+        serial: d.serial || '', issue: d.issue, condition: d.condition || '', items, quote: items.reduce((t, x) => t + x.amount, 0), inspect: !!d.inspect, inspectFee: Number(d.inspectFee) || 0, parts: [], partsCost: 0, fee: null, payment: '', promise: d.promise || '',
         doneAt: '', pickupAt: '', pickupBy: '', warrantyEnd: '', note: d.note || '', history: [`${now()}｜待維修（收件）｜${s.name}`], photos: (d.photos || []).map(save), dropSign: save(d.dropSign), pickSign: '',
         mailLog: d.email ? `${now()} 已寄送（收件）→ ${d.email}（模擬）` : '', masked: {} };
       mockRepairs.push(o);
