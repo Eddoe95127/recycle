@@ -122,7 +122,7 @@
 </footer>
 
 <script src="config.js?v=20261121d"></script>
-<script src="shared.js?v=20261121f"></script>
+<script src="shared.js?v=20261121h"></script>
 <script>
 const app = $('#app');
 
@@ -210,8 +210,11 @@ function renderHome() {
 
 /* ============================== 線上估價 ============================== */
 let est = null; // { rows, rules }
-const estSel = { category: '', model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] };
+const estSel = { category: '', cond: '', model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] };
 const EST_FUNC_OK = '功能都正常', EST_ACC_OK = '盒子配件都有'; // 預設選項
+const EST_DETAIL = ['iPhone', 'iPad', 'Mac']; // 這些類別二手要問外觀、電池、故障；其他類別直接顯示官網價
+const EST_NEW = '全新未拆封', EST_USED = '二手';
+const specLabel = c => c === 'iPad' ? '容量／網路' : c === 'Mac' ? '年份／晶片' : c === 'iPhone' ? '容量' : '規格';
 async function renderEstimate() {
   if (!est) {
     app.innerHTML = '<div class="spinner"></div>';
@@ -229,16 +232,23 @@ function drawEstimate() {
   const cats = [...new Set(rows.map(r => r.category))];
   if (!cats.includes(estSel.category)) estSel.category = cats[0];
   const inCat = rows.filter(r => r.category === estSel.category);
-  const models = [...new Set(inCat.map(r => r.model))];
+  const hasNew = inCat.some(r => r.newPrice > 0), hasUsed = inCat.some(r => r.price > 0);
+  if (!hasNew) estSel.cond = EST_USED; else if (!hasUsed) estSel.cond = EST_NEW; else if (!estSel.cond) estSel.cond = EST_USED;
+  const isNew = estSel.cond === EST_NEW;
+  const pool = inCat.filter(r => isNew ? r.newPrice > 0 : r.price > 0);
+  const models = [...new Set(pool.map(r => r.model))];
   if (!models.includes(estSel.model)) { estSel.model = ''; estSel.capacity = ''; }
-  const caps = inCat.filter(r => r.model === estSel.model);
+  const caps = pool.filter(r => r.model === estSel.model);
   if (caps.length === 1) estSel.capacity = caps[0].capacity;
   if (!caps.some(r => r.capacity === estSel.capacity)) estSel.capacity = '';
   const row = caps.find(r => r.capacity === estSel.capacity);
-  const ok = row && estSel.appearance && estSel.battery;
+  const detail = !isNew && EST_DETAIL.includes(estSel.category);
   const req = row ? batteryReq(row, rules) : 0;
-  const acc = row ? Number(row.acc) || 0 : 0;
-  const res = ok ? estimatePrice(row.price, estSel, rules, req, acc) : null;
+  const accList = row && detail ? accItemsFor(row, rules) : [];
+  const accLabels = accList.map(a => a.label);
+  estSel.missing = estSel.missing.filter(l => accLabels.includes(l)); // 換型號時去掉不適用的項目
+  const res = !row ? null : !detail ? { fixed: isNew ? row.newPrice : row.price } : (estSel.appearance && estSel.battery ? estimatePrice(row.price, estSel, rules, req, accList) : null);
+  const accHint = !accList.length ? '' : new Set(accList.map(a => a.amount)).size === 1 ? `📦 每少一項扣 NT$ ${money(accList[0].amount)}` : '📦 ' + accList.map(a => `${a.label.replace('沒有原廠', '缺')}扣 NT$ ${money(a.amount)}`).join('、');
   // okLabel：複選題的「都沒問題」選項，沒勾任何問題時預設勾它
   const chips = (key, list, multi, okLabel) => `<div class="chips">${(okLabel ? [okLabel, ...list] : list).map(l => `<label class="chip"><input type="${multi ? 'checkbox' : 'radio'}" name="es_${key}" value="${esc(l)}" ${multi ? ((l === okLabel ? !estSel[key].length : estSel[key].includes(l)) ? 'checked' : '') : (estSel[key] === l ? 'checked' : '')}><span>${esc(l)}</span></label>`).join('')}</div>`;
   app.innerHTML = `<div class="narrow" style="padding-top:22px">
@@ -246,19 +256,23 @@ function drawEstimate() {
       <h2 class="card-title" style="font-size:22px">線上估價</h2>
       <p class="muted" style="margin:4px 0 18px">選擇型號與狀況，馬上知道大約可以賣多少</p>
       ${cats.length > 1 ? `<div class="field"><span>類別</span>${chips('category', cats)}</div>` : ''}
+      ${hasNew && hasUsed ? `<div class="field"><span>商品狀態</span>${chips('cond', [EST_USED, EST_NEW])}</div>` : `<p class="small muted" style="margin:-6px 0 12px">${isNew ? '此類別只收全新未拆封商品' : ''}</p>`}
       <label class="field"><span>型號</span><select class="input" id="esModel"><option value="">請選擇型號</option>${models.map(m => `<option ${estSel.model === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
-      ${estSel.model ? `<div class="field"><span>容量</span>${chips('capacity', caps.map(r => r.capacity))}</div>` : ''}
-      ${estSel.capacity ? `<div class="field"><span>外觀</span>${chips('appearance', rules.appearance.map(x => x.label))}</div>
-        <div class="field"><span>電池健康度 <small class="muted" style="font-weight:400">設定 → 電池 → 電池健康度</small></span>
+      ${estSel.model && caps.length > 1 ? `<div class="field"><span>${specLabel(estSel.category)}</span>${chips('capacity', caps.map(r => r.capacity))}</div>` : ''}
+      ${row && detail ? `<div class="field"><span>外觀</span>${chips('appearance', rules.appearance.map(x => x.label))}</div>
+        <div class="field"><span>電池健康度 ${estSel.category === 'Mac' ? '' : '<small class="muted" style="font-weight:400">設定 → 電池 → 電池健康度</small>'}</span>
           <p class="small" style="margin:0 0 8px;color:${req ? '#8a5300' : 'var(--ink-2)'}">${req ? `🔋 ${esc(estSel.model)} 電池標準：<b>${req}% 以上</b>，未達會依程度扣款` : `🔋 ${esc(estSel.model)} 不看電池健康度`}</p>
           ${chips('battery', rules.battery.map(x => x.label))}</div>
-        ${(rules.accessories || []).length ? `<div class="field"><span>盒子與配件</span>
-          <p class="small muted" style="margin:0 0 8px">${acc ? `📦 每少一項扣 NT$ ${money(acc)}` : '📦 本型號缺盒子或配件不扣款'}</p>
-          ${chips('missing', rules.accessories.map(x => x.label), true, EST_ACC_OK)}</div>` : ''}
+        ${accList.length ? `<div class="field"><span>盒子與配件</span>
+          <p class="small muted" style="margin:0 0 8px">${accHint}</p>
+          ${chips('missing', accLabels, true, EST_ACC_OK)}</div>` : ''}
         <div class="field"><span>功能狀況（有問題的請勾選，可複選）</span>${chips('issues', rules.issues.map(x => x.label), true, EST_FUNC_OK)}</div>` : ''}
     </div>
     ${res ? `<div class="card est-result rise">
-      ${res.inspect ? `<div class="est-label">預估收購價</div><div class="est-price small-price">需實際檢測後報價</div>
+      ${res.fixed != null ? `<div class="est-label">${esc(estSel.model)} ${esc(estSel.capacity)}　${isNew ? '全新收購價' : '收購價'}</div>
+          <div class="est-price">NT$ ${money(res.fixed)}</div>
+          <p class="est-warn">${isNew ? '⚠ 需全新未拆封、未開通。拆封、外封膜破損或國外版本會另行扣款或改以電話報價，請以門市實際確認為準。' : '⚠ 以上為 A 級良品價格，有損傷、瑕疵或缺少配件會依實際檢測扣款。'}</p>`
+      : res.inspect ? `<div class="est-label">預估收購價</div><div class="est-price small-price">需實際檢測後報價</div>
           <p class="est-warn">⚠ 您選的「${esc(res.issues.filter(i => i.inspect).map(i => i.label).join('、'))}」需要我們收到後實際檢測，才能報價。</p>`
         : `<div class="est-label">${esc(estSel.model)} ${esc(estSel.capacity)}　預估收購價</div>
           <div class="est-price">NT$ ${money(res.high)} <span>–</span> ${money(res.low)}</div>
@@ -270,7 +284,12 @@ function drawEstimate() {
     <p style="text-align:center;margin:14px 0 30px"><button class="link" onclick="go('book')">不估價，直接預約 →</button></p>
   </div>`;
   $('#esModel').onchange = e => { estSel.model = e.target.value; estSel.capacity = ''; drawEstimate(); };
-  ['category', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=es_${k}]`).forEach(r => r.onchange = () => { estSel[k] = r.value; if (k === 'category') estSel.model = ''; drawEstimate(); }));
+  ['category', 'cond', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=es_${k}]`).forEach(r => r.onchange = () => {
+    estSel[k] = r.value;
+    if (k === 'category') { estSel.model = ''; estSel.cond = ''; }
+    if (k === 'cond') estSel.model = '';
+    drawEstimate();
+  }));
   // 勾「都沒問題」＝清空；勾任何問題＝取消「都沒問題」
   const multi = (key, ok) => $$(`input[name=es_${key}]`).forEach(c => c.onchange = () => {
     estSel[key] = c.value === ok ? [] : $$(`input[name=es_${key}]:checked`).map(x => x.value).filter(v => v !== ok);
@@ -278,21 +297,36 @@ function drawEstimate() {
   });
   multi('issues', EST_FUNC_OK);
   multi('missing', EST_ACC_OK);
-  if ($('#esBook')) $('#esBook').onclick = () => {
-    const cat = FIELDS[estSel.category] ? estSel.category : '其他';
-    const it = newItem(cat);
-    const note = `電池健康度 ${estSel.battery}；${estSel.missing.length ? estSel.missing.join('、') + '；' : ''}線上估價 ${res.inspect ? '需檢測' : 'NT$ ' + money(res.high) + '–' + money(res.low)}`;
-    if (cat === '其他') it.name = `${estSel.model} ${estSel.capacity}，外觀：${estSel.appearance}，${note}`;
-    else {
-      it.model = estSel.model; it.capacity = estSel.capacity; it.newOrUsed = '二手機(使用過)';
+  if ($('#esBook')) $('#esBook').onclick = () => estToBooking(res, isNew, detail);
+}
+/** 把估價帶進預約表單 */
+function estToBooking(res, isNew, detail) {
+  const cat = FIELDS[estSel.category] ? estSel.category : '其他';
+  const it = newItem(cat);
+  const priceText = res.fixed != null ? `NT$ ${money(res.fixed)}` : res.inspect ? '需檢測' : `NT$ ${money(res.high)}–${money(res.low)}`;
+  const note = (detail ? `電池健康度 ${estSel.battery}；${estSel.missing.length ? estSel.missing.join('、') + '；' : ''}` : '') + `線上估價${isNew ? '（全新）' : ''} ${priceText}`;
+  if (cat === '其他') {
+    it.name = `${estSel.category}：${estSel.model} ${estSel.capacity}${isNew ? '（全新未拆封）' : ''}${detail ? `，外觀：${estSel.appearance}` : ''}；${note}`;
+  } else {
+    it.newOrUsed = isNew ? '全新未拆封' : '二手機(使用過)';
+    const capToken = (estSel.capacity.match(/\d+(GB|TB)/) || [])[0] || '';
+    if (cat === 'iPhone') { it.model = estSel.model; it.capacity = estSel.capacity; }
+    if (cat === 'iPad') {
+      if (IPAD_MODELS.includes(estSel.model)) it.model = estSel.model;
+      if (CAPACITIES.includes(capToken)) it.capacity = capToken;
+      it.connectivity = /LTE|行動/.test(estSel.capacity) ? 'Wi-Fi + 行動網路' : 'Wi-Fi';
+    }
+    if (cat === 'Mac') { it.model = estSel.model; it.year = (estSel.capacity.match(/20\d\d/) || [''])[0]; it.spec = estSel.capacity; }
+    if (detail) {
       if (IPHONE_APPEARANCE.includes(estSel.appearance)) it.appearance = estSel.appearance;
       it.issues = estSel.issues.filter(l => IPHONE_ISSUES.includes(l));
       if (!it.issues.length && !estSel.issues.length) it.issues = ['功能都完全正常'];
-      it.issueNote = (IPHONE_APPEARANCE.includes(estSel.appearance) ? '' : `外觀：${estSel.appearance}；`) + note;
     }
-    const d = loadDraft(); d.items.push(it); d.step = 0; saveDraft(d);
-    toast('已把估價帶入預約表單'); go('book');
-  };
+    const extra = (cat === 'iPad' && !it.model ? `型號：${estSel.model} ${estSel.capacity}；` : '') + (detail && !IPHONE_APPEARANCE.includes(estSel.appearance) ? `外觀：${estSel.appearance}；` : '');
+    it.issueNote = extra + note;
+  }
+  const d = loadDraft(); d.items.push(it); d.step = 0; saveDraft(d);
+  toast('已把估價帶入預約表單'); go('book');
 }
 
 /* ============================== 預約流程 ============================== */
