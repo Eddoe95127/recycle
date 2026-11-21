@@ -214,8 +214,12 @@ function evalBlock(it, i) {
     </details>
     <div class="field" style="margin-top:12px"><span>估價</span>
       <div class="price-row"><span>基本收購價 *</span><input class="input num" data-f="base" inputmode="numeric" value="${esc(it.base)}" placeholder="例：13800"></div>
-      ${it.deductions.map((d, j) => `<div class="price-row minus"><input class="input" list="dedList" data-dr="${j}" value="${esc(d.reason)}" placeholder="扣減原因">
-        <input class="input num" data-da="${j}" inputmode="numeric" value="${esc(d.amount)}" placeholder="金額"><button type="button" class="ph-del static" data-deld="${j}" aria-label="刪除">✕</button></div>`).join('')}
+      ${it.deductions.map((d, j) => { const manual = d._other || (d.reason && !DEDUCT_SUGGEST.includes(d.reason)); return `<div class="price-row minus"><div class="ded-reason">
+          <select class="input" data-drs="${j}"><option value="" ${!d.reason && !manual ? 'selected' : ''}>選擇扣減原因</option>
+            ${DEDUCT_SUGGEST.map(s => `<option ${!manual && d.reason === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+            <option value="${IN_OTHER}" ${manual ? 'selected' : ''}>其他（手動輸入）</option></select>
+          <input class="input" data-dr="${j}" value="${esc(manual ? d.reason : '')}" placeholder="輸入扣減原因" ${manual ? '' : 'hidden'}></div>
+        <input class="input num" data-da="${j}" inputmode="numeric" value="${esc(d.amount)}" placeholder="金額"><button type="button" class="ph-del static" data-deld="${j}" aria-label="刪除">✕</button></div>`; }).join('')}
       <button type="button" class="link" data-addd>＋ 新增扣減項目</button>
       <div class="price-row sub"><span>收購金額</span><b class="num" data-sub>NT$ ${money(itemPrice(it))}</b></div>
     </div></div>`;
@@ -255,6 +259,7 @@ window.addEventListener('beforeunload', e => { if (dr && !drDone && location.has
 
 function drawForm() {
   if (drDone) return drawDone();
+  const keepY = window.scrollY;
   const steps = ['商品與交易', '證件核對', '確認與簽名'];
   app.innerHTML = `${pagesNav('intake')}
     <div class="in-wrap">
@@ -265,7 +270,10 @@ function drawForm() {
         <button class="btn btn-dark" id="inNext">${drStep < 3 ? '下一步' : '完成並建立收購單'}</button></div>
     </div>`;
   bindForm();
-  window.scrollTo(0, 0);
+  // 同一張單、同一步驟重畫（新增扣款、換選項…）：保持原本位置；換步驟或新單才回到最上面
+  const same = drawForm._dr === dr && drawForm._step === drStep;
+  window.scrollTo(0, same ? keepY : 0);
+  drawForm._dr = dr; drawForm._step = drStep;
 }
 const IN_OTHER = '__other';
 /** 下拉選單；選「其他（手動輸入）」或原本的值不在清單裡時，下面出現輸入框。attr：'data-f="model"' 或 'data-k="bank"' */
@@ -385,8 +393,16 @@ function bindForm() {
     $('[data-allok]', card).onclick = () => { it.checks.forEach(c => { c.r = 'ok'; }); it._open = true; drawForm(); };
     $('[data-ckwrap]', card).ontoggle = e => { it._open = e.target.open; };
     $$('[data-dr]', card).forEach(el => el.oninput = () => { it.deductions[+el.dataset.dr].reason = el.value; });
+    $$('[data-drs]', card).forEach(el => el.onchange = () => {
+      const d = it.deductions[+el.dataset.drs], inp = el.parentElement.querySelector('[data-dr]');
+      d._other = el.value === IN_OTHER;
+      d.reason = d._other ? inp.value.trim() : el.value;
+      inp.hidden = !d._other;
+      if (d._other) inp.focus({ preventScroll: true });
+      else el.closest('.price-row').querySelector('[data-da]').focus({ preventScroll: true }); // 選好原因 → 直接填金額
+    });
     $$('[data-da]', card).forEach(el => el.oninput = () => { it.deductions[+el.dataset.da].amount = el.value; updPrice(); });
-    $('[data-addd]', card).onclick = () => { it.deductions.push({ reason: '', amount: '' }); drawForm(); $$(`[data-i="${card.dataset.i}"] [data-dr]`).pop()?.focus(); };
+    $('[data-addd]', card).onclick = () => { it.deductions.push({ reason: '', amount: '' }); drawForm(); $$(`[data-i="${card.dataset.i}"] [data-drs]`).pop()?.focus({ preventScroll: true }); };
     $$('[data-deld]', card).forEach(b => b.onclick = () => { it.deductions.splice(+b.dataset.deld, 1); it.price = String(itemPrice(it)); drawForm(); });
     $$('[data-cat]', card).forEach(r => r.onchange = () => { it.category = r.value; it.model = ''; it.capacity = ''; it._m = {}; drawForm(); });
     $$('[data-note]', card).forEach(b => b.onclick = () => { if (!it.notes.includes(b.dataset.note)) it.notes = (it.notes ? it.notes + '、' : '') + b.dataset.note; $('[data-f=notes]', card).value = it.notes; });
@@ -447,7 +463,7 @@ async function submitIntake(err) {
   drBusy = true;
   const btn = $('#inNext'); btn.disabled = true; btn.textContent = '上傳中，請勿關閉…';
   try {
-    const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => it);
+    const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => ({ ...it, deductions: (it.deductions || []).map(({ _other, ...d }) => d) }));
     const r = await api('intakeCreate', { ...dr, items, account: dr.account.replace(/[\s-]/g, '') });
     drDone = r.intake;
     drDone._local = { items: dr.items.map(it => it.photos), ids: dr.idPhotos, sellerSign: dr.sellerSign, staffSign: dr.staffSign };
