@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>收購後台｜iPhone收購中心</title>
-<link rel="stylesheet" href="style.css?v=20261120b">
+<link rel="stylesheet" href="style.css?v=20261121a">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   body { background: #f2f2f4; }
@@ -99,6 +99,26 @@
   .price-row.sub b { font-size: 18px; }
   .lightbox.prev { cursor: default; justify-content: flex-start; overflow-y: auto; padding: 24px 12px; }
   .prev-box { max-width: 640px; width: 100%; }
+  [hidden] { display: none !important; }
+  .pages { display: flex; gap: 6px; margin: 4px 0 16px; }
+  .pages a { padding: 7px 14px; border-radius: 999px; font-size: 14px; color: var(--ink-2); text-decoration: none; background: #fff; box-shadow: var(--shadow); }
+  .pages a.on { background: var(--ink); color: #fff; }
+  .role { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eef0f4; color: var(--ink-2); margin-left: 6px; }
+  .role.boss { background: #1d1d1f; color: #fff; }
+  .no-perm { color: #8e8e93; font-size: 13px; }
+  .perm-list { display: grid; gap: 8px; margin: 6px 0 0; }
+  .perm-list label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
+  .perm-list input { margin-top: 2px; width: 17px; height: 17px; accent-color: #1d1d1f; flex: none; }
+  .perm-list .danger { background: #fff1f0; }
+  .u-off td { opacity: .45; }
+  .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #e8f8ee; color: #1a7f3c; white-space: nowrap; }
+  .pill.off { background: #f2f2f4; color: #8e8e93; }
+  .pill.warn { background: #fff4e5; color: #8a5300; }
+  .mini-perms { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mini-perms span { font-size: 11px; background: #f2f2f4; border-radius: 6px; padding: 1px 6px; color: var(--ink-2); }
+  .staff-login { max-width: 420px; margin: 48px auto; }
+  .tl-by { color: var(--ink-2); font-size: 12px; margin-left: 6px; font-weight: 400; }
+  .input:disabled { background: #f2f2f4; color: #8e8e93; }
   .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
 </style>
 </head>
@@ -113,8 +133,9 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
-<script src="config.js?v=20261120b"></script>
-<script src="shared.js?v=20261120b"></script>
+<script>window.AUTH_NS = 'admin_';</script>
+<script src="config.js?v=20261121a"></script>
+<script src="shared.js?v=20261121a"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -135,48 +156,213 @@ const GROUPS = [
 const thisMonth = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 
 /* ============================== 進入 ============================== */
+let me = null; // { name, role, via, perms, permDefs, rolePresets }
+const P = p => !!me && me.perms.includes(p);
+const isBoss = () => !!me && me.role === '老闆';
+
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
-  try { await initLine(); } catch (e) { app.innerHTML = `<div class="card gate empty">LINE 初始化失敗：${esc(e.message)}</div>`; return; }
+  try { await initLine(); } catch (e) { /* LINE 載入失敗不影響帳密登入 */ }
   start();
 })();
+window.addEventListener('hashchange', () => { if (me && me.isAdmin && !me.mustChange) route(); });
 
 async function start() {
-  if (!isLoggedIn()) {
-    mountLogin(app, { title: '收購後台', sub: '請用管理者帳號登入（LINE、Google 或 Email 驗證碼）', lineParams: MOCK ? { mock: 1 } : {}, onDone: start });
-    return;
-  }
+  closeDrawer();
+  if (!isLoggedIn()) return staffLoginPage();
   app.innerHTML = '<div class="spinner"></div>';
   try {
-    const me = await api('adminWhoami');
-    if (!me.isAdmin) {
-      const key = me.via === 'LINE' ? 'ADMIN_LINE_IDS' : 'ADMIN_EMAIL';
-      app.innerHTML = `<div class="card gate"><h2 class="card-title">尚未開通後台權限</h2>
-        <p class="muted">${esc(me.name)} 您好，請把下面這個${me.via === 'LINE' ? ' LINE ID' : ' Email'} 加到 Apps Script「指令碼屬性」的 <b>${key}</b>（多個用逗號分隔），再重新整理此頁。</p>
-        <div class="uid">${esc(me.userId)}</div>
-        <button class="btn btn-dark btn-sm" id="cp">複製</button> <button class="btn btn-ghost btn-sm" onclick="logout()">換帳號登入</button></div>`;
-      $('#cp').onclick = () => navigator.clipboard?.writeText(me.userId).then(() => toast('已複製'));
-      return;
-    }
-    $('#who').textContent = me.name;
-    $('#refresh').hidden = false;
-    $('#refresh').onclick = () => load(true);
+    me = await api('adminWhoami');
+    if (!me.isAdmin) return staffLoginPage(me);
+    $('#who').innerHTML = `${esc(me.name)}<span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role || '員工')}</span>`;
     $('#logout').hidden = false;
-    await load();
+    if (me.mustChange) return passwordPage(true);
+    route();
   } catch (e) {
     if (e.auth) return start();
-    app.innerHTML = `<div class="card gate empty">${esc(e.message)}</div>`;
+    app.innerHTML = `<div class="card gate empty">${esc(e.message)}<br><br><button class="btn btn-ghost btn-sm" onclick="logout()">重新登入</button></div>`;
   }
 }
 
+function route() {
+  const page = location.hash.slice(1);
+  closeDrawer();
+  $('#refresh').hidden = page === 'users' || page === 'account';
+  if (page === 'users' && P('manage_users')) return usersPage();
+  if (page === 'account') return accountPage();
+  $('#refresh').onclick = () => load(true);
+  orders = [];
+  load();
+}
+function pagesNav(cur) {
+  const items = [['', '訂單'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
+  return `<nav class="pages">${items.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
+}
+
+/* ---------- 員工登入 ---------- */
+function staffLoginPage(denied) {
+  $('#who').textContent = ''; $('#logout').hidden = true; $('#refresh').hidden = true;
+  app.innerHTML = `<div class="card staff-login rise">
+    <h2 class="card-title" style="font-size:22px">收購後台登入</h2>
+    <p class="muted" style="margin:6px 0 20px">請輸入老闆給您的員工帳號與密碼</p>
+    ${denied ? `<div class="alert">目前登入的 ${esc(denied.via === 'LINE' ? 'LINE' : 'Email')} 帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
+      <details style="margin-top:6px"><summary>我是老闆，要開通這個帳號</summary>
+      把下面這串加到 Apps Script「指令碼屬性」的 <b>${denied.via === 'LINE' ? 'ADMIN_LINE_IDS' : 'ADMIN_EMAIL'}</b>（多個用逗號）：<div class="uid">${esc(denied.userId)}</div></details></div>` : ''}
+    <form id="slForm" autocomplete="on">
+      <label class="field"><span>帳號</span><input class="input" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+      <label class="field"><span>密碼</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
+      <div class="err" id="slErr"></div>
+      <button class="btn btn-dark btn-block" id="slBtn">登入</button>
+    </form>
+    <div class="divider"><span>老闆</span></div>
+    <button class="btn btn-ghost btn-block" id="ownerBtn">老闆用 LINE／Google／Email 登入</button>
+    ${MOCK ? '<p class="small muted" style="margin:14px 0 0">預覽帳號：tech1（檢測）、ship1（物流）、acct1（會計，首次登入要改密碼），密碼都是 password123</p>' : ''}
+  </div>`;
+  const f = $('#slForm');
+  f.elements.username.focus();
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const b = $('#slBtn'); b.disabled = true; $('#slErr').textContent = '';
+    try {
+      const r = await api('staffLogin', { username: f.elements.username.value.trim(), password: f.elements.password.value });
+      if (!MOCK) auth.save(r);
+      start();
+    } catch (err) { $('#slErr').textContent = err.message; b.disabled = false; f.elements.password.select(); }
+  };
+  $('#ownerBtn').onclick = () => {
+    if (denied) { auth.clear(); if (!MOCK && liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout(); }
+    mountLogin(app, { title: '老闆登入', sub: '使用已開通的 LINE、Google 或 Email 帳號', lineParams: MOCK ? { mock: 1 } : {}, onDone: start });
+    app.querySelector('.login-card').insertAdjacentHTML('beforeend', '<button class="link" id="backStaff" style="display:block;margin:14px auto 0">← 改用員工帳號登入</button>');
+    $('#backStaff').onclick = () => staffLoginPage();
+  };
+}
+
+/* ---------- 我的帳號／修改密碼 ---------- */
+function accountPage() {
+  const isStaff = me.via === 'Staff';
+  app.innerHTML = `${pagesNav('account')}
+    <div class="card" style="max-width:560px">
+      <h3>${esc(me.name)} <span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role)}</span></h3>
+      <p class="small muted" style="margin:0 0 12px">${isBoss() ? `老闆帳號（${esc(me.via)} 登入），擁有全部權限。` : '您目前可以：'}</p>
+      ${isBoss() ? '' : `<ul style="margin:0;padding-left:20px;line-height:1.9">${me.perms.map(p => `<li>${esc(me.permDefs[p] || p)}</li>`).join('')}<li>查看訂單列表、商品與狀態、寫內部備註</li></ul>`}
+    </div>
+    ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}`;
+  if (isStaff) mountPassword($('#pwBox'), false);
+}
+function passwordPage(forced) {
+  app.innerHTML = '<div class="card staff-login rise" id="pwBox"></div>';
+  mountPassword($('#pwBox'), forced);
+}
+function mountPassword(box, forced) {
+  box.innerHTML = `<h3 ${forced ? 'class="card-title" style="font-size:20px"' : ''}>${forced ? '第一次登入，請設定自己的密碼' : '修改密碼'}</h3>
+    ${forced ? '<p class="muted small" style="margin:4px 0 16px">老闆給的是暫時密碼，改成只有您知道的密碼後才能開始使用。</p>' : ''}
+    <form id="pwForm">
+      <label class="field"><span>目前的密碼</span><input class="input" name="old" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>新密碼（至少 8 個字）</span><input class="input" name="np" type="password" autocomplete="new-password" required></label>
+      <label class="field"><span>再輸入一次新密碼</span><input class="input" name="np2" type="password" autocomplete="new-password" required></label>
+      <div class="err" id="pwErr"></div>
+      <button class="btn btn-dark ${forced ? 'btn-block' : ''}" id="pwBtn">更新密碼</button>
+      ${forced ? '<button type="button" class="link" style="display:block;margin:12px auto 0" onclick="logout()">登出</button>' : ''}
+    </form>`;
+  const f = $('#pwForm', box);
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const err = m => { $('#pwErr', box).textContent = m; };
+    if (f.elements.np.value.length < 8) return err('新密碼至少 8 個字');
+    if (f.elements.np.value !== f.elements.np2.value) return err('兩次輸入的新密碼不一樣');
+    const b = $('#pwBtn', box); b.disabled = true; err('');
+    try {
+      const r = await api('staffChangePassword', { oldPassword: f.elements.old.value, newPassword: f.elements.np.value });
+      if (!MOCK) auth.save(r);
+      toast('密碼已更新，其他裝置的舊登入已失效');
+      if (forced) return start();
+      f.reset();
+    } catch (x) { if (x.auth) return start(); err(x.message); }
+    b.disabled = false;
+  };
+}
+
+/* ---------- 員工帳號管理 ---------- */
+let users = [];
+async function usersPage() {
+  app.innerHTML = `${pagesNav('users')}<div class="spinner"></div>`;
+  try { users = (await api('adminUsers')).users; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('users') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+  const st = u => !u.enabled ? '<span class="pill off">停用</span>' : u.mustChange ? '<span class="pill warn">待改密碼</span>' : '<span class="pill">啟用</span>';
+  app.innerHTML = `${pagesNav('users')}
+    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0;flex:1">老闆（用 LINE／Google 登入的管理員）不在列表中，永遠擁有全部權限。</p>
+      <button class="btn btn-dark btn-sm" id="addU">＋ 新增員工</button></div>
+    ${users.length ? `<table class="table"><thead><tr><th>帳號</th><th>名稱／角色</th><th class="hide-m">權限</th><th>狀態</th><th class="hide-m">最後登入</th></tr></thead><tbody>
+      ${users.map(u => `<tr data-u="${esc(u.username)}" class="${u.enabled ? '' : 'u-off'}">
+        <td><b class="num">${esc(u.username)}</b></td>
+        <td>${esc(u.name)}<div class="sub">${esc(u.role)}</div></td>
+        <td class="hide-m"><div class="mini-perms">${u.perms.map(p => `<span>${esc((me.permDefs[p] || p).split('（')[0])}</span>`).join('') || '<span>只能看列表</span>'}</div></td>
+        <td>${st(u)}</td>
+        <td class="sub num hide-m">${esc(u.lastLogin || '—')}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="card empty">還沒有員工帳號，按右上「新增員工」建立第一個</div>'}`;
+  $('#addU').onclick = () => userDrawer(null);
+  $$('[data-u]').forEach(tr => tr.onclick = () => userDrawer(users.find(u => u.username === tr.dataset.u)));
+}
+const genPw = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; return Array.from(crypto.getRandomValues(new Uint32Array(10)), n => c[n % c.length]).join(''); };
+function userDrawer(u) {
+  const isNew = !u;
+  const presets = me.rolePresets;
+  u = u || { username: '', name: '', role: '檢測人員', perms: [...presets['檢測人員']], enabled: true };
+  const d = $('#drawer');
+  d.innerHTML = `
+    <div class="d-head"><b>${isNew ? '新增員工' : esc(u.name) + ' <span class="sub">' + esc(u.username) + '</span>'}</b><button class="d-close" aria-label="關閉">✕</button></div>
+    <div class="d-body"><form id="uForm" autocomplete="off" onsubmit="return false">
+      <div class="card">
+        <div class="grid2">
+          <label class="field"><span>登入帳號</span><input class="input num" name="username" value="${esc(u.username)}" ${isNew ? '' : 'readonly'} placeholder="例：tech1" autocapitalize="off" spellcheck="false"></label>
+          <label class="field"><span>顯示名稱</span><input class="input" name="name" value="${esc(u.name)}" placeholder="例：阿傑"></label>
+        </div>
+        <label class="field"><span>${isNew ? '初始密碼' : '重設密碼（不改請留空）'}</span>
+          <div style="display:flex;gap:8px"><input class="input num" name="password" value="${isNew ? genPw() : ''}" placeholder="${isNew ? '' : '輸入新密碼才會重設'}" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" id="gen">隨機產生</button></div>
+          <small class="muted">員工第一次登入（或被重設後）會被要求改成自己的密碼</small></label>
+        <label class="check"><input type="checkbox" name="enabled" ${u.enabled ? 'checked' : ''}> 啟用帳號 <span class="small muted">（取消勾選＝立刻無法使用）</span></label>
+      </div>
+      <div class="card">
+        <h3>角色與權限</h3>
+        <div class="chips" style="margin-bottom:10px">${[...Object.keys(presets), '自訂'].map(r => `<label class="chip"><input type="radio" name="role" value="${esc(r)}" ${u.role === r || (r === '自訂' && !presets[u.role]) ? 'checked' : ''}><span>${esc(r)}</span></label>`).join('')}</div>
+        <div class="perm-list">${Object.entries(me.permDefs).map(([k, l]) => `<label class="${k === 'manage_users' || k === 'edit_any' ? 'danger' : ''}"><input type="checkbox" name="perm" value="${k}" ${u.perms.includes(k) ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div>
+        <p class="small muted" style="margin:10px 0 0">沒勾選的資料會顯示「無權限查看」。所有人都能看訂單列表、商品、狀態，並寫內部備註。</p>
+      </div>
+    </form></div>
+    <div class="d-foot"><span class="err" id="uErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="uSave">${isNew ? '建立帳號' : '儲存'}</button></div>`;
+  d.classList.add('show'); $('#scrim').classList.add('show');
+  const f = $('#uForm');
+  $('.d-close', d).onclick = closeDrawer;
+  $('#gen').onclick = () => { f.elements.password.value = genPw(); };
+  const checks = () => $$('input[name=perm]', f);
+  $$('input[name=role]', f).forEach(r => r.onchange = () => { if (presets[r.value]) checks().forEach(c => { c.checked = presets[r.value].includes(c.value); }); });
+  checks().forEach(c => c.onchange = () => {
+    const sel = checks().filter(x => x.checked).map(x => x.value).sort().join();
+    const hit = Object.keys(presets).find(r => [...presets[r]].sort().join() === sel) || '自訂';
+    f.querySelector(`input[name=role][value="${hit}"]`).checked = true;
+  });
+  $('#uSave').onclick = async () => {
+    const v = { isNew, username: f.elements.username.value.trim().toLowerCase(), name: f.elements.name.value.trim(), role: f.querySelector('input[name=role]:checked').value,
+      perms: checks().filter(x => x.checked).map(x => x.value), enabled: f.elements.enabled.checked, password: f.elements.password.value.trim() };
+    if (v.perms.includes('manage_users') && !(u.perms || []).includes('manage_users') && !(await ask(`「管理員工帳號與權限」可以新增帳號、修改所有人的權限。\n確定要給 ${v.name || v.username} 嗎？`, '確定給'))) return;
+    const b = $('#uSave'); b.disabled = true; $('#uErr').textContent = '';
+    try {
+      await api('adminSaveUser', { user: v });
+      closeDrawer();
+      if (v.password) await ask(`請把登入資料交給 ${v.name || v.username}：\n\n網址：${location.origin}${location.pathname}\n帳號：${v.username}\n密碼：${v.password}\n\n對方登入後要先改成自己的密碼。`, '好', '關閉');
+      else toast('已儲存');
+      usersPage();
+    } catch (e) { if (e.auth) return start(); $('#uErr').textContent = e.message; b.disabled = false; }
+  };
+}
+
 async function load(keepOpen) {
-  if (!orders.length) app.innerHTML = '<div class="spinner"></div>';
+  if (!orders.length) app.innerHTML = pagesNav('') + '<div class="spinner"></div>';
   try {
     orders = (await api('adminList')).orders;
     renderBoard();
     if (keepOpen && openId) openDrawer(openId);
     if (keepOpen) toast('已更新');
-  } catch (e) { if (e.auth) return start(); toast(e.message); }
+  } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('') + `<div class="card gate empty">${esc(e.message)}</div>`; }
 }
 
 /* ============================== 列表 ============================== */
@@ -194,7 +380,7 @@ function visible() {
 
 function renderBoard() {
   const active = orders.filter(o => !CLOSED.includes(o.status)).length;
-  app.innerHTML = `
+  app.innerHTML = `${pagesNav('')}
     <div class="stats">${GROUPS.map(g => { const n = orders.filter(g.match).length; return `<button class="stat ${g.hot && n ? 'hot' : ''} ${filter === g.key ? 'on' : ''}" style="--c:${g.color}" data-f="${g.key}"><div class="n num">${n}</div><div class="l">${g.label}</div></button>`; }).join('')}</div>
     <div class="toolbar">
       <input class="input" id="q" placeholder="搜尋 姓名／電話／訂單編號／單號／型號" value="${esc(query)}">
@@ -236,9 +422,19 @@ function openDrawer(id) {
   if (!o) return;
   openId = id;
   $$('#tbl tr').forEach(t => t.classList.toggle('sel', t.dataset.id === id));
-  const next = NEXT_STATUS[o.status];
+  const m = o.masked || {};
+  const NOPE = '<span class="no-perm">🔒 無權限查看</span>';
+  const canShip = P('edit_shipping') || P('edit_any');
+  const canQuote = P('edit_report') || P('edit_any');
+  let next = NEXT_STATUS[o.status];
+  if (next && !canTransition(me.perms, o.status, next)) next = null;
+  if (next === '已報價' && !P('edit_report')) next = null; // 報價一律從檢測報告送出
+  const rp = o.report, sent = rp && rp.sent;
+  const draftChanged = rp && sent && rp.updatedAt !== sent.updatedAt;
+  const quoteMismatch = o.quote && ['已報價', '客戶同意', '客戶不同意'].includes(o.status) && (!sent || Number(o.quote) !== Number(sent.total));
   const shipText = `${o.name}\n${o.phone}\n${o.city}${o.address}`;
   const bankText = o.bankAccount ? `${o.bankName} ${o.bankBranch}\n戶名：${o.bankHolder}\n帳號：${o.bankAccount}` : '';
+  const dis = ok => ok ? '' : 'disabled title="您沒有修改這個欄位的權限"';
   const d = $('#drawer');
   d.innerHTML = `
     <div class="d-head"><b class="num">${esc(o.id)}</b>${badge(o.status)}<button class="d-close" aria-label="關閉">✕</button></div>
@@ -246,45 +442,50 @@ function openDrawer(id) {
       <div class="card">
         ${stepperHTML(o.status)}
         ${next === '已報價'
-          ? `<button class="next-btn" id="repNext" style="--c:${statusColor(next)};margin-top:18px"><span>填寫檢測報告並報價</span><small>${o.report ? '繼續編輯' : '開始'} →</small></button>`
+          ? `<button class="next-btn" id="repNext" style="--c:${statusColor(next)};margin-top:18px"><span>填寫檢測報告並報價</span><small>${rp ? '繼續編輯' : '開始'} →</small></button>`
           : next ? `<button class="next-btn" id="nextBtn" style="--c:${statusColor(next)};margin-top:18px"><span>改為「${esc(next)}」</span><small>並通知客戶 →</small></button>` : ''}
-        <div class="row-actions">
-          <select class="input" id="stSel">${STATUS_LIST.map(s => `<option ${s === o.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+        <div class="row-actions" ${next || P('edit_any') ? '' : 'hidden'}>
+          ${P('edit_any') ? `<select class="input" id="stSel">${STATUS_LIST.map(s => `<option ${s === o.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>` : ''}
           <label class="check small"><input type="checkbox" id="notify" checked> 改狀態時通知客戶</label>
         </div>
         ${o.notified ? `<div class="small muted" style="margin-top:8px">上次通知：${esc(o.notified)}</div>` : ''}
       </div>
 
       <div class="card">
-        <h3>檢測估價報告 ${o.report ? `<span class="small" style="font-weight:500">NT$ ${money(o.report.total)}・${o.report.items.reduce((s, it) => s + it.photos.length, 0)} 張照片・${esc(o.report.updatedAt || '')}</span>` : ''}</h3>
-        ${['已取件', '檢測中'].includes(o.status) && !o.report ? '<p class="small muted" style="margin:0 0 10px">檢測完成後在這裡填寫報告、上傳照片，送出後客戶會收到含照片的完整報價</p>' : ''}
-        <button class="btn ${o.report || !['已取件', '檢測中'].includes(o.status) ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${o.report ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>
+        <h3>檢測估價報告 ${rp ? `<span class="small" style="font-weight:500">NT$ ${money(rp.total)}・${rp.items.reduce((s, it) => s + it.photos.length, 0)} 張照片・${esc(rp.updatedAt || '')}</span>` : ''}</h3>
+        ${rp && !sent ? '<div class="alert" style="margin:0 0 10px">📝 草稿：尚未送出，客戶看不到這份報告</div>' : ''}
+        ${draftChanged ? `<div class="alert" style="margin:0 0 10px">📝 有未送出的修改。客戶目前看到的是 ${esc(sent.sentAt || '')} 送出的版本（NT$ ${money(sent.total)}）</div>` : ''}
+        ${quoteMismatch ? `<div class="alert" style="margin:0 0 10px;background:#fff1f0;color:#b42318">⚠ 報價金額 NT$ ${money(o.quote)} ${sent ? `與已送出報告 NT$ ${money(sent.total)} 不同` : '沒有對應的已送出報告'}${P('edit_report') ? '，建議重新送出報告' : ''}</div>` : ''}
+        ${P('edit_report')
+          ? `${['已取件', '檢測中'].includes(o.status) && !rp ? '<p class="small muted" style="margin:0 0 10px">檢測完成後在這裡填寫報告、上傳照片，送出後客戶會收到含照片的完整報價</p>' : ''}
+             <button class="btn ${rp || !['已取件', '檢測中'].includes(o.status) ? 'btn-ghost' : 'btn-dark'} btn-block" id="repBtn">${rp ? '查看／編輯檢測報告' : '填寫檢測報告'}</button>`
+          : rp ? `<button class="btn btn-ghost btn-block" id="repView">查看${sent ? '已送出的' : ''}檢測報告</button>` : '<p class="small muted" style="margin:0">尚未填寫</p>'}
       </div>
 
-      ${o.status === '客戶同意' ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請先核對下方「身分證照片」與「匯款戶名」，匯款後按「改為已付款」。</div>` : ''}
-      ${o.status === '客戶不同意' ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
+      ${o.status === '客戶同意' && P('edit_payment') ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請先核對下方「身分證照片」與「匯款戶名」，匯款後按「改為已付款」。</div>` : ''}
+      ${o.status === '客戶不同意' && canShip ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
 
       <div class="card">
         <h3>物流</h3>
         <div class="grid2">
-          <label class="field"><span>物流公司</span><input class="input" id="fCarrier" value="${esc(o.carrier)}" list="carriers" placeholder="黑貓宅急便"><datalist id="carriers"><option value="黑貓宅急便"><option value="新竹物流"><option value="中華郵政"><option value="全家二手機回收"></datalist></label>
-          <label class="field"><span>託運單號</span><input class="input" id="fTracking" value="${esc(o.tracking)}"></label>
+          <label class="field"><span>物流公司</span><input class="input" id="fCarrier" value="${esc(o.carrier)}" list="carriers" placeholder="黑貓宅急便" ${dis(canShip)}><datalist id="carriers"><option value="黑貓宅急便"><option value="新竹物流"><option value="中華郵政"><option value="全家二手機回收"></datalist></label>
+          <label class="field"><span>託運單號</span><input class="input" id="fTracking" value="${esc(o.tracking)}" ${dis(canShip)}></label>
         </div>
         <h3 style="margin-top:4px">檢測報價</h3>
-        <label class="field"><span>報價金額（NT$）</span><input class="input num" id="fQuote" value="${esc(o.quote)}" inputmode="numeric" placeholder="例：12500"></label>
-        <label class="field"><span>報價說明（客戶看得到）</span><textarea class="input" id="fQuoteNote" placeholder="例：電池健康度 86%，背蓋輕微刮傷">${esc(o.quoteNote)}</textarea></label>
+        <label class="field"><span>報價金額（NT$）${P('edit_report') ? '<small class="muted">　建議從檢測報告送出</small>' : ''}</span><input class="input num" id="fQuote" value="${esc(o.quote)}" inputmode="numeric" placeholder="例：12500" ${dis(canQuote)}></label>
+        <label class="field"><span>報價說明（客戶看得到）</span><textarea class="input" id="fQuoteNote" placeholder="例：電池健康度 86%，背蓋輕微刮傷" ${dis(canQuote)}>${esc(o.quoteNote)}</textarea></label>
         <label class="field" style="margin-bottom:0"><span>內部備註（客戶看不到）</span><textarea class="input" id="fInternal">${esc(o.internal)}</textarea></label>
       </div>
 
       <div class="card">
-        <h3>客戶資料 <button class="copy" data-copy="${esc(shipText)}">複製寄件資訊</button></h3>
+        <h3>客戶資料 ${m.contact ? '' : `<button class="copy" data-copy="${esc(shipText)}">複製寄件資訊</button>`}</h3>
         <dl class="kv">
-          <dt>姓名</dt><dd>${esc(o.name)}　<span class="muted small">LINE：${esc(o.lineName)}</span></dd>
-          <dt>手機</dt><dd><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><button class="copy" data-copy="${esc(o.phone)}">複製</button></dd>
-          <dt>Email</dt><dd><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></dd>
-          <dt>身分證</dt><dd class="num">${o.idNo ? esc(o.idNo) : '<span class="muted small">客戶同意報價時提供</span>'}</dd>
+          <dt>姓名</dt><dd>${esc(o.name)}${o.lineName ? `　<span class="muted small">LINE：${esc(o.lineName)}</span>` : ''}</dd>
+          <dt>手機</dt><dd>${m.contact ? NOPE : `<a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><button class="copy" data-copy="${esc(o.phone)}">複製</button>`}</dd>
+          <dt>Email</dt><dd>${m.contact ? NOPE : `<a href="mailto:${esc(o.email)}">${esc(o.email)}</a>`}</dd>
+          <dt>身分證</dt><dd class="num">${m.id ? NOPE : o.idNo ? esc(o.idNo) : '<span class="muted small">客戶同意報價時提供</span>'}</dd>
           ${o.idPhoto ? `<dt>身分證照片</dt><dd><img class="id-thumb" data-photo="${esc(o.idPhoto)}" alt="身分證正面"></dd>` : ''}
-          <dt>地址</dt><dd>${esc(o.city)}${esc(o.address)}<button class="copy" data-copy="${esc(o.city + o.address)}">複製</button></dd>
+          <dt>地址</dt><dd>${m.contact ? NOPE : `${esc(o.city)}${esc(o.address)}<button class="copy" data-copy="${esc(o.city + o.address)}">複製</button>`}</dd>
           <dt>收件時段</dt><dd>${esc(o.slot)}</dd>
           ${o.note ? `<dt>客戶備註</dt><dd>${esc(o.note)}</dd>` : ''}
         </dl>
@@ -292,7 +493,9 @@ function openDrawer(id) {
 
       <div class="card">
         <h3>匯款帳戶 ${bankText ? `<button class="copy" data-copy="${esc(bankText)}">複製</button>` : ''}</h3>
-        ${o.bankAccount ? `<dl class="kv"><dt>銀行</dt><dd>${esc(o.bankName)} ${esc(o.bankBranch)}</dd><dt>戶名</dt><dd>${esc(o.bankHolder)}${o.bankHolder && o.bankHolder !== o.name ? ' <span style="color:var(--red)" class="small">⚠ 與回收者姓名不同</span>' : ''}</dd><dt>帳號</dt><dd class="num">${esc(o.bankAccount)}<button class="copy" data-copy="${esc(o.bankAccount)}">複製</button></dd></dl>` : '<p class="muted small" style="margin:0">客戶尚未填寫（同意報價時會要求填寫）</p>'}
+        ${m.bank ? `<p style="margin:0">${NOPE}　<span class="small muted">客戶已填寫</span></p>`
+          : o.bankAccount ? `<dl class="kv"><dt>銀行</dt><dd>${esc(o.bankName)} ${esc(o.bankBranch)}</dd><dt>戶名</dt><dd>${esc(o.bankHolder)}${o.bankHolder && o.bankHolder !== o.name ? ' <span style="color:var(--red)" class="small">⚠ 與回收者姓名不同</span>' : ''}</dd><dt>帳號</dt><dd class="num">${esc(o.bankAccount)}<button class="copy" data-copy="${esc(o.bankAccount)}">複製</button></dd></dl>`
+          : '<p class="muted small" style="margin:0">客戶尚未填寫（同意報價時會要求填寫）</p>'}
       </div>
 
       <div class="card">
@@ -302,7 +505,7 @@ function openDrawer(id) {
 
       <div class="card">
         <h3>狀態紀錄</h3>
-        <ul class="timeline" style="--c:${statusColor(o.status)}">${[...o.history].reverse().map(h => `<li><b>${esc(h.status)}</b><time>${esc(h.time)}</time></li>`).join('')}</ul>
+        <ul class="timeline" style="--c:${statusColor(o.status)}">${[...o.history].reverse().map(h => `<li><b>${esc(h.status)}</b>${h.by ? `<span class="tl-by">${esc(h.by)}</span>` : ''}<time>${esc(h.time)}</time></li>`).join('')}</ul>
       </div>
     </div>
     <div class="d-foot"><span class="err" id="dErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="save">儲存</button></div>`;
@@ -310,10 +513,17 @@ function openDrawer(id) {
   $('.d-close', d).onclick = closeDrawer;
   $$('[data-copy]', d).forEach(b => b.onclick = () => navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('已複製'), () => {}));
   loadPhotos(d);
-  $('#save').onclick = () => save(o, $('#stSel').value);
-  $('#repBtn').onclick = () => openReport(o);
+  $('#save').onclick = () => save(o, $('#stSel') ? $('#stSel').value : o.status);
+  if ($('#repBtn')) $('#repBtn').onclick = () => openReport(o);
+  if ($('#repView')) $('#repView').onclick = () => previewReport(sent || rp, sent ? '' : '（草稿，客戶看不到）');
   if ($('#repNext')) $('#repNext').onclick = () => openReport(o);
   if ($('#nextBtn')) $('#nextBtn').onclick = () => save(o, next);
+}
+function previewReport(r, label) {
+  const w = document.createElement('div'); w.className = 'lightbox prev';
+  w.innerHTML = `<div class="prev-box">${reportHTML({ ...r, updatedAt: label || r.sentAt || r.updatedAt })}<button class="btn btn-dark btn-block" style="margin-top:12px">關閉</button></div>`;
+  w.onclick = e => { if (e.target === w || e.target.tagName === 'BUTTON') w.remove(); };
+  document.body.appendChild(w); loadPhotos(w);
 }
 
 /* ============================== 檢測報告編輯 ============================== */
@@ -392,7 +602,7 @@ function drawReport() {
   $('.rep-ed-body', ed).scrollTop = keep;
   loadPhotos(ed);
   $('#reClose').onclick = closeReport;
-  $('#rePrev').onclick = () => { computeReport(rep); const w = document.createElement('div'); w.className = 'lightbox prev'; w.innerHTML = `<div class="prev-box">${reportHTML({ ...rep, updatedAt: '（預覽）' })}<button class="btn btn-dark btn-block" style="margin-top:12px">關閉預覽</button></div>`; w.onclick = e => { if (e.target === w || e.target.tagName === 'BUTTON') w.remove(); }; document.body.appendChild(w); loadPhotos(w); };
+  $('#rePrev').onclick = () => { computeReport(rep); previewReport(rep, '（預覽）'); };
   $('#reSave').onclick = () => saveReport(false);
   if ($('#reSubmit')) $('#reSubmit').onclick = () => saveReport(true);
 }
@@ -471,16 +681,20 @@ async function saveReport(submit) {
 }
 
 async function save(o, status) {
-  const fields = {
+  const all = {
     carrier: $('#fCarrier').value.trim(), tracking: $('#fTracking').value.trim(),
     quote: $('#fQuote').value.replace(/[^\d]/g, ''), quoteNote: $('#fQuoteNote').value.trim(), internal: $('#fInternal').value.trim(),
   };
+  const fields = {}; // 只送出有改的欄位（沒有權限的欄位不會被動到）
+  Object.keys(all).forEach(k => { if (all[k] !== String(o[k] || '')) fields[k] = all[k]; });
   if (status && status !== o.status) fields.status = status;
-  if (fields.status === '已報價' && !fields.quote) { $('#dErr').textContent = '請先填寫報價金額'; $('#fQuote').focus(); return; }
-  if (fields.status && !(await ask(`將 ${o.id} 改為「${fields.status}」${$('#notify').checked ? '並通知客戶' : '（不通知客戶）'}？`))) return;
+  if (!Object.keys(fields).length) { toast('沒有變更'); return; }
+  if (fields.status === '已報價' && !(fields.quote ?? o.quote)) { $('#dErr').textContent = '請先填寫報價金額'; $('#fQuote').focus(); return; }
+  const notify = $('#notify') ? $('#notify').checked : true;
+  if (fields.status && !(await ask(`將 ${o.id} 改為「${fields.status}」${notify ? '並通知客戶' : '（不通知客戶）'}？`))) return;
   const btns = $$('#save, #nextBtn'); btns.forEach(b => b.disabled = true);
   try {
-    const r = await api('adminUpdate', { id: o.id, fields, notify: $('#notify').checked });
+    const r = await api('adminUpdate', { id: o.id, fields, notify });
     const i = orders.findIndex(x => x.id === o.id);
     orders[i] = r.order;
     toast(fields.status ? `已改為「${fields.status}」${r.order.notified ? '（' + r.order.notified.split('｜')[1] + '）' : ''}` : '已儲存');

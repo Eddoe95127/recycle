@@ -28,6 +28,13 @@ function stepsFor(status) {
   return MAIN_STEPS;
 }
 const NEXT_STATUS = { '已預約': '已安排取件', '已安排取件': '已取件', '已取件': '檢測中', '檢測中': '已報價', '客戶同意': '已付款', '客戶不同意': '退回寄送中', '退回寄送中': '已退回' };
+// 後台權限：各權限可做的狀態轉換（與後端 TRANSITIONS 相同；edit_any 可任意改）
+const STAFF_TRANSITIONS = {
+  edit_shipping: { '已預約': ['已安排取件'], '已安排取件': ['已取件'], '已取件': ['檢測中'], '客戶不同意': ['退回寄送中'], '退回寄送中': ['已退回'] },
+  edit_report: { '已取件': ['檢測中', '已報價'], '檢測中': ['已報價'] },
+  edit_payment: { '客戶同意': ['已付款'] },
+};
+const canTransition = (perms, from, to) => perms.includes('edit_any') || Object.keys(STAFF_TRANSITIONS).some(p => perms.includes(p) && (STAFF_TRANSITIONS[p][from] || []).includes(to));
 const statusColor = s => (STATUS_META[s] || {}).color || '#8E8E93';
 
 /* ---------- 商品選項（沿用原本 Google 表單） ---------- */
@@ -290,10 +297,11 @@ function progressPct(status) {
 let liffReady = false;
 let mockLoggedIn = !new URLSearchParams(location.search).has('login'); // 預覽登入畫面：?mock=1&login=1
 const auth = {
-  get session() { return store.get('session'); },
-  get user() { return store.get('sessionUser') || (liffReady && !MOCK && liff.isLoggedIn() ? { via: 'LINE' } : null); },
-  save(r) { store.set('session', r.session); store.set('sessionUser', r.user); },
-  clear() { try { localStorage.removeItem('session'); localStorage.removeItem('sessionUser'); } catch (e) {} },
+  ns: window.AUTH_NS || '', // 後台用 'admin_'，和客戶網站的登入分開
+  get session() { return store.get(this.ns + 'session'); },
+  get user() { return store.get(this.ns + 'sessionUser') || (liffReady && !MOCK && liff.isLoggedIn() ? { via: 'LINE' } : null); },
+  save(r) { store.set(this.ns + 'session', r.session); store.set(this.ns + 'sessionUser', r.user); },
+  clear() { try { localStorage.removeItem(this.ns + 'session'); localStorage.removeItem(this.ns + 'sessionUser'); } catch (e) {} },
 };
 async function initLine() {
   if (MOCK) { liffReady = true; return; }
@@ -310,11 +318,11 @@ function login(params) {
 }
 function logout() {
   auth.clear();
-  if (MOCK) { mockLoggedIn = false; location.reload(); return; }
+  if (MOCK) { try { localStorage.removeItem('mockMe'); } catch (e) {} const u = new URL(location.href); u.searchParams.set('login', '1'); u.searchParams.delete('reset'); location.href = u; return; }
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };
@@ -444,10 +452,24 @@ mockDB.find(o => o.id === 'AR261115002').report = {
   }], total: 12500,
 };
 
+{ const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
+// 預覽用員工帳號（密碼都是 password123）
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '標記已付款', edit_any: '任意修改狀態（含取消）', manage_users: '管理員工帳號與權限' };
+const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment'] };
+const mockUsers = [
+  { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
+  { username: 'ship1', name: '小美', role: '物流客服', perms: MOCK_PRESETS['物流客服'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:01', lastLogin: '', pw: 'password123' },
+  { username: 'acct1', name: '會計 Amy', role: '會計', perms: MOCK_PRESETS['會計'], enabled: true, mustChange: true, createdAt: '2026-11-20 10:02', lastLogin: '', pw: 'password123' },
+];
+let mockMe = ''; // 目前預覽登入的員工帳號；空白 = 老闆
+
 // 預覽模式：前台與後台共用同一份假資料（存在這台電腦的瀏覽器裡，網址加 &reset=1 可重置）
 if (MOCK) {
   try {
-    if (new URLSearchParams(location.search).has('reset')) { localStorage.removeItem('mockDB'); localStorage.removeItem('mockPhotos'); }
+    if (new URLSearchParams(location.search).has('reset')) { ['mockDB', 'mockPhotos', 'mockUsers', 'mockMe'].forEach(k => localStorage.removeItem(k)); }
+    const us = JSON.parse(localStorage.getItem('mockUsers') || 'null');
+    if (us) mockUsers.splice(0, mockUsers.length, ...us);
+    mockMe = localStorage.getItem('mockMe') || '';
     const db = JSON.parse(localStorage.getItem('mockDB') || 'null');
     if (db) mockDB.splice(0, mockDB.length, ...db);
     Object.assign(mockPhotos, JSON.parse(localStorage.getItem('mockPhotos') || '{}'));
@@ -456,6 +478,8 @@ if (MOCK) {
 function mockPersist() {
   try {
     localStorage.setItem('mockDB', JSON.stringify(mockDB));
+    localStorage.setItem('mockUsers', JSON.stringify(mockUsers));
+    localStorage.setItem('mockMe', mockMe);
     localStorage.setItem('mockPhotos', JSON.stringify(Object.fromEntries(Object.entries(mockPhotos).filter(([k]) => !k.startsWith('demo')))));
   } catch (e) {}
 }
@@ -467,8 +491,17 @@ async function mockApiInner(action, d) {
   await new Promise(r => setTimeout(r, 350));
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
   const find = id => { const o = mockDB.find(x => x.id === id); if (!o) throw new Error('找不到此訂單'); return o; };
-  const setStatus = (o, s) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s }); } };
-  const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history] });
+  const setStatus = (o, s, by) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s, by: by || '客戶' }); } };
+  const me = () => { const u = mockUsers.find(x => x.username === mockMe); return u ? { ...u, via: 'Staff' } : { username: '', name: '老闆', role: '老闆', via: 'Google', perms: Object.keys(MOCK_PERMS), mustChange: false }; };
+  const need = p => { const s = me(); if (s.mustChange) throw new Error('請先修改密碼'); if (p && !s.perms.includes(p)) throw new Error('您沒有這項權限'); return s; };
+  const adm = o => {
+    const s = me(), a = { ...o, history: [...o.history], masked: {} };
+    if (!s.perms.includes('view_contact')) { ['phone', 'email', 'city', 'address'].forEach(k => a[k] = ''); a.masked.contact = true; }
+    if (!s.perms.includes('view_id')) { a.masked.id = !!(o.idNo || o.idPhoto); a.idNo = ''; a.idPhoto = ''; }
+    if (!s.perms.includes('view_bank')) { a.masked.bank = !!o.bankAccount; ['bankName', 'bankBranch', 'bankAccount', 'bankHolder'].forEach(k => a[k] = ''); }
+    return a;
+  };
+  const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history], report: o.report ? (o.report.sent || null) : null });
   switch (action) {
     case 'loginGoogle': return { ok: true, session: 'mock', user: { name: 'Google 用戶', email: 'ming@gmail.com', via: 'Google' } };
     case 'emailStart': return { ok: true };
@@ -483,23 +516,65 @@ async function mockApiInner(action, d) {
     }
     case 'respondQuote': { const o = find(d.id); if (d.accept) { if (!d.idNo || !d.idPhoto) throw new Error('請填寫身分證字號並上傳照片'); const pid = 'id' + Date.now(); mockPhotos[pid] = d.idPhoto; o.idNo = d.idNo; o.idPhoto = pid; } if (d.bank) Object.assign(o, d.bank); o.replyAt = now(); setStatus(o, d.accept ? '客戶同意' : '客戶不同意'); return { ok: true, order: pub(o) }; }
     case 'cancelOrder': { const o = find(d.id); setStatus(o, '已取消'); return { ok: true, order: pub(o) }; }
-    case 'adminWhoami': return { ok: true, isAdmin: true, userId: 'Umock', name: '店長' };
-    case 'adminList': return { ok: true, orders: [...mockDB].reverse().map(o => ({ ...o, history: [...o.history] })), statuses: STATUS_LIST };
+    case 'staffLogin': {
+      const u = mockUsers.find(x => x.username === String(d.username || '').trim().toLowerCase());
+      if (!u || !u.enabled || u.pw !== d.password) throw new Error('帳號或密碼錯誤（預覽：tech1 / ship1 / acct1，密碼 password123）');
+      u.lastLogin = now(); mockMe = u.username; mockLoggedIn = true;
+      return { ok: true, session: 'mock', user: { name: u.name, via: 'Staff' } };
+    }
+    case 'adminWhoami': {
+      const s = me();
+      return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS };
+    }
+    case 'staffChangePassword': {
+      const u = mockUsers.find(x => x.username === mockMe);
+      if (!u) throw new Error('老闆帳號使用 LINE／Google 登入，不需要密碼');
+      if (u.pw !== d.oldPassword) throw new Error('目前的密碼不正確');
+      if (String(d.newPassword || '').length < 8) throw new Error('新密碼至少 8 個字');
+      if (d.newPassword === d.oldPassword) throw new Error('新密碼不能和舊密碼相同');
+      u.pw = d.newPassword; u.mustChange = false;
+      return { ok: true, session: 'mock', user: { name: u.name, via: 'Staff' } };
+    }
+    case 'adminUsers': need('manage_users'); return { ok: true, users: mockUsers.map(({ pw, ...u }) => ({ ...u, perms: [...u.perms] })) };
+    case 'adminSaveUser': {
+      need('manage_users');
+      const v = d.user || {}, username = String(v.username || '').trim().toLowerCase();
+      if (!/^[a-z0-9_.-]{3,30}$/.test(username)) throw new Error('帳號只能用英文小寫、數字、. _ -，長度 3–30');
+      let u = mockUsers.find(x => x.username === username);
+      if (v.isNew && u) throw new Error('這個帳號已經存在');
+      if (!u) { if (!v.password) throw new Error('請設定初始密碼'); u = { username, createdAt: now(), lastLogin: '' }; mockUsers.push(u); }
+      if (v.password) { if (String(v.password).length < 8) throw new Error('密碼至少 8 個字'); u.pw = v.password; u.mustChange = true; }
+      Object.assign(u, { name: v.name || username, role: v.role || '自訂', perms: (v.perms || []).filter(p => MOCK_PERMS[p]), enabled: v.enabled !== false });
+      const { pw, ...pub } = u; return { ok: true, user: pub };
+    }
+    case 'adminList': need(); return { ok: true, orders: [...mockDB].reverse().map(adm), statuses: STATUS_LIST };
     case 'photo': if (!mockPhotos[d.fileId]) throw new Error('找不到照片'); return { ok: true, dataUrl: mockPhotos[d.fileId] };
-    case 'adminUploadPhoto': { const id = 'up' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[id] = d.dataUrl; return { ok: true, fileId: id }; }
-    case 'adminDeletePhoto': return { ok: true };
+    case 'adminUploadPhoto': { need('edit_report'); const id = 'up' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[id] = d.dataUrl; return { ok: true, fileId: id }; }
+    case 'adminDeletePhoto': need('edit_report'); return { ok: true };
     case 'adminSaveReport': {
+      const s = need('edit_report');
       const o = find(d.id), rep = computeReport(JSON.parse(JSON.stringify(d.report)));
-      rep.updatedAt = now(); o.report = rep;
-      if (d.submit) { if (!rep.total) throw new Error('請先填寫基本收購價'); o.quote = String(rep.total); o.quoteNote = rep.summary; setStatus(o, '已報價'); }
-      return { ok: true, order: { ...o, history: [...o.history] } };
+      delete rep.sent; rep.updatedAt = now();
+      if (o.report && o.report.sent) rep.sent = o.report.sent;
+      if (d.submit) {
+        if (!rep.total) throw new Error('請先填寫基本收購價');
+        const snap = JSON.parse(JSON.stringify(rep)); delete snap.sent; snap.sentAt = now(); rep.sent = snap;
+        o.quote = String(rep.total); o.quoteNote = rep.summary; setStatus(o, '已報價', s.name);
+      }
+      o.report = rep;
+      return { ok: true, order: adm(o) };
     }
     case 'adminUpdate': {
+      const s = need();
       const o = find(d.id), f = d.fields || {};
+      const has = p => s.perms.includes(p) || s.perms.includes('edit_any');
+      const labels = { carrier: ['物流公司', 'edit_shipping'], tracking: ['託運單號', 'edit_shipping'], quote: ['報價金額', 'edit_report'], quoteNote: ['報價說明', 'edit_report'], internal: ['內部備註', ''] };
+      Object.keys(labels).forEach(k => { if (k in f && f[k] !== o[k] && labels[k][1] && !has(labels[k][1])) throw new Error(`您沒有修改「${labels[k][0]}」的權限`); });
+      if (f.status && f.status !== o.status && !canTransition(s.perms, o.status, f.status)) throw new Error(`您沒有把狀態改成「${f.status}」的權限`);
       if (f.status === '已報價' && !(f.quote ?? o.quote)) throw new Error('請先填寫報價金額');
-      ['carrier', 'tracking', 'quote', 'quoteNote', 'internal'].forEach(k => { if (k in f) o[k] = f[k]; });
-      setStatus(o, f.status);
-      return { ok: true, order: { ...o, history: [...o.history] } };
+      Object.keys(labels).forEach(k => { if (k in f) o[k] = f[k]; });
+      setStatus(o, f.status, s.name);
+      return { ok: true, order: adm(o) };
     }
   }
   throw new Error('未知的操作');
