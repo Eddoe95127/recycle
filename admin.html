@@ -177,6 +177,7 @@
   /* 維修作業 */
   .rp-item { display: grid; grid-template-columns: 1fr 110px 110px 32px; gap: 8px; align-items: start; margin-bottom: 8px; }
   .rp-item.rp-part { grid-template-columns: 1fr 110px 32px; }
+  .rp-item.rp-part.no-cost { grid-template-columns: 1fr 32px; }
   @media (max-width: 560px) { .rp-item { grid-template-columns: 1fr 90px; } .rp-item select[data-iw] { grid-column: 1; } }
   .rp-hist { border: 2px solid var(--line, #e5e5ea); } .rp-hist.warn { border-color: #ff9f0a; background: #fff8ec; }
   .rp-hrow { padding: 6px 0; border-top: 1px solid var(--line, #eee); cursor: pointer; font-size: 14px; } .rp-hrow:first-of-type { margin-top: 6px; }
@@ -242,7 +243,10 @@
   .scan-use { background: #34c759 !important; color: #fff !important; } .scan-use:disabled { opacity: .45; }
   .sig-big { aspect-ratio: auto; height: clamp(420px, 68vh, 860px); border-width: 3px; margin-top: 10px; border-radius: 16px; }
   .rc-sign > div { display: flex; flex-direction: column; justify-content: flex-end; }
-  .rc-staff-sm { font-size: 13px; padding-bottom: 4px; border-bottom: 1px solid #111; max-width: 260px; }
+  .rc-staff-sm { font-size: 12px; padding-bottom: 3px; border-bottom: 1px solid #999; max-width: 200px; color: #3a3a3c; }
+  .rc-sign.rc-sign-drop { grid-template-columns: 2.6fr 1fr; }
+  .rc-sign.rc-sign-drop img { max-width: 420px; }
+  .rc-sign .rc-staff-lbl { font-size: 11px; color: #888; }
   .rc-staff { aspect-ratio: 600/220; max-width: 260px; display: flex; align-items: flex-end; padding-bottom: 6px; font-size: 14px; border-bottom: 1px solid #111; }
   .sig-img { display: block; width: 100%; max-width: 260px; aspect-ratio: 600/220; object-fit: contain; border-bottom: 1px solid var(--line-2); background: #fff; }
   .terms-ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.7; font-size: 14px; }
@@ -308,7 +312,7 @@
 <script src="shared.js?v=20261122g"></script>
 <script src="store.js?v=20261122u"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122i"></script>
+<script src="repair.js?v=20261122l"></script>
 <script>
 const app = $('#app');
 let orders = [];

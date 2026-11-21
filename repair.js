@@ -15,7 +15,7 @@ const REPAIR_TERMS = [
   ['資料備份', '送修前請自行備份資料並記下解鎖密碼。維修過程可能需要重置、刷機或更換零件，資料遺失本店恕不負責。'],
   ['關閉「尋找」', '更換原廠零件或需軟體校正的項目，請於送修前關閉「尋找我的 iPhone／iPad」；無法關閉時，部分項目可能無法進行。'],
   ['檢測與報價', '報價以門市實際檢測為準。拆機後如發現其他故障需追加費用，本店會先聯繫並取得您的同意才進行。'],
-  ['檢測費', '選擇「檢測後另行報價」者，如之後確認報價並維修，就不收檢測費；決定不維修則收取本單所列的檢測費。'],
+  ['檢測費', '選擇「檢測後另行報價」者，如之後確認後維修報價，則不收取檢測費；決定不維修則收取本單所列的檢測費。'],
   ['零件說明', '依您選擇的零件（原廠／副廠／BSMI 認證電池）施工。更換非原廠零件後，系統可能顯示「未知零件」等訊息，屬正常現象。'],
   ['原廠保固與防水', '本店為獨立維修中心，非 Apple 授權服務供應商。裝置經拆機後將失去原廠保固與原有防水性能，且無法恢復至送修前狀態，如有疑慮請勿送修。'],
   ['維修風險', '曾進水、摔落、主機板受損或曾經他處拆修的裝置，拆修過程可能出現其他功能異常或無法開機；本店會事先告知風險，並經您同意後施工。'],
@@ -94,7 +94,7 @@ function drawRepairList() {
 const newRepair = () => ({ requestId: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random(), customer: '', phone: '', email: '',
   category: '手機', model: '', capacity: '', color: '', serial: '', issue: '', condition: '', photos: [],
   items: [{ name: '', amount: '', warranty: 90 }], inspect: false, inspectFee: '', promise: '', note: '', agreed: false, dropSign: '', _m: {} });
-const INSPECT_NOTE = '如之後確認報價並維修，就不收檢測費';
+const INSPECT_NOTE = '如之後確認後維修報價，則不收取檢測費';
 /** 列表、紀錄上的項目文字 */
 const rpItemText = o => o.items.map(x => x.name).join('、') || (o.inspect ? '檢測後另行報價' : o.issue);
 async function repairForm() {
@@ -153,7 +153,7 @@ function drawRepairForm() {
       <p class="small muted" style="margin:-4px 0 10px">${priceListOf(rp.category, rp.model).length ? `已載入 ${esc(rp.model)} 的官網維修價目，選項目會自動帶入價格` : '先選型號會自動帶入官網價目；不確定的話可以先留空，檢測後再補'}</p>
       <label class="check rp-inspect"><input type="checkbox" id="rpInspect" ${rp.inspect ? 'checked' : ''}> <b>檢測後再另行報價</b></label>
       ${rp.inspect ? `<div class="rp-inspect-box">
-        <label class="field" style="margin:0"><span>檢測費（NT$）</span><input class="input num" data-r="inspectFee" inputmode="numeric" value="${esc(rp.inspectFee)}" placeholder="不收檢測費請留空"></label>
+        <label class="field" style="margin:0"><span>檢測費（NT$）</span><input class="input num" data-r="inspectFee" inputmode="numeric" value="${esc(rp.inspectFee)}" placeholder="0"></label>
         <p class="small" style="margin:6px 0 0;color:#8a5300">※ ${INSPECT_NOTE}</p></div>
         <p class="small muted" style="margin:10px 0 6px">已知的維修項目可以先填（選填）：</p>` : ''}
       ${rpItemsEditor(rp.items, 'f', priceListOf(rp.category, rp.model))}
@@ -235,7 +235,7 @@ function bindRepairForm() {
   bindItemsEditor($('[data-items="f"]'), rp.items, drawRepairForm);
   $$('[data-rpro]').forEach(r => r.onchange = () => { rp.promise = r.value; });
   $('#rpAgree').onchange = e => { rp.agreed = e.target.checked; };
-  $('#rpInspect').onchange = e => { rp.inspect = e.target.checked; if (!rp.inspect) rp.inspectFee = ''; drawRepairForm(); };
+  $('#rpInspect').onchange = e => { rp.inspect = e.target.checked; rp.inspectFee = rp.inspect ? (rp.inspectFee || '0') : ''; drawRepairForm(); };
   sigPad($('#rpSign'), rp.dropSign, v => { rp.dropSign = v; });
   $('#rpClear').onclick = () => { rp.dropSign = ''; drawRepairForm(); };
   $('#rpSubmit').onclick = () => submitRepair(err);
@@ -299,12 +299,12 @@ function repairDocHTML(o, kind) {
       ${o.inspect ? `<tr><td colspan="4" style="background:#fff8ec"><b>檢測後另行報價</b>　檢測費 NT$ ${money(o.inspectFee || 0)}<div class="small" style="color:#8a5300">※ ${INSPECT_NOTE}</div></td></tr>` : ''}
       ${o.items.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${x.warranty ? x.warranty + ' 天' : '無'}</td><td class="num" style="text-align:right">NT$ ${money(x.amount)}</td></tr>`).join('')}
       ${!o.items.length && !o.inspect ? '<tr><td colspan="4">檢測後報價</td></tr>' : ''}
-      <tr class="rc-total"><td colspan="3">${pick ? '實收金額' : (o.items.length || !o.inspect ? '報價合計' : '檢測費（確認維修則不收）')}</td>
+      <tr class="rc-total"><td colspan="3">${pick ? '實收金額' : (o.items.length || !o.inspect ? '報價合計' : '檢測費（確認維修報價則不收取）')}</td>
         <td class="num" style="text-align:right">NT$ ${money(pick ? o.fee : (o.items.length || !o.inspect ? o.quote : o.inspectFee || 0))}${pick && o.payment ? '（' + esc(o.payment) + '）' : ''}</td></tr></tbody></table>
     <ol class="terms-ol small">${REPAIR_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
     <p class="small">✓ 客人已確認故障描述、報價與上述維修條款（${esc(o.terms || '')}）</p>
-    <div class="rc-sign"><div><img data-photo="${esc(o.dropSign)}" alt="送修簽名"><span>送修簽名 ${esc(o.customer)}</span></div>
-      <div>${pick ? `<img data-photo="${esc(o.pickSign)}" alt="取件簽名"><span>取件簽名 ${esc(o.customer)}</span>` : `<div class="rc-staff-sm">${esc(o.staff)}</div><span>收件人員</span>`}</div></div>
+    <div class="rc-sign ${pick ? '' : 'rc-sign-drop'}"><div><img data-photo="${esc(o.dropSign)}" alt="送修簽名"><span>送修簽名 ${esc(o.customer)}</span></div>
+      <div>${pick ? `<img data-photo="${esc(o.pickSign)}" alt="取件簽名"><span>取件簽名 ${esc(o.customer)}</span>` : `<div class="rc-staff-sm">${esc(o.staff)}</div><span class="rc-staff-lbl">收件人員</span>`}</div></div>
   </div>`;
 }
 function rpPreview(o, kind) {
@@ -385,8 +385,8 @@ function repairDrawer(o) {
         ${o.inspect ? `<div class="rp-inspect-box" style="margin-bottom:10px"><b>檢測後另行報價</b>・檢測費 NT$ ${money(o.inspectFee || 0)}<div class="small" style="color:#8a5300">※ ${INSPECT_NOTE}</div></div>` : ''}
         ${can && o.status !== '已取件' ? rpItemsEditor(ed.items, 'd', priceListOf(o.category, o.model)) : `${o.items.length ? `<table class="rep-price">${o.items.map(x => `<tr><td>${esc(x.name)}<div class="sub">${x.warranty ? '保固 ' + x.warranty + ' 天' : '無保固'}</div></td><td>NT$ ${money(x.amount)}</td></tr>`).join('')}<tr class="sub"><td>報價合計</td><td>NT$ ${money(o.quote)}</td></tr></table>` : '<p class="small muted">尚未填寫</p>'}`}</div>
       <div class="card"><h3>使用零件</h3>
-        ${can && o.status !== '已取件' ? `<div data-parts>${ed.parts.map((p, j) => `<div class="rp-item rp-part"><input class="input" data-pname="${j}" list="rpPartList" value="${esc(p.name)}" placeholder="選擇或輸入零件名稱">
-            ${o.masked.cost ? '' : `<input class="input num" data-pcost="${j}" inputmode="numeric" value="${esc(p.cost ?? '')}" placeholder="成本">`}<button type="button" class="ph-del static" data-pdel="${j}" aria-label="刪除">✕</button></div>`).join('')}
+        ${can && o.status !== '已取件' ? `<div data-parts>${ed.parts.map((p, j) => `<div class="rp-item rp-part ${showCost() ? '' : 'no-cost'}"><input class="input" data-pname="${j}" list="rpPartList" value="${esc(p.name)}" placeholder="選擇或輸入零件名稱">
+            ${!showCost() ? '' : `<input class="input num" data-pcost="${j}" inputmode="numeric" value="${esc(p.cost ?? '')}" placeholder="成本">`}<button type="button" class="ph-del static" data-pdel="${j}" aria-label="刪除">✕</button></div>`).join('')}
           <button type="button" class="link" data-padd>＋ 新增零件</button>
           <datalist id="rpPartList">${[...REPAIR_PARTS, ...ed.items.map(x => x.name).filter(Boolean)].map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>`
           : (o.parts.length ? o.parts.map(p => `<div>${esc(p.name)}${showCost() && p.cost != null ? `<span class="num" style="float:right">NT$ ${money(p.cost)}</span>` : ''}</div>`).join('') : '<p class="small muted">未登記</p>')}
@@ -395,7 +395,7 @@ function repairDrawer(o) {
         ${can && o.status !== '已取件' ? '<button class="btn btn-ghost btn-block" id="rpSave" style="margin-top:10px">💾 儲存項目／零件／備註</button>' : ''}</div>
       ${can && pickable ? `<div class="card rp-pick"><h3>取件與收款</h3>
         <p class="small muted" style="margin:-4px 0 10px">客人取件時填寫；保固從今天起算${ed.items.some(x => numv(x.warranty)) ? `，到 ${addDays(localDay(), Math.max(...ed.items.map(x => numv(x.warranty))))}` : ''}</p>
-        ${o.inspect ? `<p class="small" style="margin:0 0 8px;color:#8a5300">${quote ? '已報價維修：確認維修就不收檢測費，實收金額預設為維修報價' : `尚未報價維修：實收金額預設為檢測費 NT$ ${money(o.inspectFee || 0)}`}</p>` : ''}
+        ${o.inspect ? `<p class="small" style="margin:0 0 8px;color:#8a5300">${quote ? '已確認維修報價：不收取檢測費，實收金額預設為維修報價' : `尚未報價維修：實收金額預設為檢測費 NT$ ${money(o.inspectFee || 0)}`}</p>` : ''}
         <div class="grid2"><label class="field"><span>實收金額（NT$）</span><input class="input num" id="pkFee" inputmode="numeric" value="${o.inspect && !quote ? (o.inspectFee || 0) : quote}"></label>
           <div class="field"><span>付款方式</span><div class="chips">${REPAIR_PAY.map(p => `<label class="chip"><input type="radio" name="pkpay" value="${p}" ${p === '現金' ? 'checked' : ''}><span>${p}</span></label>`).join('')}</div></div></div>
         <div style="display:flex;justify-content:space-between;align-items:center"><b>客人取件簽名</b><button type="button" class="link" id="pkClear" style="font-size:14px">清除重簽</button></div>
