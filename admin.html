@@ -340,7 +340,7 @@ function pagesNav(cur) {
     const full = isBoss() || ['manage_users', 'edit_payment', 'edit_report', 'edit_shipping', 'edit_any'].some(P);
     return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
   }
-  const items = [['', '宅配訂單'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
+  const items = [['', '宅配收購'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
     P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
   return `<nav class="pages">${items.map(([k, l]) => k === 'shopLink' ? `<a href="admin.html?shop=1#intake/new" style="order:99;margin-left:auto">${l}</a>` : `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
