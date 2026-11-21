@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>收購後台｜iPhone收購中心</title>
-<link rel="stylesheet" href="style.css?v=20261121a">
+<link rel="stylesheet" href="style.css?v=20261121b">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   body { background: #f2f2f4; }
@@ -119,6 +119,36 @@
   .staff-login { max-width: 420px; margin: 48px auto; }
   .tl-by { color: var(--ink-2); font-size: 12px; margin-left: 6px; font-weight: 400; }
   .input:disabled { background: #f2f2f4; color: #8e8e93; }
+  .pages { flex-wrap: wrap; }
+  .in-wrap { max-width: 760px; margin: 0 auto; }
+  .in-steps { display: flex; gap: 8px; margin-bottom: 14px; }
+  .in-steps div { flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #fff; box-shadow: var(--shadow); font-size: 14px; color: var(--ink-2); }
+  .in-steps i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #eef0f4; font-size: 13px; flex: none; }
+  .in-steps .on { color: var(--ink); font-weight: 700; } .in-steps .on i { background: var(--ink); color: #fff; }
+  .in-steps .done i { background: #30D158; color: #fff; }
+  .in-foot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 12px 0 16px; background: linear-gradient(transparent, var(--bg) 30%); }
+  .chip-btn { border: 1px solid var(--line-2); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+  .chip-btn:active { background: #f2f2f4; }
+  .small-chips { gap: 6px; }
+  .ph-add.disabled { opacity: .4; pointer-events: none; }
+  .sig-pad { width: 100%; aspect-ratio: 600/220; border: 2px dashed var(--line-2); border-radius: 12px; background: #fff; touch-action: none; margin-top: 6px; cursor: crosshair; }
+  .sig-img { display: block; width: 100%; max-width: 260px; aspect-ratio: 600/220; object-fit: contain; border-bottom: 1px solid var(--line-2); background: #fff; }
+  .terms-ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.7; font-size: 14px; }
+  .notice-kv dd { font-size: 13px; }
+  .receipt { background: #fff; color: #111; padding: 28px; border-radius: 12px; font-size: 14px; }
+  .receipt h2 { margin: 2px 0 0; font-size: 22px; }
+  .rc-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 12px; }
+  .receipt table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .receipt th, .receipt td { border: 1px solid #d0d4dc; padding: 6px 8px; text-align: left; vertical-align: top; }
+  .receipt th { background: #f3f5f8; font-weight: 600; white-space: nowrap; }
+  .rc-total td { font-weight: 700; font-size: 16px; }
+  .receipt td.num { white-space: nowrap; }
+  .rc-ids { display: flex; gap: 10px; margin: 8px 0 12px; } .rc-ids img { width: 48%; max-width: 300px; border-radius: 8px; border: 1px solid #ddd; }
+  .rc-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
+  .rc-sign img { width: 100%; max-width: 260px; aspect-ratio: 600/220; object-fit: contain; border-bottom: 1px solid #111; display: block; }
+  .rc-sign span { font-size: 13px; color: #555; }
+  @media (max-width: 600px) { .in-steps div { font-size: 12px; padding: 8px; } .receipt { padding: 14px; } }
+  @media print { .lightbox.prev { position: static; background: none; padding: 0; } .receipt { padding: 0; } }
   .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
 </style>
 </head>
@@ -134,8 +164,10 @@
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
 <script>window.AUTH_NS = 'admin_';</script>
-<script src="config.js?v=20261121a"></script>
-<script src="shared.js?v=20261121a"></script>
+<script src="device-ocr.js?v=20261121b" defer></script>
+<script src="config.js?v=20261121b"></script>
+<script src="shared.js?v=20261121b"></script>
+<script src="store.js?v=20261121b"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -190,12 +222,14 @@ function route() {
   $('#refresh').hidden = page === 'users' || page === 'account';
   if (page === 'users' && P('manage_users')) return usersPage();
   if (page === 'account') return accountPage();
+  if (isStoreRoute(page)) return storeRoute(page);
   $('#refresh').onclick = () => load(true);
   orders = [];
   load();
 }
 function pagesNav(cur) {
-  const items = [['', '訂單'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
+  const items = [['', '宅配訂單'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
+    P('edit_payment') && ['remit', '匯款'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
   return `<nav class="pages">${items.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 
@@ -205,9 +239,9 @@ function staffLoginPage(denied) {
   app.innerHTML = `<div class="card staff-login rise">
     <h2 class="card-title" style="font-size:22px">收購後台登入</h2>
     <p class="muted" style="margin:6px 0 20px">請輸入老闆給您的員工帳號與密碼</p>
-    ${denied ? `<div class="alert">目前登入的 ${esc(denied.via === 'LINE' ? 'LINE' : 'Email')} 帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
-      <details style="margin-top:6px"><summary>我是老闆，要開通這個帳號</summary>
-      把下面這串加到 Apps Script「指令碼屬性」的 <b>${denied.via === 'LINE' ? 'ADMIN_LINE_IDS' : 'ADMIN_EMAIL'}</b>（多個用逗號）：<div class="uid">${esc(denied.userId)}</div></details></div>` : ''}
+    ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
+      ${denied.via === 'LINE' ? `<details style="margin-top:6px"><summary>我是老闆，要開通這個 LINE 帳號</summary>
+      把下面這串加到 Apps Script「指令碼屬性」的 <b>ADMIN_LINE_IDS</b>（多個用逗號）：<div class="uid">${esc(denied.userId)}</div></details>` : ''}</div>` : ''}
     <form id="slForm" autocomplete="on">
       <label class="field"><span>帳號</span><input class="input" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
       <label class="field"><span>密碼</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
@@ -215,7 +249,7 @@ function staffLoginPage(denied) {
       <button class="btn btn-dark btn-block" id="slBtn">登入</button>
     </form>
     <div class="divider"><span>老闆</span></div>
-    <button class="btn btn-ghost btn-block" id="ownerBtn">老闆用 LINE／Google／Email 登入</button>
+    <button class="btn btn-line btn-block" id="ownerBtn">${LINE_ICON}老闆用 LINE 登入</button>
     ${MOCK ? '<p class="small muted" style="margin:14px 0 0">預覽帳號：tech1（檢測）、ship1（物流）、acct1（會計，首次登入要改密碼），密碼都是 password123</p>' : ''}
   </div>`;
   const f = $('#slForm');
@@ -230,10 +264,12 @@ function staffLoginPage(denied) {
     } catch (err) { $('#slErr').textContent = err.message; b.disabled = false; f.elements.password.select(); }
   };
   $('#ownerBtn').onclick = () => {
-    if (denied) { auth.clear(); if (!MOCK && liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout(); }
-    mountLogin(app, { title: '老闆登入', sub: '使用已開通的 LINE、Google 或 Email 帳號', lineParams: MOCK ? { mock: 1 } : {}, onDone: start });
-    app.querySelector('.login-card').insertAdjacentHTML('beforeend', '<button class="link" id="backStaff" style="display:block;margin:14px auto 0">← 改用員工帳號登入</button>');
-    $('#backStaff').onclick = () => staffLoginPage();
+    auth.clear(); // 清掉舊的員工／其他登入，只用 LINE
+    if (MOCK) { mockLoggedIn = true; try { localStorage.setItem('mockMe', ''); } catch (e) {} mockMe = ''; return start(); }
+    if (!liffReady) { $('#slErr').textContent = 'LINE 登入載入失敗，請重新整理再試'; return; }
+    if (denied && liff.isLoggedIn() && !liff.isInClient()) liff.logout(); // 換一個 LINE 帳號
+    if (liff.isLoggedIn()) return start();
+    login({});
   };
 }
 
@@ -289,7 +325,7 @@ async function usersPage() {
   try { users = (await api('adminUsers')).users; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('users') + `<div class="card empty">${esc(e.message)}</div>`; return; }
   const st = u => !u.enabled ? '<span class="pill off">停用</span>' : u.mustChange ? '<span class="pill warn">待改密碼</span>' : '<span class="pill">啟用</span>';
   app.innerHTML = `${pagesNav('users')}
-    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0;flex:1">老闆（用 LINE／Google 登入的管理員）不在列表中，永遠擁有全部權限。</p>
+    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0;flex:1">老闆（用 LINE 登入）不在列表中，永遠擁有全部權限。</p>
       <button class="btn btn-dark btn-sm" id="addU">＋ 新增員工</button></div>
     ${users.length ? `<table class="table"><thead><tr><th>帳號</th><th>名稱／角色</th><th class="hide-m">權限</th><th>狀態</th><th class="hide-m">最後登入</th></tr></thead><tbody>
       ${users.map(u => `<tr data-u="${esc(u.username)}" class="${u.enabled ? '' : 'u-off'}">
@@ -361,6 +397,7 @@ async function load(keepOpen) {
     orders = (await api('adminList')).orders;
     renderBoard();
     if (keepOpen && openId) openDrawer(openId);
+    if (window.openAfterLoad) { const id = window.openAfterLoad; window.openAfterLoad = null; if (orders.find(o => o.id === id)) openDrawer(id); }
     if (keepOpen) toast('已更新');
   } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('') + `<div class="card gate empty">${esc(e.message)}</div>`; }
 }

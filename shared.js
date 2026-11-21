@@ -454,19 +454,25 @@ mockDB.find(o => o.id === 'AR261115002').report = {
 
 { const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
 // 預覽用員工帳號（密碼都是 password123）
-const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '標記已付款', edit_any: '任意修改狀態（含取消）', manage_users: '管理員工帳號與權限' };
-const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment'] };
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）' };
+const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake'] };
 const mockUsers = [
   { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
   { username: 'ship1', name: '小美', role: '物流客服', perms: MOCK_PRESETS['物流客服'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:01', lastLogin: '', pw: 'password123' },
+  { username: 'clerk1', name: '店員小王', role: '門市店員', perms: MOCK_PRESETS['門市店員'], enabled: true, mustChange: false, createdAt: '2026-11-21 10:00', lastLogin: '', pw: 'password123' },
   { username: 'acct1', name: '會計 Amy', role: '會計', perms: MOCK_PRESETS['會計'], enabled: true, mustChange: true, createdAt: '2026-11-20 10:02', lastLogin: '', pw: 'password123' },
 ];
 let mockMe = ''; // 目前預覽登入的員工帳號；空白 = 老闆
+const mockIntakes = [], mockStock = [
+  { sku: 'AR261112001-1', source: '宅配', ref: 'AR261112001', inAt: '2026-11-15 11:00', category: '手機', model: 'iPhone 15 Pro', capacity: '256GB', color: '原色鈦金屬', serial: '356789012345678', notes: '外觀 A', cost: 18800, status: '已售出', saleDate: '2026-11-18', channel: '蝦皮', salePrice: 21500, updatedAt: '2026-11-18 14:00', updatedBy: '老闆', photos: [] },
+];
 
 // 預覽模式：前台與後台共用同一份假資料（存在這台電腦的瀏覽器裡，網址加 &reset=1 可重置）
 if (MOCK) {
   try {
-    if (new URLSearchParams(location.search).has('reset')) { ['mockDB', 'mockPhotos', 'mockUsers', 'mockMe'].forEach(k => localStorage.removeItem(k)); }
+    if (new URLSearchParams(location.search).has('reset')) { ['mockDB', 'mockPhotos', 'mockUsers', 'mockMe', 'mockIntakes', 'mockStock'].forEach(k => localStorage.removeItem(k)); }
+    const mi = JSON.parse(localStorage.getItem('mockIntakes') || 'null'); if (mi) mockIntakes.splice(0, mockIntakes.length, ...mi);
+    const ms = JSON.parse(localStorage.getItem('mockStock') || 'null'); if (ms) mockStock.splice(0, mockStock.length, ...ms);
     const us = JSON.parse(localStorage.getItem('mockUsers') || 'null');
     if (us) mockUsers.splice(0, mockUsers.length, ...us);
     mockMe = localStorage.getItem('mockMe') || '';
@@ -480,6 +486,8 @@ function mockPersist() {
     localStorage.setItem('mockDB', JSON.stringify(mockDB));
     localStorage.setItem('mockUsers', JSON.stringify(mockUsers));
     localStorage.setItem('mockMe', mockMe);
+    localStorage.setItem('mockIntakes', JSON.stringify(mockIntakes));
+    localStorage.setItem('mockStock', JSON.stringify(mockStock));
     localStorage.setItem('mockPhotos', JSON.stringify(Object.fromEntries(Object.entries(mockPhotos).filter(([k]) => !k.startsWith('demo')))));
   } catch (e) {}
 }
@@ -492,7 +500,7 @@ async function mockApiInner(action, d) {
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
   const find = id => { const o = mockDB.find(x => x.id === id); if (!o) throw new Error('找不到此訂單'); return o; };
   const setStatus = (o, s, by) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s, by: by || '客戶' }); } };
-  const me = () => { const u = mockUsers.find(x => x.username === mockMe); return u ? { ...u, via: 'Staff' } : { username: '', name: '老闆', role: '老闆', via: 'Google', perms: Object.keys(MOCK_PERMS), mustChange: false }; };
+  const me = () => { const u = mockUsers.find(x => x.username === mockMe); return u ? { ...u, via: 'Staff' } : { username: '', name: '老闆', role: '老闆', via: 'LINE', perms: Object.keys(MOCK_PERMS), mustChange: false }; };
   const need = p => { const s = me(); if (s.mustChange) throw new Error('請先修改密碼'); if (p && !s.perms.includes(p)) throw new Error('您沒有這項權限'); return s; };
   const adm = o => {
     const s = me(), a = { ...o, history: [...o.history], masked: {} };
@@ -501,6 +509,18 @@ async function mockApiInner(action, d) {
     if (!s.perms.includes('view_bank')) { a.masked.bank = !!o.bankAccount; ['bankName', 'bankBranch', 'bankAccount', 'bankHolder'].forEach(k => a[k] = ''); }
     return a;
   };
+  const storeOk = s => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(p => s.perms.includes(p));
+  const inOut = (o, s) => {
+    const a = JSON.parse(JSON.stringify(o)); a.masked = {};
+    const m = (v, h, t) => v.length <= h + t ? v : v.slice(0, h) + '*'.repeat(v.length - h - t) + v.slice(-t);
+    if (!s.perms.includes('view_contact') && a.phone) { a.phone = m(a.phone, 2, 3); a.masked.phone = true; }
+    if (!s.perms.includes('view_bank') && a.account) { a.account = m(a.account, 0, 4); a.masked.account = true; }
+    if (!s.perms.includes('view_id')) { a.masked.id = a.idPhotos.length; a.idPhotos = []; }
+    if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.total = null; a.items.forEach(it => it.price = null); }
+    if (!s.perms.includes('edit_payment') && !s.perms.includes('view_bank')) a.proofs = [];
+    return a;
+  };
+  const stOut = (r, s) => ({ ...r, cost: s.perms.includes('view_cost') ? r.cost : null, salePrice: s.perms.includes('view_cost') || s.perms.includes('edit_stock') ? r.salePrice : null });
   const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history], report: o.report ? (o.report.sent || null) : null });
   switch (action) {
     case 'loginGoogle': return { ok: true, session: 'mock', user: { name: 'Google 用戶', email: 'ming@gmail.com', via: 'Google' } };
@@ -573,8 +593,43 @@ async function mockApiInner(action, d) {
       if (f.status && f.status !== o.status && !canTransition(s.perms, o.status, f.status)) throw new Error(`您沒有把狀態改成「${f.status}」的權限`);
       if (f.status === '已報價' && !(f.quote ?? o.quote)) throw new Error('請先填寫報價金額');
       Object.keys(labels).forEach(k => { if (k in f) o[k] = f[k]; });
+      const was = o.status;
       setStatus(o, f.status, s.name);
+      if (o.status === '已付款' && was !== '已付款' && !mockStock.some(r => r.ref === o.id)) {
+        o.items.forEach((it, i) => mockStock.push({ sku: o.id + '-' + (i + 1), source: '宅配', ref: o.id, inAt: now(), category: { iPhone: '手機', iPad: '平板', Mac: '筆電' }[it.category] || '其他商品',
+          model: itemTitle(it), capacity: it.capacity || '', color: it.color || '', serial: it.imei || it.serial || '', notes: '', cost: i ? 0 : Number(o.quote) || 0, status: '在庫', saleDate: '', channel: '', salePrice: '', updatedAt: now(), updatedBy: s.name, photos: [] }));
+      }
       return { ok: true, order: adm(o) };
+    }
+    case 'intakeList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, intakes: [...mockIntakes].reverse().map(o => inOut(o, s)) }; }
+    case 'intakeCreate': {
+      const s = need('create_intake');
+      if (!d.seller) throw new Error('請填寫出售人姓名');
+      if (!d.sellerSign || !d.staffSign) throw new Error('請完成出售人與經手人簽名');
+      const day = now().slice(2, 10).replace(/-/g, ''), id = 'IN' + day + String(mockIntakes.length + 1).padStart(3, '0');
+      const save = (u) => { const k = 'mk' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[k] = u; return k; };
+      const items = d.items.map(it => ({ ...it, price: Number(it.price) || 0, photos: it.photos.map(save) }));
+      const o = { id, createdAt: now(), staff: s.name, seller: d.seller, phone: d.phone, payment: d.payment, bank: d.bank || '', account: d.account || '', period: d.payment === '轉帳' ? d.period : '', payDate: d.payDate || '',
+        total: items.reduce((t, it) => t + it.price, 0), remit: d.payment === '轉帳' ? '待匯款' : '', remitAt: '', remitBy: '', verified: true, noticeAt: d.idPhotos.length ? d.noticeAt : '',
+        terms: '2026-11-21 門市收購條款 v1', items, idPhotos: d.idPhotos.map(save), sellerSign: save(d.sellerSign), staffSign: save(d.staffSign), proofs: [] };
+      mockIntakes.push(o);
+      items.forEach((it, i) => mockStock.push({ sku: id + '-' + (i + 1), source: '門市', ref: id, inAt: o.createdAt, category: it.category, model: it.model, capacity: it.capacity, color: it.color, serial: it.serial, notes: it.notes, cost: it.price, status: '在庫', saleDate: '', channel: '', salePrice: '', updatedAt: o.createdAt, updatedBy: s.name, photos: it.photos }));
+      return { ok: true, intake: inOut(o, s) };
+    }
+    case 'intakeRemit': {
+      const s = need('edit_payment'), o = mockIntakes.find(x => x.id === d.id);
+      if (d.proof) { const k = 'pf' + Date.now(); mockPhotos[k] = d.proof; o.proofs.push(k); }
+      if (d.status) { o.remit = d.status; o.remitAt = d.status === '已匯款' ? now() : ''; o.remitBy = d.status === '已匯款' ? s.name : ''; }
+      return { ok: true, intake: inOut(o, s) };
+    }
+    case 'stockList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, items: [...mockStock].reverse().map(r => stOut(r, s)) }; }
+    case 'stockUpdate': {
+      const s = need('edit_stock'), r = mockStock.find(x => x.sku === d.sku);
+      if (d.expected && d.expected !== r.status) throw new Error('這件商品剛被其他人改過，請重新整理');
+      if (d.status === '已售出') { if (!d.sale.date || !d.sale.channel || !d.sale.price) throw new Error('請填寫銷售日期、管道與價格'); Object.assign(r, { saleDate: d.sale.date, channel: d.sale.channel, salePrice: Number(d.sale.price) }); }
+      else Object.assign(r, { saleDate: '', channel: '', salePrice: '' });
+      Object.assign(r, { status: d.status, updatedAt: now(), updatedBy: s.name });
+      return { ok: true, item: stOut(r, s) };
     }
   }
   throw new Error('未知的操作');
