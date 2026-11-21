@@ -656,13 +656,13 @@ async function mockApiInner(action, d) {
     case 'intakeCreate': {
       const s = need('create_intake');
       if (!d.seller) throw new Error('請填寫出售人姓名');
-      if (!d.sellerSign || !d.staffSign) throw new Error('請完成出售人與經手人簽名');
+      if (!d.sellerSign) throw new Error('請出售人完成簽名');
       const day = now().slice(2, 10).replace(/-/g, ''), id = 'IN' + day + String(mockIntakes.length + 1).padStart(3, '0');
       const save = (u) => { const k = 'mk' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[k] = u; return k; };
       const items = d.items.map(it => ({ ...it, price: Number(it.price) || 0, photos: it.photos.map(save) }));
       const o = { id, createdAt: now(), staff: s.name, seller: d.seller, phone: d.phone, payment: d.payment, bank: d.bank || '', account: d.account || '', period: d.payment === '轉帳' ? d.period : '', payDate: d.payDate || '',
         total: items.reduce((t, it) => t + it.price, 0), remit: d.payment === '轉帳' ? '待匯款' : '', remitAt: '', remitBy: '', verified: true, noticeAt: d.idPhotos.length ? d.noticeAt : '',
-        terms: '2026-11-21 門市收購條款 v1', items, idPhotos: d.idPhotos.map(save), sellerSign: save(d.sellerSign), staffSign: save(d.staffSign), proofs: [] };
+        terms: '2026-11-21 門市收購條款 v1', items, idPhotos: d.idPhotos.map(save), sellerSign: save(d.sellerSign), staffSign: d.staffSign ? save(d.staffSign) : '', staffUser: s.username || '老闆（LINE）', proofs: [] };
       mockIntakes.push(o);
       items.forEach((it, i) => mockStock.push({ sku: id + '-' + (i + 1), source: '門市', ref: id, inAt: o.createdAt, category: it.category, model: it.model, capacity: it.capacity, color: it.color, serial: it.serial, notes: it.notes, cost: it.price, status: '在庫', saleDate: '', channel: '', salePrice: '', updatedAt: o.createdAt, updatedBy: s.name, photos: it.photos }));
       return { ok: true, intake: inOut(o, s) };

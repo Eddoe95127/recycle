@@ -101,7 +101,7 @@ function intakeDrawer(o) {
         <button class="btn btn-ghost btn-sm" data-rc="customer">列印客戶聯</button></div>
         ${o.masked.cost ? '<p class="small muted" style="margin:8px 0 0">您沒有查看金額的權限，收購聯上的金額會隱藏</p>' : ''}</div>
       <div class="card"><h3>交易</h3><dl class="kv">
-        <dt>建立時間</dt><dd>${esc(o.createdAt)}</dd><dt>經手人</dt><dd>${esc(o.staff)}</dd>
+        <dt>建立時間</dt><dd>${esc(o.createdAt)}</dd><dt>經手人</dt><dd>${esc(o.staff)}${o.staffUser ? ` <span class="small muted">（${esc(o.staffUser)}）</span>` : ''}</dd>
         <dt>出售人</dt><dd>${esc(o.seller)}</dd><dt>電話</dt><dd class="num">${esc(o.phone || '未填')}${o.masked.phone ? ' <span class="no-perm">🔒</span>' : ''}</dd>
         <dt>付款</dt><dd>${esc(o.payment)}</dd>
         ${o.payment === '轉帳' ? `<dt>收款帳戶</dt><dd class="num">${esc(o.bank)}<br>${esc(o.account)}${o.masked.account ? ' <span class="no-perm">🔒</span>' : ''}</dd><dt>匯款期限</dt><dd>${esc(o.period)}${o.payDate ? ' ' + esc(o.payDate) : ''}</dd>` : ''}
@@ -116,7 +116,7 @@ function intakeDrawer(o) {
         <p class="small" style="margin:0 0 8px">${o.verified ? '✓ 門市已核對證件' : ''}${o.noticeAt ? `・出售人已確認個資告知（${esc(fmtTime(o.noticeAt))}）` : ''}</p>
         ${o.masked.id ? `<p>${NOPE}　<span class="small muted">已附 ${o.masked.id} 張證件照</span></p>` : o.idPhotos.length ? `<div class="ph-grid">${o.idPhotos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="證件"></div>`).join('')}</div>` : '<p class="small muted">未附證件照片</p>'}
         <div class="grid2" style="margin-top:10px"><div><div class="small muted">出售人簽名</div><img class="sig-img" data-photo="${esc(o.sellerSign)}" alt="出售人簽名"></div>
-          <div><div class="small muted">經手人簽名</div><img class="sig-img" data-photo="${esc(o.staffSign)}" alt="經手人簽名"></div></div></div>
+          <div><div class="small muted">經手人</div>${o.staffSign ? `<img class="sig-img" data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<p style="margin:6px 0 0"><b>${esc(o.staff)}</b><br><span class="small muted">登入帳號：${esc(o.staffUser || '—')}</span></p>`}</div></div></div>
       ${P('edit_payment') && o.payment === '轉帳' ? remitBox(o) : ''}
     </div>`;
   d.classList.add('show'); $('#scrim').classList.add('show');
@@ -251,9 +251,10 @@ function stepSign() {
       <dt>合計</dt><dd class="num"><b style="font-size:18px">NT$ ${money(sumDraft())}</b></dd></dl></div>
     <div class="card"><h3>二手商品收購條款</h3><ol class="terms-ol">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
       <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 雙方已核對商品、金額與付款方式，同意上述條款，並以電子方式簽署 *</label></div>
-    <div class="card"><h3>簽名</h3><div class="grid2">
-      ${[['sellerSign', '出售人簽名'], ['staffSign', `經手人簽名（${esc(me.name)}）`]].map(([k, l]) => `<div><div style="display:flex;justify-content:space-between" class="small"><b>${l}</b><button type="button" class="link" data-clear="${k}" style="font-size:13px">清除</button></div>
-        <canvas class="sig-pad" data-sig="${k}" width="600" height="220"></canvas></div>`).join('')}</div></div>`;
+    <div class="card"><h3>簽名</h3><div>
+      <div><div style="display:flex;justify-content:space-between;align-items:center"><b>出售人簽名（請出售人在框內簽名）</b><button type="button" class="link" data-clear="sellerSign" style="font-size:14px">清除重簽</button></div>
+        <canvas class="sig-pad sig-big" data-sig="sellerSign" width="1200" height="480"></canvas></div>
+      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b>（依登入帳號自動記錄，不需簽名）</p></div>`;
 }
 
 function bindForm() {
@@ -318,7 +319,7 @@ function nextStep(err) {
   if (drStep === 2 && !dr.verified) return err('請勾選「已當面核對出售人證件」');
   if (drStep < 3) { drStep++; return drawForm(); }
   if (!dr.agreed) return err('請勾選同意條款與電子簽署');
-  if (!dr.sellerSign || !dr.staffSign) return err('請完成出售人與經手人簽名');
+  if (!dr.sellerSign) return err('請出售人完成簽名');
   submitIntake(err);
 }
 async function submitIntake(err) {
@@ -342,7 +343,7 @@ function drawDone() {
   // 剛建立的單：照片直接用本機的，不必再下載
   o.items.forEach((it, i) => it.photos.forEach((id, j) => { if (o._local.items[i]?.[j]) photoCache[id] = o._local.items[i][j]; }));
   o.idPhotos.forEach((id, j) => { if (o._local.ids[j]) photoCache[id] = o._local.ids[j]; });
-  photoCache[o.sellerSign] = o._local.sellerSign; photoCache[o.staffSign] = o._local.staffSign;
+  photoCache[o.sellerSign] = o._local.sellerSign;
   app.innerHTML = `${pagesNav('intake')}<div class="card staff-login rise" style="text-align:center">
     <div style="font-size:44px">✅</div><h2 class="card-title">收購單已建立</h2>
     <p class="num" style="font-size:22px;margin:6px 0">${esc(o.id)}</p>
@@ -359,7 +360,11 @@ function drawDone() {
 /* ---------- 簽名板 ---------- */
 function sigPad(canvas, existing, onChange) {
   const g = canvas.getContext('2d');
-  g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
+  if (canvas.classList.contains('sig-big')) { // 平板簽名：畫布解析度跟著實際顯示大小，筆跡不變形
+    const r = canvas.getBoundingClientRect(), k = Math.min(2, window.devicePixelRatio || 1);
+    if (r.width > 0) { canvas.width = Math.round(r.width * k); canvas.height = Math.round(r.height * k); }
+  }
+  g.lineWidth = Math.max(3.2, canvas.width / 190); g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
   if (existing) { const img = new Image(); img.onload = () => g.drawImage(img, 0, 0); img.src = existing; }
   let drawing = false, last = null, inked = !!existing;
   const pos = e => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height]; };
@@ -418,7 +423,7 @@ async function showReceipt(o, kind) {
     <p class="small">✓ 門市已當面核對出售人證件　✓ 雙方同意上述條款並以電子方式簽署（${esc(o.terms)}）</p>
     ${o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : ''}
     <div class="rc-sign"><div><img data-photo="${esc(o.sellerSign)}" alt="出售人簽名"><span>出售人 ${esc(o.seller)}</span></div>
-      <div><img data-photo="${esc(o.staffSign)}" alt="經手人簽名"><span>經手人 ${esc(o.staff)}</span></div></div>
+      <div>${o.staffSign ? `<img data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<div class="rc-staff">${esc(o.staff)}</div>`}<span>經手人 ${esc(o.staff)}${o.staffSign ? '' : '（依系統登入帳號記錄）'}</span></div></div>
   </div><div class="no-print" style="display:flex;gap:8px;margin-top:12px"><button class="btn" style="flex:1;background:#fff;color:#111" data-print>🖨 列印／存成 PDF</button><button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div></div>`;
   document.body.appendChild(w);
   w.onclick = e => { if (e.target === w || e.target.dataset.close !== undefined) w.remove(); };
