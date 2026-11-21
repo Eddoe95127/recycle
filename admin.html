@@ -116,6 +116,13 @@
   .pages { display: flex; gap: 6px; margin: 4px 0 16px; }
   .pages a { padding: 7px 14px; border-radius: 999px; font-size: 14px; color: var(--ink-2); text-decoration: none; background: #fff; box-shadow: var(--shadow); }
   .pages a.on { background: var(--ink); color: #fff; }
+  .nav-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 4px 0 10px; align-items: stretch; }
+  .nav-groups a { display: flex; align-items: center; justify-content: center; padding: 12px 10px; border-radius: 14px; font-size: 15px; font-weight: 700; color: var(--ink-2); text-decoration: none; background: #fff; box-shadow: var(--shadow); text-align: center; }
+  .nav-groups a.on { background: var(--ink); color: #fff; }
+  .nav-groups a.shop-link { font-size: 13px; font-weight: 600; background: transparent; box-shadow: none; border: 1.5px dashed var(--line-2, #d2d2d7); }
+  .pages.sub { padding: 8px; background: #fff; border-radius: 14px; box-shadow: var(--shadow); }
+  .pages.sub a { box-shadow: none; background: #f2f2f4; }
+  .pages.sub a.on { background: var(--ink); color: #fff; }
   .role { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eef0f4; color: var(--ink-2); margin-left: 6px; }
   .role.boss { background: #1d1d1f; color: #fff; }
   .no-perm { color: #8e8e93; font-size: 13px; }
@@ -381,9 +388,17 @@ function pagesNav(cur) {
     const full = isBoss() || ['manage_users', 'edit_payment', 'edit_report', 'edit_shipping', 'edit_any'].some(P);
     return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
   }
-  const items = [['', '宅配收購'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], (P('repair') || P('view_cost')) && ['repair', '維修'], canStoreView() && ['stock', '庫存'],
-    P('edit_payment') && ['remit', '匯款'], P('view_cost') && ['report', '報表'], P('edit_prices') && ['prices', '估價表'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
-  return `<nav class="pages">${items.map(([k, l]) => k === 'shopLink' ? `<a href="admin.html?shop=1#intake/new" style="order:99;margin-left:auto">${l}</a>` : `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
+  // 完整後台：大分類 → 點進去顯示可查詢的項目
+  const groups = [
+    ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表']]],
+    ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
+    ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], P('view_cost') && ['report', '報表']]],
+    ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']]],
+  ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
+  const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];
+  return `<nav class="nav-groups">${groups.map(([k, l, subs]) => `<a href="#${subs[0][0]}" class="${k === curGroup[0] ? 'on' : ''}">${l}</a>`).join('')}
+      ${P('create_intake') || P('repair') ? '<a class="shop-link" href="admin.html?shop=1">門市工作台 ↗</a>' : ''}</nav>
+    <nav class="pages sub">${curGroup[2].map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 
 /* ---------- 員工登入 ---------- */
