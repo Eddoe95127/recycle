@@ -828,7 +828,8 @@ async function showReceipt(o, kind) {
 }
 
 /* ============================== 庫存 ============================== */
-let stockCache = null, stQuery = '', stStatus = 'active', stSource = '';
+let stockCache = null, stQuery = '', stStatus = 'active', stSource = '', stView = 'list', stModel = '';
+const byName = (a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true });
 async function stockPage(refresh) {
   if (refresh || !stockCache) {
     app.innerHTML = pagesNav('stock') + '<div class="spinner"></div>';
@@ -846,25 +847,58 @@ async function stockPage(refresh) {
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${soldM.length}</div><div class="l">本月售出</div></div>
       ${P('view_cost') ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
     </div>
+    <div class="tabs st-view">${[['list', '📋 明細'], ['model', '📊 依型號總清單']].map(([k, l]) => `<button data-view="${k}" class="${stView === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="toolbar">
       <input class="input" id="stQ" placeholder="搜尋 型號／IMEI／單號" value="${esc(stQuery)}">
-      <div class="tabs">${[['active', '在庫'], ['整理中', '整理中'], ['已售出', '已售出'], ['all', '全部']].map(([k, l]) => `<button data-st="${k}" class="${stStatus === k ? 'on' : ''}">${l}</button>`).join('')}
+      ${stView === 'list' ? `<select class="input st-model" id="stModel"><option value="">全部型號</option>${modelOptions()}</select>` : ''}
+      <div class="tabs">${stView === 'list' ? [['active', '在庫'], ['整理中', '整理中'], ['已售出', '已售出'], ['all', '全部']].map(([k, l]) => `<button data-st="${k}" class="${stStatus === k ? 'on' : ''}">${l}</button>`).join('') : ''}
         ${[['', '全部來源'], ['門市', '門市'], ['宅配', '宅配']].map(([k, l]) => `<button data-src="${k}" class="${stSource === k ? 'on' : ''}">${l}</button>`).join('')}
         ${P('edit_stock') ? '<button id="csv">⬇ 匯出盤點 CSV</button>' : ''}</div>
     </div><div id="stTbl"></div>`;
   $('#stQ').oninput = e => { stQuery = e.target.value; drawStock(); };
+  $$('[data-view]').forEach(b => b.onclick = () => { stView = b.dataset.view; stockPage(); });
+  if ($('#stModel')) $('#stModel').onchange = e => { stModel = e.target.value; drawStock(); };
   $$('[data-st]').forEach(b => b.onclick = () => { stStatus = b.dataset.st; stockPage(); });
   $$('[data-src]').forEach(b => b.onclick = () => { stSource = b.dataset.src; stockPage(); });
   if ($('#csv')) $('#csv').onclick = exportCsv;
   drawStock();
 }
-function stockVisible() {
+/** 型號下拉：每個型號後面標在庫數量 */
+function modelOptions() {
+  const m = {};
+  stockCache.filter(r => !stSource || r.source === stSource).forEach(r => { const k = r.model || '（未填型號）'; m[k] = m[k] || { n: 0, a: 0 }; m[k].n++; if (r.status !== '已售出') m[k].a++; });
+  return Object.keys(m).sort(byName).map(k => `<option value="${esc(k)}" ${stModel === k ? 'selected' : ''}>${esc(k)}（在庫 ${m[k].a}／共 ${m[k].n}）</option>`).join('');
+}
+function stockVisible(ignoreStatus) {
   const q = stQuery.trim().toLowerCase();
-  return stockCache.filter(r => (stStatus === 'all' || (stStatus === 'active' ? r.status !== '已售出' : r.status === stStatus))
+  return stockCache.filter(r => (ignoreStatus || stStatus === 'all' || (stStatus === 'active' ? r.status !== '已售出' : r.status === stStatus))
     && (!stSource || r.source === stSource)
+    && (ignoreStatus || !stModel || (r.model || '（未填型號）') === stModel)
     && (!q || [r.sku, r.ref, r.model, r.serial, r.capacity, r.color, r.category].join(' ').toLowerCase().includes(q)));
 }
+/** 依型號總清單 */
+function drawModelSummary() {
+  const g = {};
+  stockVisible(true).forEach(r => {
+    const k = r.model || '（未填型號）';
+    const x = g[k] = g[k] || { model: k, cat: r.category || '', a: 0, p: 0, s: 0, cost: 0, caps: {} };
+    if (r.status === '在庫') x.a++; else if (r.status === '整理中') x.p++; else x.s++;
+    if (r.status !== '已售出') { x.cost += r.cost || 0; const c = r.capacity || '—'; x.caps[c] = (x.caps[c] || 0) + 1; }
+  });
+  const rows = Object.values(g).sort((a, b) => byName(a.cat, b.cat) || byName(a.model, b.model));
+  const cost = P('view_cost');
+  const tot = rows.reduce((t, x) => ({ a: t.a + x.a, p: t.p + x.p, s: t.s + x.s, cost: t.cost + x.cost }), { a: 0, p: 0, s: 0, cost: 0 });
+  $('#stTbl').innerHTML = rows.length ? `<table class="st-sum"><thead><tr><th>型號</th><th class="hide-m">在庫規格</th><th class="c">在庫</th><th class="c">整理中</th><th class="c">已售出</th>${cost ? '<th class="hide-m" style="text-align:right">在庫成本</th>' : ''}</tr></thead><tbody>
+    ${rows.map(x => `<tr data-model="${esc(x.model)}"><td><b>${esc(x.model)}</b><div class="sub">${esc(x.cat)}</div></td>
+      <td class="sub hide-m">${Object.keys(x.caps).sort(byName).map(c => `${esc(c)}×${x.caps[c]}`).join('、') || '—'}</td>
+      <td class="c num"><b>${x.a || '—'}</b></td><td class="c num">${x.p || '—'}</td><td class="c num sub">${x.s || '—'}</td>
+      ${cost ? `<td class="num hide-m" style="text-align:right">${x.cost ? nt(x.cost) : '—'}</td>` : ''}</tr>`).join('')}
+    <tr class="st-tot"><td><b>合計 ${rows.length} 個型號</b></td><td class="hide-m"></td><td class="c num"><b>${tot.a}</b></td><td class="c num">${tot.p}</td><td class="c num">${tot.s}</td>${cost ? `<td class="num hide-m" style="text-align:right"><b>${nt(tot.cost)}</b></td>` : ''}</tr>
+    </tbody></table><p class="small muted" style="margin:8px 4px">點型號可查看該型號的每一台明細</p>` : '<div class="card empty">沒有符合的庫存</div>';
+  $$('[data-model]').forEach(tr => tr.onclick = () => { stModel = tr.dataset.model; stView = 'list'; stStatus = 'all'; stockPage(); });
+}
 function drawStock() {
+  if (stView === 'model') return drawModelSummary();
   const list = stockVisible();
   $('#stTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>商品</th><th class="hide-m">IMEI／序號</th><th>來源</th><th class="hide-m">成本</th><th>狀態</th></tr></thead><tbody>
     ${list.map(r => `<tr data-sku="${esc(r.sku)}"><td><b>${esc(r.model)}</b> <span class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</span><div class="sub">${esc(r.sku)}・入庫 ${esc(r.inAt.slice(0, 10))}</div></td>
