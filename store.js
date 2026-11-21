@@ -18,7 +18,7 @@ const IN_BANKS = ['004 臺灣銀行', '005 臺灣土地銀行', '006 合作金�
   '017 兆豐銀行', '700 中華郵政', '803 聯邦銀行', '805 遠東銀行', '806 元大銀行', '807 永豐銀行', '808 玉山銀行', '809 凱基銀行', '812 台新銀行',
   '822 中國信託', '823 將來銀行', '824 LINE Bank'];
 const IN_PERIODS = ['收購當日', '收購後 1 個工作天內', '收購後 3 個工作天內', '收購後 7 個工作天內', '指定日期'];
-const SALE_CHANNELS = ['門市', '蝦皮', '露天', 'Facebook', '同業批發', '其他'];
+const SALE_CHANNELS = ['門市銷售', '蝦皮銷售'];
 const IN_TERMS = [
   ['交易與付款', '雙方以本單所列商品、收購金額及付款方式為本次買賣內容。出售人依約交付商品，門市依約支付價款；付款是否完成，以實際收款或轉帳紀錄為準。'],
   ['商品來源與處分權', '出售人確認對商品有合法處分權，並據實告知所知的遺失、遭竊、租賃、分期未繳清、所有權保留或第三人權利等情形。如有隱瞞，出售人應負法律責任並返還價款。'],
@@ -890,7 +890,11 @@ function stockDrawer(r) {
         <div class="chips">${['在庫', '整理中', '已售出'].map(s => `<label class="chip"><input type="radio" name="sst" value="${s}" ${r.status === s ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div>
         <div id="saleBox" ${r.status === '已售出' ? '' : 'hidden'} style="margin-top:12px"><div class="grid2">
           <label class="field"><span>銷售日期</span><input class="input" type="date" id="sDate" value="${esc(r.saleDate || localDay())}"></label>
-          <label class="field"><span>銷售管道</span><input class="input" id="sCh" list="chList" value="${esc(r.channel)}"><datalist id="chList">${SALE_CHANNELS.map(c => `<option value="${c}">`).join('')}</datalist></label>
+          ${(() => { const manual = r.channel && !SALE_CHANNELS.includes(r.channel); return `<label class="field"><span>銷售管道</span>
+            <select class="input" id="sChSel"><option value="" ${!r.channel ? 'selected' : ''}>請選擇</option>
+              ${SALE_CHANNELS.map(c => `<option ${r.channel === c ? 'selected' : ''}>${c}</option>`).join('')}
+              <option value="${IN_OTHER}" ${manual ? 'selected' : ''}>其他（自行填寫）</option></select>
+            <input class="input" id="sCh" value="${esc(manual ? r.channel : '')}" placeholder="例：露天、Facebook、同業批發" style="margin-top:6px" ${manual ? '' : 'hidden'}></label>`; })()}
           <label class="field"><span>銷售價格（NT$）</span><input class="input num" id="sPrice" inputmode="numeric" value="${esc(r.salePrice ?? '')}"></label></div></div></div>` : ''}
     </div>
     ${can ? '<div class="d-foot"><span class="err" id="sErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="sSave">儲存</button></div>' : ''}`;
@@ -906,9 +910,11 @@ function stockDrawer(r) {
   };
   if (!can) return;
   $$('input[name=sst]', d).forEach(x => x.onchange = () => { $('#saleBox').hidden = x.value !== '已售出'; });
+  $('#sChSel').onchange = e => { const inp = $('#sCh'); inp.hidden = e.target.value !== IN_OTHER; if (!inp.hidden) inp.focus(); };
   $('#sSave').onclick = async () => {
     const status = $('input[name=sst]:checked', d).value;
-    const sale = { date: $('#sDate').value, channel: $('#sCh').value.trim(), price: $('#sPrice').value.replace(/[^\d]/g, '') };
+    const chSel = $('#sChSel'), chOther = chSel && chSel.value === IN_OTHER;
+    const sale = { date: $('#sDate').value, channel: chOther ? $('#sCh').value.trim() : (chSel ? chSel.value : ''), price: $('#sPrice').value.replace(/[^\d]/g, '') };
     if (status === '已售出' && (!sale.date || !sale.channel || !sale.price)) return $('#sErr').textContent = '請填寫銷售日期、管道與價格';
     $('#sSave').disabled = true;
     try {
