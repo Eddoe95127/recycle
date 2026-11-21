@@ -204,7 +204,7 @@ function evalBlock(it, i) {
   const bad = it.checks.filter(c => c.r === 'bad').length, na = it.checks.filter(c => c.r === 'na').length;
   const fresh = isNewItem(it);
   return `<div class="eval-box">
-    <div class="eval-h">${fresh ? '全新未拆封・估價' : '檢測評估'}</div>
+    <div class="eval-h">${fresh ? '全新機（未拆封）・估價' : '檢測評估'}</div>
     ${fresh ? '<p class="small muted" style="margin:0 0 8px">全新未拆封不需外觀、電池與功能檢測；請確認外盒、封膜完整，未開通。拆封或外封膜破損請改選「二手機」或加扣款。</p>' : `<div class="grid2">
       <div class="field"><span>外觀等級</span><div class="chips">${['A', 'B', 'C', 'D'].map(g => `<label class="chip"><input type="radio" name="g${i}" data-grade value="${g}" ${it.grade === g ? 'checked' : ''}><span>${g} ${GRADE_TEXT[g]}</span></label>`).join('')}</div></div>
       <label class="field"><span>電池健康度（%）</span><input class="input num" data-f="battery" inputmode="numeric" maxlength="3" value="${esc(it.battery)}" placeholder="例：86"></label>
@@ -309,9 +309,9 @@ function stepItems() {
     </div>
     ${dr.items.map((it, i) => `<div class="card" data-i="${i}">
       <h3 style="display:flex;justify-content:space-between">商品 ${i + 1}${dr.items.length > 1 ? `<button class="link" data-del-item="${i}" style="font-size:13px">移除</button>` : ''}</h3>
+      <div class="cond-seg">${[[IN_USED, '二手機', '需檢測外觀、電池、功能'], [IN_NEW, '全新機（未拆封）', '免檢測，只填收購價']].map(([v, l, s]) => `<label><input type="radio" name="cond${i}" data-cond value="${v}" ${(it.cond || IN_USED) === v ? 'checked' : ''}><span><b>${l}</b><small>${s}</small></span></label>`).join('')}</div>
       <button type="button" class="btn ${it.model ? 'btn-ghost' : 'btn-dark'} btn-block est-open" data-est>🧮 用估價表填寫（同線上估價）${it._est ? `<small>已帶入：${esc(it._est)}</small>` : ''}</button>
       <div class="chips" style="margin-bottom:10px">${Object.keys(IN_CATS).map(c => `<label class="chip"><input type="radio" name="cat${i}" data-cat value="${c}" ${it.category === c ? 'checked' : ''}><span>${c}</span></label>`).join('')}</div>
-      <div class="field"><span>商品狀態 *</span><div class="chips cond-chips">${[[IN_USED, '二手機'], [IN_NEW, '全新未拆封']].map(([v, l]) => `<label class="chip"><input type="radio" name="cond${i}" data-cond value="${v}" ${(it.cond || IN_USED) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
       <div class="grid2">
         ${IN_CATS[it.category].length ? pickField('品名／型號 *', 'data-f="model"', it.model, IN_CATS[it.category], it._m && it._m.model, '輸入完整型號') : `<label class="field"><span>品名／型號 *</span><input class="input" data-f="model" value="${esc(it.model)}" placeholder="例：Switch 主機、相機"></label>`}
         ${pickField(it.category === '筆電' ? '年份／規格' : '容量／規格', 'data-f="capacity"', it.capacity, it.category === '筆電' ? [] : IN_CAPS, it._m && it._m.capacity, it.category === '筆電' ? '例：2023 M3 / 16GB / 512GB' : '')}

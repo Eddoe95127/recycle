@@ -160,6 +160,13 @@
   .st-sum .st-tot td { background: #f5f5f7; border-top: 2px solid var(--ink, #1d1d1f); border-bottom: 0; }
   @media (max-width: 760px) { .st-sum .hide-m { display: none; } .st-sum th.c, .st-sum td.c { width: 52px; padding: 10px 4px; } }
   /* 門市檢測評估 */
+  .cond-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 12px; }
+  .cond-seg label { cursor: pointer; }
+  .cond-seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .cond-seg span { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line, #e5e5ea); background: #fff; text-align: center; transition: all .15s; }
+  .cond-seg b { font-size: 16px; } .cond-seg small { font-size: 12px; color: var(--muted); }
+  .cond-seg input:checked + span { border-color: var(--ink, #1d1d1f); background: var(--ink, #1d1d1f); color: #fff; }
+  .cond-seg input:checked + span small { color: rgba(255,255,255,.75); }
   .eval-box { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 4px 0 14px; background: #fafafb; }
   .eval-h { font-weight: 700; margin-bottom: 8px; }
   .ck-wrap { border-top: 1px solid var(--line); padding-top: 8px; }
@@ -261,7 +268,7 @@
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261122e"></script>
-<script src="store.js?v=20261122o"></script>
+<script src="store.js?v=20261122p"></script>
 <script>
 const app = $('#app');
 let orders = [];
