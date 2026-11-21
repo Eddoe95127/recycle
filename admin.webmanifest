@@ -1,0 +1,26 @@
+{
+  "id": "admin",
+  "name": "iPhone收購中心 收購後台",
+  "short_name": "收購後台",
+  "description": "訂單、門市收購單、庫存、估價表與帳號管理",
+  "lang": "zh-Hant-TW",
+  "start_url": "admin.html?app=1",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f07800",
+  "icons": [
+    {
+      "src": "icons/admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

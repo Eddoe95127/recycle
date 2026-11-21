@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>收購後台｜iPhone收購中心</title>
-<link rel="manifest" href="shop.webmanifest">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="門市收購">
+<script>/* 加到主畫面：門市工作台（?shop=1）與收購後台用不同的 App 名稱、圖示 */
+(function () {
+  var shop = /[?&]shop=1/.test(location.search);
+  document.write('<link rel="manifest" href="' + (shop ? 'shop' : 'admin') + '.webmanifest">'
+    + '<link rel="apple-touch-icon" href="icons/' + (shop ? 'icon' : 'admin') + '-180.png">'
+    + '<link rel="icon" href="icons/' + (shop ? 'icon' : 'admin') + '-192.png">'
+    + '<meta name="apple-mobile-web-app-title" content="' + (shop ? '門市收購' : '收購後台') + '">');
+})();
+</script>
 <meta name="theme-color" content="#f5f5f7">
 <link rel="stylesheet" href="style.css?v=20261122b">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
