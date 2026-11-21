@@ -120,7 +120,7 @@ function rpTotal() { return rp.items.reduce((t, x) => t + numv(x.amount), 0); }
 function drawRepairForm() {
   const keepY = window.scrollY, same = drawRepairForm._rp === rp;
   const chipToggle = (key, list) => `<div class="chips small-chips">${list.map(n => `<button type="button" class="chip-btn" data-add-${key}="${esc(n)}">${esc(n)}</button>`).join('')}</div>`;
-  app.innerHTML = `${pagesNav('repair')}<div class="in-wrap">
+  app.innerHTML = `${pagesNav('repair/new')}<div class="in-wrap">
     <div class="card"><h3>客戶</h3>
       <div class="grid2">
         <label class="field"><span>姓名 *</span><input class="input" data-r="customer" value="${esc(rp.customer)}" autocomplete="off"></label>

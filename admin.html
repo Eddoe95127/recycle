@@ -306,9 +306,9 @@
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261122g"></script>
-<script src="store.js?v=20261122t"></script>
+<script src="store.js?v=20261122u"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122h"></script>
+<script src="repair.js?v=20261122i"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -383,10 +383,18 @@ function route() {
   load();
 }
 function pagesNav(cur) {
-  if (SHOP) {
-    const s = [(P('create_intake') || canStoreView()) && ['intake', '收購作業'], P('repair') && ['repair', '維修作業'], canStoreView() && ['stock', '庫存'], ['account', '我的帳號']].filter(Boolean);
+  if (SHOP) { // 門市工作台：大分類 → 點進去顯示項目
     const full = isBoss() || ['manage_users', 'edit_payment', 'edit_report', 'edit_shipping', 'edit_any'].some(P);
-    return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
+    const groups = [
+      ['buy', '🛒 收購作業', [(P('create_intake') || canStoreView()) && ['intake', '收購單列表'], P('create_intake') && ['intake/new', '＋ 新增收購單']]],
+      ['fix', '🔧 維修作業', [P('repair') && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
+      ['stock', '📦 庫存', [canStoreView() && ['stock', '庫存']]],
+      ['me', '⚙️ 我的帳號', [['account', '我的帳號']]],
+    ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
+    const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];
+    return `<nav class="nav-groups">${groups.map(([k, l, subs]) => `<a href="#${subs[0][0]}" class="${k === curGroup[0] ? 'on' : ''}">${l}</a>`).join('')}
+        ${full ? '<a class="shop-link" href="admin.html">完整後台 ↗</a>' : ''}</nav>
+      ${curGroup[2].length > 1 ? `<nav class="pages sub">${curGroup[2].map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>` : ''}`;
   }
   // 完整後台：大分類 → 點進去顯示可查詢的項目
   const groups = [
