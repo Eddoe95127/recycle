@@ -273,29 +273,66 @@ function drawRepairDone() {
     <p class="muted">${esc(o.customer)}・${esc(rpDev(o))}${o.quote ? `・報價 NT$ ${money(o.quote)}` : ''}</p>
     ${o.email ? `<p class="small" style="color:${o.mailLog.includes('已寄送') ? 'var(--ok, #1a7f37)' : 'var(--danger, #c9372c)'}">${o.mailLog.includes('已寄送') ? '✉️ 維修單已寄到 ' + esc(o.email) : '⚠️ 維修單寄送失敗'}</p>` : ''}
     <div style="display:grid;gap:10px;margin-top:18px">
-      <button class="btn btn-dark btn-block" data-rpdf="drop">📄 送修單 PDF（列印／存檔／分享）</button>
+      <button class="btn btn-dark btn-block" data-rpdf="drop">📄 檢視送修單（分享／列印）</button>
       <button class="btn btn-ghost btn-block" id="rpNext">＋ 下一位客人</button>
       <a class="btn btn-ghost btn-block" href="#repair">回維修列表</a></div></div>`;
-  $('[data-rpdf]').onclick = e => rpPdf(o, 'drop', e.currentTarget);
+  $('[data-rpdf]').onclick = () => rpPreview(o, 'drop');
   $('#rpNext').onclick = () => { rp = null; repairForm(); };
 }
 
-/** 產生 PDF：iPad 直接開分享選單（列印／存檔），其他裝置下載 */
-async function rpPdf(o, kind, btn) {
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'PDF 產生中…';
-  try {
-    const r = await api('repairPdf', { id: o.id, kind });
+/** 維修單畫面（送修單／取件單）：先顯示單據，下方再分享／存 PDF、列印 */
+function repairDocHTML(o, kind) {
+  const pick = kind === 'pickup';
+  const tail = (v, n) => v ? '*'.repeat(Math.max(0, v.length - n)) + v.slice(-n) : '';
+  return `<div id="report" class="receipt">
+    <div class="rc-head"><div><div class="small muted">${esc(REPAIR_ENTITY)}</div><h2>${pick ? '維修取件單（保固憑證）' : '維修送修單'}</h2></div>
+      <div style="text-align:right"><b class="num">${esc(o.id)}</b><div class="small">客戶聯</div></div></div>
+    <table class="rc-meta">
+      <tr><th>送修日期</th><td>${esc(o.createdAt)}</td><th>收件人員</th><td>${esc(o.staff)}</td></tr>
+      <tr><th>客戶</th><td>${esc(o.customer)}</td><th>電話</th><td class="num">${esc(tail(o.phone, 3))}</td></tr>
+      <tr><th>機型</th><td>${esc(rpDev(o))}</td><th>IMEI／序號</th><td class="num">${esc(o.serial || '—')}</td></tr>
+      <tr><th>故障描述</th><td colspan="3">${esc(o.issue)}</td></tr>
+      <tr><th>外觀與配件</th><td colspan="3">${esc(o.condition || '—')}</td></tr>
+      ${pick ? `<tr><th>取件日期</th><td>${esc(o.pickupAt)}</td><th>保固到期</th><td><b>${esc(o.warrantyEnd || '無保固')}</b></td></tr>`
+        : `<tr><th>預計完成</th><td colspan="3">${esc(o.promise || '檢測後通知')}</td></tr>`}</table>
+    <table class="rc-items"><thead><tr><th>#</th><th>維修項目</th><th>保固</th><th style="text-align:right">金額</th></tr></thead><tbody>
+      ${o.inspect ? `<tr><td colspan="4" style="background:#fff8ec"><b>檢測後另行報價</b>　檢測費 NT$ ${money(o.inspectFee || 0)}<div class="small" style="color:#8a5300">※ ${INSPECT_NOTE}</div></td></tr>` : ''}
+      ${o.items.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${x.warranty ? x.warranty + ' 天' : '無'}</td><td class="num" style="text-align:right">NT$ ${money(x.amount)}</td></tr>`).join('')}
+      ${!o.items.length && !o.inspect ? '<tr><td colspan="4">檢測後報價</td></tr>' : ''}
+      <tr class="rc-total"><td colspan="3">${pick ? '實收金額' : (o.items.length || !o.inspect ? '報價合計' : '檢測費（確認維修則不收）')}</td>
+        <td class="num" style="text-align:right">NT$ ${money(pick ? o.fee : (o.items.length || !o.inspect ? o.quote : o.inspectFee || 0))}${pick && o.payment ? '（' + esc(o.payment) + '）' : ''}</td></tr></tbody></table>
+    <ol class="terms-ol small">${REPAIR_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
+    <p class="small">✓ 客人已確認故障描述、報價與上述維修條款（${esc(o.terms || '')}）</p>
+    <div class="rc-sign"><div><img data-photo="${esc(o.dropSign)}" alt="送修簽名"><span>送修簽名 ${esc(o.customer)}</span></div>
+      <div>${pick ? `<img data-photo="${esc(o.pickSign)}" alt="取件簽名"><span>取件簽名 ${esc(o.customer)}</span>` : `<div class="rc-staff">${esc(o.staff)}</div><span>收件人員</span>`}</div></div>
+  </div>`;
+}
+function rpPreview(o, kind) {
+  const w = document.createElement('div'); w.className = 'lightbox prev';
+  w.innerHTML = `<div class="prev-box">${repairDocHTML(o, kind)}
+    <div class="no-print" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
+      ${canPrint() ? '<button class="btn" style="background:#fff;color:#111" data-print>🖨 列印</button>' : ''}
+      <button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div>
+    <p class="no-print small" style="color:rgba(255,255,255,.75);margin:8px 0 0;text-align:center">在平板上按「分享」會打開分享選單，可選「列印」「儲存到檔案」「AirDrop」或「郵件」</p></div>`;
+  document.body.appendChild(w);
+  w.onclick = e => { if (e.target === w || e.target.dataset.close !== undefined) w.remove(); };
+  const pr = $('[data-print]', w);
+  if (pr) pr.onclick = () => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 1500); };
+  const pb = $('[data-pdf]', w);
+  let file = null;
+  api('repairPdf', { id: o.id, kind }).then(r => {
     const bin = atob(r.data), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const f = new File([bytes], r.name, { type: 'application/pdf' });
-    btn.disabled = false;
-    if (canSharePdf(f)) {
-      btn.textContent = '📤 開啟分享（列印／存檔）';
-      btn.onclick = async () => { try { await navigator.share({ files: [f], title: f.name }); } catch (e) { if (e.name !== 'AbortError') downloadFile(f); } };
-      try { await navigator.share({ files: [f], title: f.name }); } catch (e) { /* 需要再按一次 */ }
-    } else { downloadFile(f); btn.textContent = label; }
-  } catch (e) { if (e.auth) return start(); toast(e.message); btn.disabled = false; btn.textContent = label; }
+    file = new File([bytes], r.name, { type: 'application/pdf' });
+    pb.disabled = false; pb.textContent = canSharePdf(file) ? '📤 分享／列印／存 PDF' : '📄 下載 PDF';
+  }).catch(e => { if (e.auth) return start(); pb.textContent = 'PDF 產生失敗：' + e.message; });
+  pb.onclick = async () => {
+    if (!file) return;
+    if (canSharePdf(file)) { try { await navigator.share({ files: [file], title: file.name }); } catch (e) { if (e.name !== 'AbortError') downloadFile(file); } }
+    else downloadFile(file);
+  };
+  loadPhotos(w);
 }
 
 /* ---------- 維修單明細（進度、項目、零件、取件） ---------- */
@@ -311,8 +348,8 @@ function repairDrawer(o) {
     <div class="d-body">
       ${wBadge(o) ? `<div class="card" style="text-align:center">${wBadge(o)}</div>` : ''}
       <div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-dark btn-sm" data-rpdf="drop">📄 送修單 PDF</button>
-        ${o.status === '已取件' ? '<button class="btn btn-dark btn-sm" data-rpdf="pickup">📄 取件單／保固 PDF</button>' : ''}</div></div>
+        <button class="btn btn-dark btn-sm" data-rpdf="drop">📄 送修單</button>
+        ${o.status === '已取件' ? '<button class="btn btn-dark btn-sm" data-rpdf="pickup">📄 取件單／保固憑證</button>' : ''}</div></div>
       <div class="card"><h3>客戶與裝置</h3><dl class="kv">
         <dt>客戶</dt><dd>${esc(o.customer)}</dd><dt>電話</dt><dd class="num"><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></dd>
         ${o.email ? `<dt>信箱</dt><dd>${esc(o.email)}</dd>` : ''}
@@ -354,7 +391,7 @@ function repairDrawer(o) {
     d.classList.add('show'); $('#scrim').classList.add('show');
     $('.d-close', d).onclick = closeDrawer;
     loadPhotos(d);
-    $$('[data-rpdf]', d).forEach(b => b.onclick = () => rpPdf(o, b.dataset.rpdf, b));
+    $$('[data-rpdf]', d).forEach(b => b.onclick = () => rpPreview(o, b.dataset.rpdf));
     if (!can) return;
     const itemsRoot = $('[data-items="d"]', d);
     if (itemsRoot) bindItemsEditor(itemsRoot, ed.items, draw);
