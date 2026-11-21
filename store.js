@@ -61,9 +61,10 @@ async function intakePage(refresh) {
   const today = new Date().toISOString().slice(0, 10);
   const todays = intakes.filter(o => o.createdAt.slice(0, 10) === today);
   app.innerHTML = `${pagesNav('intake')}
+    ${SHOP && P('create_intake') ? '<a class="shop-cta" href="#intake/new"><div><b>＋ 新增收購單</b><small>客人在現場：填商品 → 核對證件 → 雙方簽名 → 列印收購聯</small></div><span class="go">→</span></a>' : ''}
     <div class="toolbar" style="align-items:center">
       <input class="input" id="inQ" placeholder="搜尋 單號／出售人／型號／IMEI" value="${esc(inQuery)}">
-      ${P('create_intake') ? '<a class="btn btn-dark" href="#intake/new" style="white-space:nowrap">＋ 新增收購單</a>' : ''}
+      ${P('create_intake') && !SHOP ? '<a class="btn btn-dark" href="#intake/new" style="white-space:nowrap">＋ 新增收購單</a>' : ''}
     </div>
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
       <div class="stat" style="--c:#0A84FF"><div class="n num">${todays.length}</div><div class="l">今日收購單</div></div>
@@ -328,7 +329,8 @@ function drawDone() {
     <div style="display:grid;gap:10px;margin-top:18px">
       <button class="btn btn-dark btn-block" data-rc="customer">列印／存 PDF 客戶聯（交給出售人）</button>
       <button class="btn btn-ghost btn-block" data-rc="shop">列印門市存聯</button>
-      <button class="btn btn-ghost btn-block" id="nextOne">＋ 新增下一張</button></div></div>`;
+      <button class="btn btn-ghost btn-block" id="nextOne">＋ 下一位客人</button>
+      <a class="btn btn-ghost btn-block" href="#intake">回收購單列表</a></div></div>`;
   $$('[data-rc]').forEach(b => b.onclick = () => showReceipt(o, b.dataset.rc));
   $('#nextOne').onclick = () => { dr = null; intakeForm(); };
 }

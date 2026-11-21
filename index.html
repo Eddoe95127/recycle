@@ -591,7 +591,7 @@ function drawDetail(o) {
 /* ============================== 啟動 ============================== */
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
-  $('#footInfo').innerHTML = `${esc(CFG.SHOP_NAME)}・宅配收購<br><a href="${esc(CFG.OA_URL)}">LINE 官方帳號</a>　·　<a href="tel:${esc(CFG.PHONE)}">${esc(CFG.PHONE)}</a>`;
+  $('#footInfo').innerHTML = `${esc(CFG.SHOP_NAME)}・宅配收購<br><a href="${esc(CFG.OA_URL)}">LINE 官方帳號</a>　·　<a href="tel:${esc(CFG.PHONE)}">${esc(CFG.PHONE)}</a><br><a href="shop.html" style="opacity:.55;font-size:12px">門市人員入口</a>`;
   try { await initLine(); }
   catch (e) { app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">LINE 初始化失敗：${esc(e.message)}</div></div>`; return; }
   // LIFF / 通知信連結使用 ?page=…&id=…，轉成站內路由

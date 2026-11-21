@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>收購後台｜iPhone收購中心</title>
+<link rel="manifest" href="shop.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="門市收購">
+<meta name="theme-color" content="#f5f5f7">
 <link rel="stylesheet" href="style.css?v=20261121b">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -149,6 +155,17 @@
   .rc-sign span { font-size: 13px; color: #555; }
   @media (max-width: 600px) { .in-steps div { font-size: 12px; padding: 8px; } .receipt { padding: 14px; } }
   @media print { .lightbox.prev { position: static; background: none; padding: 0; } .receipt { padding: 0; } }
+  /* 門市工作台（admin.html?shop=1）：字大、按鈕大，適合平板在客人面前操作 */
+  body.shop { font-size: 16px; }
+  body.shop .input { font-size: 17px; min-height: 48px; }
+  body.shop .chip span { padding: 10px 18px; font-size: 16px; }
+  body.shop .chip-btn { padding: 8px 14px; font-size: 15px; }
+  body.shop .in-wrap { max-width: 880px; }
+  body.shop .in-foot .btn { min-height: 52px; font-size: 17px; padding: 0 26px; }
+  body.shop .check { font-size: 16px; }
+  body.shop .sig-pad { border-width: 3px; }
+  .shop-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 28px; border-radius: 20px; background: #1d1d1f; color: #fff; text-decoration: none; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .shop-cta b { font-size: 24px; display: block; } .shop-cta small { opacity: .7; font-size: 14px; } .shop-cta span.go { font-size: 34px; }
   .uid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f2f2f4; padding: 10px 12px; border-radius: 10px; word-break: break-all; margin: 12px 0; }
 </style>
 </head>
@@ -167,7 +184,7 @@
 <script src="device-ocr.js?v=20261121b" defer></script>
 <script src="config.js?v=20261121b"></script>
 <script src="shared.js?v=20261121b"></script>
-<script src="store.js?v=20261121b"></script>
+<script src="store.js?v=20261121c"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -191,6 +208,14 @@ const thisMonth = () => { const d = new Date(); return d.getFullYear() + '-' + S
 let me = null; // { name, role, via, perms, permDefs, rolePresets }
 const P = p => !!me && me.perms.includes(p);
 const isBoss = () => !!me && me.role === '老闆';
+const SHOP = new URLSearchParams(location.search).has('shop'); // 門市工作台模式
+const SHOP_PAGES = ['intake', 'intake/new', 'stock', 'account'];
+if (SHOP) {
+  document.body.classList.add('shop');
+  document.title = '門市工作台｜iPhone收購中心';
+  $('.nav .tag').textContent = '門市工作台';
+  $('.nav .logo').href = 'admin.html?shop=1#intake';
+}
 
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
@@ -219,6 +244,11 @@ async function start() {
 function route() {
   const page = location.hash.slice(1);
   closeDrawer();
+  if (SHOP && !SHOP_PAGES.includes(page)) {
+    if (P('create_intake') || canStoreView()) { location.hash = '#intake'; return; }
+    app.innerHTML = `<div class="card gate">您的帳號沒有門市收購權限，請老闆在「員工帳號」勾選「門市收購登記」。<br><br><a class="btn btn-ghost btn-sm" href="admin.html">前往後台</a></div>`;
+    return;
+  }
   $('#refresh').hidden = page === 'users' || page === 'account';
   if (page === 'users' && P('manage_users')) return usersPage();
   if (page === 'account') return accountPage();
@@ -228,16 +258,21 @@ function route() {
   load();
 }
 function pagesNav(cur) {
-  const items = [['', '宅配訂單'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
+  if (SHOP) {
+    const s = [['intake', '收購單'], canStoreView() && ['stock', '庫存'], ['account', '我的帳號']].filter(Boolean);
+    const full = isBoss() || ['manage_users', 'edit_payment', 'edit_report', 'edit_shipping', 'edit_any'].some(P);
+    return `<nav class="pages">${s.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}${full ? '<a href="admin.html" style="margin-left:auto">完整後台 ↗</a>' : ''}</nav>`;
+  }
+  const items = [['', '宅配訂單'], P('create_intake') && ['shopLink', '門市工作台 ↗'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], canStoreView() && ['stock', '庫存'],
     P('edit_payment') && ['remit', '匯款'], P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']].filter(Boolean);
-  return `<nav class="pages">${items.map(([k, l]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
+  return `<nav class="pages">${items.map(([k, l]) => k === 'shopLink' ? `<a href="admin.html?shop=1#intake/new" style="order:99;margin-left:auto">${l}</a>` : `<a href="#${k}" class="${cur === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 
 /* ---------- 員工登入 ---------- */
 function staffLoginPage(denied) {
   $('#who').textContent = ''; $('#logout').hidden = true; $('#refresh').hidden = true;
   app.innerHTML = `<div class="card staff-login rise">
-    <h2 class="card-title" style="font-size:22px">收購後台登入</h2>
+    <h2 class="card-title" style="font-size:22px">${SHOP ? '門市工作台登入' : '收購後台登入'}</h2>
     <p class="muted" style="margin:6px 0 20px">請輸入老闆給您的員工帳號與密碼</p>
     ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
       ${denied.via === 'LINE' ? `<details style="margin-top:6px"><summary>我是老闆，要開通這個 LINE 帳號</summary>
