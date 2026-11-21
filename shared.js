@@ -562,9 +562,10 @@ async function mockApiInner(action, d) {
     const a = JSON.parse(JSON.stringify(o)); a.masked = {};
     const m = (v, h, t) => v.length <= h + t ? v : v.slice(0, h) + '*'.repeat(v.length - h - t) + v.slice(-t);
     if (!s.perms.includes('view_contact') && a.phone) { a.phone = m(a.phone, 2, 3); a.masked.phone = true; }
+    if (!s.perms.includes('view_contact') && a.email) { a.email = a.email.replace(/^(.{1,2})[^@]*/, '$1***'); a.masked.email = true; a.mailLog = (a.mailLog || '').replace(/[^\s@（→]+@/g, '***@'); }
     if (!s.perms.includes('view_bank') && a.account) { a.account = m(a.account, 0, 4); a.masked.account = true; }
     if (!s.perms.includes('view_id')) { a.masked.id = a.idPhotos.length; a.idPhotos = []; }
-    if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.total = null; a.items.forEach(it => it.price = null); }
+    if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.total = null; a.items.forEach(it => { it.price = null; it.base = null; (it.deductions || []).forEach(x => { x.amount = null; }); }); }
     if (!s.perms.includes('edit_payment') && !s.perms.includes('view_bank')) a.proofs = [];
     return a;
   };
@@ -656,15 +657,24 @@ async function mockApiInner(action, d) {
     case 'intakeCreate': {
       const s = need('create_intake');
       if (!d.seller) throw new Error('請填寫出售人姓名');
+      if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) throw new Error('電子信箱格式不正確');
       if (!d.sellerSign) throw new Error('請出售人完成簽名');
       const day = now().slice(2, 10).replace(/-/g, ''), id = 'IN' + day + String(mockIntakes.length + 1).padStart(3, '0');
       const save = (u) => { const k = 'mk' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[k] = u; return k; };
-      const items = d.items.map(it => ({ ...it, price: Number(it.price) || 0, photos: it.photos.map(save) }));
+      const items = d.items.map(it => { const base = Number(it.base) || Number(it.price) || 0, deductions = (it.deductions || []).filter(x => x.reason || x.amount).map(x => ({ reason: x.reason, amount: Number(x.amount) || 0 }));
+        return { ...it, _m: undefined, _open: undefined, base, deductions, price: Math.max(0, base - deductions.reduce((s, x) => s + x.amount, 0)), photos: it.photos.map(save) }; });
       const o = { id, createdAt: now(), staff: s.name, seller: d.seller, phone: d.phone, payment: d.payment, bank: d.bank || '', account: d.account || '', period: d.payment === '轉帳' ? d.period : '', payDate: d.payDate || '',
         total: items.reduce((t, it) => t + it.price, 0), remit: d.payment === '轉帳' ? '待匯款' : '', remitAt: '', remitBy: '', verified: true, noticeAt: d.idPhotos.length ? d.noticeAt : '',
-        terms: '2026-11-21 門市收購條款 v1', items, idPhotos: d.idPhotos.map(save), sellerSign: save(d.sellerSign), staffSign: d.staffSign ? save(d.staffSign) : '', staffUser: s.username || '老闆（LINE）', proofs: [] };
+        terms: '2026-11-21 門市收購條款 v1', items, idPhotos: d.idPhotos.map(save), sellerSign: save(d.sellerSign), staffSign: d.staffSign ? save(d.staffSign) : '', staffUser: s.username || '老闆（LINE）', proofs: [], email: (d.email || '').toLowerCase(), mailLog: d.email ? `${now()} 已寄送 → ${(d.email || '').toLowerCase()}（模擬）` : '' };
       mockIntakes.push(o);
       items.forEach((it, i) => mockStock.push({ sku: id + '-' + (i + 1), source: '門市', ref: id, inAt: o.createdAt, category: it.category, model: it.model, capacity: it.capacity, color: it.color, serial: it.serial, notes: it.notes, cost: it.price, status: '在庫', saleDate: '', channel: '', salePrice: '', updatedAt: o.createdAt, updatedBy: s.name, photos: it.photos }));
+      return { ok: true, intake: inOut(o, s) };
+    }
+    case 'intakeMail': {
+      const s = need('create_intake'), o = mockIntakes.find(x => x.id === d.id);
+      const email = (d.email || '').toLowerCase() || o.email;
+      if (!email) throw new Error('請填寫客人的電子信箱');
+      o.email = email; o.mailLog = `${now()} 已寄送 → ${email}（模擬）` + (o.mailLog ? '\n' + o.mailLog : '');
       return { ok: true, intake: inOut(o, s) };
     }
     case 'intakeRemit': {

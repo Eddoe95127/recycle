@@ -138,8 +138,50 @@
   .small-chips { gap: 6px; }
   .ph-add.disabled { opacity: .4; pointer-events: none; }
   .sig-pad { width: 100%; aspect-ratio: 600/220; border: 2px dashed var(--line-2); border-radius: 12px; background: #fff; touch-action: none; margin-top: 6px; cursor: crosshair; }
+  .est-open { margin-bottom: 12px; flex-direction: column; gap: 2px; }
+  .est-open small { font-size: 12px; font-weight: 400; opacity: .75; }
+  .est-box { max-width: 560px !important; max-height: 88vh; overflow-y: auto; }
+  .est-box .chips { flex-wrap: wrap; }
+  /* 門市檢測評估 */
+  .eval-box { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 4px 0 14px; background: #fafafb; }
+  .eval-h { font-weight: 700; margin-bottom: 8px; }
+  .ck-wrap { border-top: 1px solid var(--line); padding-top: 8px; }
+  .ck-wrap summary { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; list-style: none; }
+  .ck-wrap summary::-webkit-details-marker { display: none; }
+  .ck-wrap summary::after { content: '展開 ▾'; margin-left: auto; font-size: 13px; color: var(--blue, #0a84ff); }
+  .ck-wrap[open] summary::after { content: '收合 ▴'; }
+  .in-eval .rep-item + .rep-item { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .in-eval.compact { font-size: 12px; }
+  .in-eval.compact .rep-checks { grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
+  .in-eval.compact .chk { padding: 3px 0; font-size: 11px; }
+  .in-eval.compact .chk .ico { width: 14px; height: 14px; font-size: 9px; }
+  .in-eval.compact .rep-price { font-size: 12px; margin-top: 6px; }
+  .in-eval.compact .rep-price td { padding: 3px 0; }
+  .in-eval.compact .rep-tags { margin: 4px 0 6px; }
+  .in-eval.compact .tag { font-size: 11px; padding: 2px 8px; }
+  /* 掃描框 */
+  .scan-wrap { position: fixed; inset: 0; z-index: 400; background: #000; color: #fff; overflow: hidden; }
+  .scan-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .scan-frame { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: min(90vw, 640px); height: min(42vh, 420px); border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(0,0,0,.55); }
+  .scan-frame i { position: absolute; width: 34px; height: 34px; border: 4px solid #34c759; }
+  .scan-frame i:nth-child(1) { left: -2px; top: -2px; border-right: 0; border-bottom: 0; border-radius: 14px 0 0 0; }
+  .scan-frame i:nth-child(2) { right: -2px; top: -2px; border-left: 0; border-bottom: 0; border-radius: 0 14px 0 0; }
+  .scan-frame i:nth-child(3) { left: -2px; bottom: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 14px; }
+  .scan-frame i:nth-child(4) { right: -2px; bottom: -2px; border-left: 0; border-top: 0; border-radius: 0 0 14px 0; }
+  .scan-line { position: absolute; left: 4%; right: 4%; height: 2px; background: linear-gradient(90deg, transparent, #34c759, transparent); animation: scanline 2.2s ease-in-out infinite; }
+  @keyframes scanline { 0%, 100% { top: 6%; } 50% { top: 92%; } }
+  .scan-top { position: absolute; left: 0; right: 0; top: max(18px, env(safe-area-inset-top)); text-align: center; padding: 0 20px; display: grid; gap: 4px; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+  .scan-top b { font-size: 18px; } .scan-top span { font-size: 13px; opacity: .85; }
+  .scan-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px max(18px, env(safe-area-inset-bottom)); text-align: center; }
+  .scan-chips { display: flex; gap: 8px; justify-content: center; }
+  .scan-chips span { padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 13px; }
+  .scan-chips span.ok { background: #34c759; color: #fff; } .scan-chips span.ok::before { content: '✓ '; }
+  .scan-msg { margin: 10px 0 12px; font-size: 14px; min-height: 20px; }
+  .scan-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .scan-ghost { background: rgba(255,255,255,.16); color: #fff; border: 0; } .scan-ghost.on { background: #ffd60a; color: #111; }
+  .scan-use { background: #34c759 !important; color: #fff !important; } .scan-use:disabled { opacity: .45; }
   .sig-big { aspect-ratio: auto; height: clamp(300px, 50vh, 560px); border-width: 3px; margin-top: 10px; border-radius: 16px; }
-  .rc-staff { aspect-ratio: 600/220; max-width: 260px; display: flex; align-items: flex-end; padding-bottom: 6px; font-size: 18px; font-weight: 600; border-bottom: 1px solid #111; }
+  .rc-staff { aspect-ratio: 600/220; max-width: 260px; display: flex; align-items: flex-end; padding-bottom: 6px; font-size: 14px; border-bottom: 1px solid #111; }
   .sig-img { display: block; width: 100%; max-width: 260px; aspect-ratio: 600/220; object-fit: contain; border-bottom: 1px solid var(--line-2); background: #fff; }
   .terms-ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.7; font-size: 14px; }
   .notice-kv dd { font-size: 13px; }
@@ -194,10 +236,10 @@
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
 <script>window.AUTH_NS = 'admin_';</script>
-<script src="device-ocr.js?v=20261121d" defer></script>
+<script src="device-ocr.js?v=20261122a" defer></script>
 <script src="config.js?v=20261121d"></script>
-<script src="shared.js?v=20261121k"></script>
-<script src="store.js?v=20261121k"></script>
+<script src="shared.js?v=20261122b"></script>
+<script src="store.js?v=20261122c"></script>
 <script>
 const app = $('#app');
 let orders = [];

@@ -22,6 +22,57 @@ const deviceOcr = (() => {
     return library;
   }
 
+  /** OCR 常把數字讀成相似字母 */
+  const digits = value => String(value || '').replace(/[\s-]/g,'').replace(/[Oo]/g,'0').replace(/[Il|]/g,'1').replace(/S/g,'5').replace(/B/g,'8');
+  /** IMEI 檢查碼（Luhn） */
+  function luhn(code) {
+    if (!/^\d{15}$/.test(code)) return false;
+    let sum = 0;
+    for (let i = 0; i < 15; i++) { let d = +code[i]; if (i % 2) { d *= 2; if (d > 9) d -= 9; } sum += d; }
+    return sum % 10 === 0;
+  }
+
+  /** 影像前處理：只取框內、放大、灰階、拉高對比；深色模式畫面自動反白 */
+  function enhance(source, sx, sy, sw, sh, maxWidth = 1600) {
+    const scale = Math.min(maxWidth / sw, 3);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const img = g.getImageData(0, 0, canvas.width, canvas.height), px = img.data, n = px.length / 4;
+    const hist = new Uint32Array(256), lum = new Uint8ClampedArray(n);
+    let total = 0;
+    for (let i = 0; i < n; i++) { const v = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000; lum[i] = v; hist[lum[i]]++; total += v; }
+    const pick = q => { let acc = 0; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * q) return v; } return 255; };
+    const lo = pick(0.02), hi = Math.max(lo + 1, pick(0.98)), dark = total / n < 110;
+    for (let i = 0; i < n; i++) {
+      let v = (lum[i] - lo) * 255 / (hi - lo);
+      if (dark) v = 255 - v;
+      v = Math.max(0, Math.min(255, v));
+      px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v; px[i * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  /** 連續掃描用：建立一次辨識引擎，重複使用 */
+  async function session() {
+    const api = await loadLibrary();
+    const worker = await api.createWorker(['eng','chi_tra'], api.OEM.LSTM_ONLY, {
+      workerPath:new URL('worker.min.js',assets).href,
+      corePath:new URL('tesseract-core-lstm.wasm.js',assets).href,
+      langPath:assets.href,
+      workerBlobURL:false,
+    });
+    await worker.setParameters({ tessedit_pageseg_mode:api.PSM.SPARSE_TEXT });
+    return {
+      async read(canvas) { const r = await worker.recognize(canvas); return { ...parse(r.data.text), text: r.data.text }; },
+      end() { void worker.terminate(); },
+    };
+  }
+
   function parse(text) {
     const lines = text.normalize('NFKC').split(/\r?\n/).map(line => line.replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\s+/g,' ').trim()).filter(Boolean);
     const isLabel = line => [modelNameLabel,modelNumberLabel,serialLabel,imeiLabel,fields].some(label => label.test(line));
@@ -44,13 +95,16 @@ const deviceOcr = (() => {
     const part = firstValid(modelNumberLabel, value => /^[a-z0-9][a-z0-9\-/]{3,25}$/i.test(value) && /\d/.test(value) ? value.toUpperCase() : '');
     const model = iPhoneName || named || part || all.match(/\bA\s*\d{4}\b/i)?.[0].replace(/\s/g,'').toUpperCase() || '';
     const serial = firstValid(serialLabel, value => {
-      const code = value.replace(/\s+/g,'');
-      return /^[A-Z0-9][A-Z0-9-]{4,31}$/i.test(code) && (/\d/.test(code) || code === code.toUpperCase()) ? code.toUpperCase() : '';
+      // Apple 序號不使用 O、I，OCR 讀成 O／I 的其實是 0／1
+      const code = value.replace(/\s+/g,'').toUpperCase().replace(/O/g,'0').replace(/I/g,'1');
+      return /^[A-Z0-9][A-Z0-9-]{4,31}$/.test(code) && /\d/.test(code) ? code : '';
     });
-    const imei = firstValid(imeiLabel, value => {
-      const code = value.replace(/[\s-]/g,'');
-      return /^\d{15}$/.test(code) ? code : '';
-    });
+    const imeiOk = value => { const code = digits(value); return luhn(code) ? code : ''; };
+    let imei = firstValid(imeiLabel, imeiOk);
+    if (!imei) { // 沒有讀到「IMEI」字樣：整段文字裡找符合檢查碼的 15 位數字
+      const runs = all.match(/(?:[\dOoIlSB][\s-]?){15,17}/g) || [];
+      imei = runs.map(imeiOk).find(Boolean) || '';
+    }
     return { model, serial, imei };
   }
 
@@ -68,7 +122,7 @@ const deviceOcr = (() => {
       context.fillStyle = 'white';
       context.fillRect(0,0,canvas.width,canvas.height);
       context.drawImage(image,0,0,canvas.width,canvas.height);
-      return canvas;
+      return enhance(canvas, 0, 0, canvas.width, canvas.height, 2000);
     } catch {
       throw new Error('無法讀取照片，請試用 JPG 或 PNG。');
     } finally {
@@ -113,5 +167,5 @@ const deviceOcr = (() => {
     }
   }
 
-  return { parse, recognize };
+  return { parse, recognize, session, enhance, luhn };
 })();
