@@ -262,7 +262,7 @@ function drawForm() {
   const keepY = window.scrollY;
   const steps = ['商品與交易', '證件核對', '確認與簽名'];
   app.innerHTML = `${pagesNav('intake')}
-    <div class="in-wrap">
+    <div class="in-wrap${drStep === 3 ? ' sign-step' : ''}">
       <div class="in-steps">${steps.map((s, i) => `<div class="${i + 1 === drStep ? 'on' : i + 1 < drStep ? 'done' : ''}"><i>${i + 1 < drStep ? '✓' : i + 1}</i>${s}</div>`).join('')}</div>
       <div id="inBody">${drStep === 1 ? stepItems() : drStep === 2 ? stepId() : stepSign()}</div>
       <div class="in-foot"><span class="err" id="inErr" style="flex:1;margin:0"></span>
