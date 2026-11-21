@@ -4,22 +4,20 @@
  * ===================================================================== */
 const COMPANY = CFG.COMPANY || '丰格科技有限公司';
 const IN_CATS = {
-  '手機': ['iPhone 17 Pro Max', 'iPhone 17 Pro', 'iPhone 17', 'iPhone Air', 'iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16 Plus', 'iPhone 16', 'iPhone 16e',
-    'iPhone 15 Pro Max', 'iPhone 15 Pro', 'iPhone 15 Plus', 'iPhone 15', 'iPhone 14 Pro Max', 'iPhone 14 Pro', 'iPhone 14 Plus', 'iPhone 14',
-    'iPhone 13 Pro Max', 'iPhone 13 Pro', 'iPhone 13', 'iPhone 13 mini', 'iPhone 12 Pro Max', 'iPhone 12 Pro', 'iPhone 12', 'iPhone 12 mini',
-    'iPhone 11 Pro Max', 'iPhone 11 Pro', 'iPhone 11', 'iPhone SE（第 3 代）', 'iPhone SE（第 2 代）'],
-  '平板': ['iPad', 'iPad mini', 'iPad Air', 'iPad Pro'],
-  '筆電': ['MacBook Air', 'MacBook Pro', 'MacBook'],
-  '其他 3C': ['Apple Watch', 'AirPods', 'AirPods Pro', 'AirPods Max', 'Mac mini', 'iMac', 'Mac Studio'],
+  '手機': [...IPHONE_MODELS].reverse().concat(['iPhone SE（第 3 代）', 'iPhone SE（第 2 代）']),
+  '平板': IPAD_MODELS.filter(m => m !== '其他 iPad'),
+  '筆電': ['MacBook Air 13吋', 'MacBook Air 15吋', 'MacBook Pro 13吋', 'MacBook Pro 14吋', 'MacBook Pro 15吋', 'MacBook Pro 16吋', 'iMac 24吋', 'iMac 27吋', 'Mac mini', 'Mac Studio', 'Studio Display'],
+  '其他 3C': ['Apple Watch S6', 'Apple Watch S7／SE2', 'Apple Watch S8', 'Apple Watch S9／SE3', 'Apple Watch S10', 'Apple Watch S11', 'Apple Watch S12', 'Apple Watch Ultra', 'Apple Watch Ultra 2', 'Apple Watch Ultra 3',
+    'AirPods 3', 'AirPods 4', 'AirPods 5', 'AirPods Pro', 'AirPods Pro 2', 'AirPods Pro 3', 'AirPods Max', 'Apple Pencil', '巧控鍵盤', 'HomePod mini', 'HomePod'],
   '其他商品': [],
 };
-const IN_CAPS = ['64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
+const IN_CAPS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 const IN_COLORS = ['黑色', '白色', '銀色', '灰色', '金色', '藍色', '綠色', '粉紅色', '紫色', '紅色', '原色鈦金屬', '沙漠色鈦金屬'];
 const IN_NOTES = ['螢幕刮傷', '螢幕破裂', '邊框刮傷', '邊框凹傷', '背蓋破裂', '電池需更換', '無法充電', '無法開機', '相機異常', 'Face ID 異常', '附原盒', '附充電線'];
 const IN_BANKS = ['004 臺灣銀行', '005 臺灣土地銀行', '006 合作金庫', '007 第一銀行', '008 華南銀行', '009 彰化銀行', '012 台北富邦', '013 國泰世華',
   '017 兆豐銀行', '700 中華郵政', '803 聯邦銀行', '805 遠東銀行', '806 元大銀行', '807 永豐銀行', '808 玉山銀行', '809 凱基銀行', '812 台新銀行',
   '822 中國信託', '823 將來銀行', '824 LINE Bank'];
-const IN_PERIODS = ['收購當日', '收購後 1 個工作天內', '收購後 3 個工作天內', '指定日期'];
+const IN_PERIODS = ['收購當日', '收購後 1 個工作天內', '收購後 3 個工作天內', '收購後 7 個工作天內', '指定日期'];
 const SALE_CHANNELS = ['門市', '蝦皮', '露天', 'Facebook', '同業批發', '其他'];
 const IN_TERMS = [
   ['交易與付款', '雙方以本單所列商品、收購金額及付款方式為本次買賣內容。出售人依約交付商品，門市依約支付價款；付款是否完成，以實際收款或轉帳紀錄為準。'],
@@ -184,13 +182,25 @@ function drawForm() {
   bindForm();
   window.scrollTo(0, 0);
 }
+const IN_OTHER = '__other';
+/** 下拉選單；選「其他（手動輸入）」或原本的值不在清單裡時，下面出現輸入框。attr：'data-f="model"' 或 'data-k="bank"' */
+function pickField(label, attr, val, options, manual, ph = '') {
+  const isManual = manual || (val && !options.includes(val));
+  return `<label class="field"><span>${label}</span>
+    <select class="input" data-pick ${attr}>
+      <option value="" ${!val && !isManual ? 'selected' : ''}>請選擇</option>
+      ${options.map(o => `<option ${!isManual && val === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+      <option value="${IN_OTHER}" ${isManual ? 'selected' : ''}>其他（手動輸入）</option>
+    </select>
+    ${isManual ? `<input class="input" ${attr} value="${esc(val)}" placeholder="${esc(ph || '請輸入')}" style="margin-top:6px" data-manual>` : ''}</label>`;
+}
 const fld = (label, key, val, extra = '') => `<label class="field"><span>${label}</span><input class="input" data-k="${key}" value="${esc(val)}" ${extra}></label>`;
 function stepItems() {
   return `<div class="card"><h3>出售人與付款</h3>
       <div class="grid2">${fld('出售人姓名 *', 'seller', dr.seller, 'autocomplete="off"')}${fld('聯絡電話', 'phone', dr.phone, 'type="tel" inputmode="tel" placeholder="選填"')}</div>
       <div class="field"><span>付款方式 *</span><div class="chips">${['現金', '轉帳'].map(p => `<label class="chip"><input type="radio" name="pay" value="${p}" ${dr.payment === p ? 'checked' : ''}><span>${p}</span></label>`).join('')}</div></div>
       ${dr.payment === '轉帳' ? `<div class="grid2">
-        <label class="field"><span>收款銀行 *</span><input class="input" data-k="bank" list="bankList" value="${esc(dr.bank)}" placeholder="例：822 中國信託"><datalist id="bankList">${IN_BANKS.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
+        ${pickField('收款銀行 *', 'data-k="bank"', dr.bank, IN_BANKS, dr._mbank, '例：700 中華郵政')}
         ${fld('收款帳號 *', 'account', dr.account, 'inputmode="numeric" autocomplete="off"')}
         <label class="field"><span>匯款期限</span><select class="input" data-k="period">${IN_PERIODS.map(p => `<option ${dr.period === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
         ${dr.period === '指定日期' ? fld('指定日期', 'payDate', dr.payDate, 'type="date"') : ''}</div>
@@ -200,10 +210,10 @@ function stepItems() {
       <h3 style="display:flex;justify-content:space-between">商品 ${i + 1}${dr.items.length > 1 ? `<button class="link" data-del-item="${i}" style="font-size:13px">移除</button>` : ''}</h3>
       <div class="chips" style="margin-bottom:10px">${Object.keys(IN_CATS).map(c => `<label class="chip"><input type="radio" name="cat${i}" data-cat value="${c}" ${it.category === c ? 'checked' : ''}><span>${c}</span></label>`).join('')}</div>
       <div class="grid2">
-        <label class="field"><span>品名／型號 *</span><input class="input" data-f="model" list="ml${i}" value="${esc(it.model)}" placeholder="可直接輸入"><datalist id="ml${i}">${IN_CATS[it.category].map(m => `<option value="${esc(m)}">`).join('')}</datalist></label>
+        ${IN_CATS[it.category].length ? pickField('品名／型號 *', 'data-f="model"', it.model, IN_CATS[it.category], it._m && it._m.model, '輸入完整型號') : `<label class="field"><span>品名／型號 *</span><input class="input" data-f="model" value="${esc(it.model)}" placeholder="例：Switch 主機、相機"></label>`}
         <label class="field"><span>收購金額（NT$）*</span><input class="input num" data-f="price" inputmode="numeric" value="${esc(it.price)}" placeholder="整數"></label>
-        <label class="field"><span>容量／規格</span><input class="input" data-f="capacity" list="capList" value="${esc(it.capacity)}"></label>
-        <label class="field"><span>顏色</span><input class="input" data-f="color" list="colList" value="${esc(it.color)}"></label>
+        ${pickField(it.category === '筆電' ? '年份／規格' : '容量／規格', 'data-f="capacity"', it.capacity, it.category === '筆電' ? [] : IN_CAPS, it._m && it._m.capacity, it.category === '筆電' ? '例：2023 M3 / 16GB / 512GB' : '')}
+        ${pickField('顏色', 'data-f="color"', it.color, IN_COLORS, it._m && it._m.color)}
       </div>
       <label class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
         <label class="link" style="font-size:13px;cursor:pointer">📷 拍設定畫面自動辨識<input type="file" accept="image/*" capture="environment" hidden data-ocr></label></span>
@@ -216,7 +226,6 @@ function stepItems() {
           ${it.photos.length < 8 ? `<label class="ph-add">📷 拍照<input type="file" accept="image/*" capture="environment" hidden data-photo-add></label>
           <label class="ph-add">＋ 相簿<input type="file" accept="image/*" multiple hidden data-photo-add></label>` : ''}</div></div>
     </div>`).join('')}
-    <datalist id="capList">${IN_CAPS.map(c => `<option value="${c}">`).join('')}</datalist><datalist id="colList">${IN_COLORS.map(c => `<option value="${c}">`).join('')}</datalist>
     <button class="btn btn-ghost btn-block" id="addItem">＋ 再加一件商品</button>
     ${P('view_cost') ? `<div class="rep-total" style="margin-top:14px"><span>合計</span><b id="inTotal">NT$ ${money(sumDraft())}</b></div>` : ''}`;
 }
@@ -249,12 +258,22 @@ function stepSign() {
 
 function bindForm() {
   const body = $('#inBody'), err = m => { $('#inErr').textContent = m || ''; };
-  $$('[data-k]', body).forEach(el => el.oninput = el.onchange = () => { dr[el.dataset.k] = el.value; if (el.dataset.k === 'period') drawForm(); });
+  $$('[data-k]:not([data-pick])', body).forEach(el => el.oninput = el.onchange = () => { dr[el.dataset.k] = el.value; if (el.dataset.k === 'period') drawForm(); });
+  $$('select[data-pick][data-k]', body).forEach(el => el.onchange = () => {
+    const k = el.dataset.k, other = el.value === IN_OTHER;
+    dr['_m' + k] = other; dr[k] = other ? '' : el.value; drawForm();
+    if (other) $(`input[data-k="${k}"][data-manual]`)?.focus();
+  });
   $$('input[name=pay]', body).forEach(r => r.onchange = () => { dr.payment = r.value; drawForm(); });
   $$('[data-i]', body).forEach(card => {
     const it = dr.items[+card.dataset.i];
-    $$('[data-f]', card).forEach(el => el.oninput = () => { it[el.dataset.f] = el.value; if (el.dataset.f === 'price' && $('#inTotal')) $('#inTotal').textContent = 'NT$ ' + money(sumDraft()); });
-    $$('[data-cat]', card).forEach(r => r.onchange = () => { it.category = r.value; drawForm(); });
+    $$('select[data-pick][data-f]', card).forEach(el => el.onchange = () => {
+      const f = el.dataset.f, other = el.value === IN_OTHER;
+      it._m = it._m || {}; it._m[f] = other; it[f] = other ? '' : el.value;
+      if (other) { drawForm(); $(`[data-i="${card.dataset.i}"] input[data-f="${f}"][data-manual]`)?.focus(); }
+    });
+    $$('[data-f]:not(select)', card).forEach(el => el.oninput = () => { it[el.dataset.f] = el.value; if (el.dataset.f === 'price' && $('#inTotal')) $('#inTotal').textContent = 'NT$ ' + money(sumDraft()); });
+    $$('[data-cat]', card).forEach(r => r.onchange = () => { it.category = r.value; it.model = ''; it.capacity = ''; it._m = {}; drawForm(); });
     $$('[data-note]', card).forEach(b => b.onclick = () => { if (!it.notes.includes(b.dataset.note)) it.notes = (it.notes ? it.notes + '、' : '') + b.dataset.note; $('[data-f=notes]', card).value = it.notes; });
     $$('[data-delph]', card).forEach(b => b.onclick = () => { it.photos.splice(+b.dataset.delph, 1); drawForm(); });
     $$('[data-photo-add]', card).forEach(inp => inp.onchange = async () => {
