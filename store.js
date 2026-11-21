@@ -300,7 +300,7 @@ function stepItems() {
       <div class="grid2">
         ${IN_CATS[it.category].length ? pickField('品名／型號 *', 'data-f="model"', it.model, IN_CATS[it.category], it._m && it._m.model, '輸入完整型號') : `<label class="field"><span>品名／型號 *</span><input class="input" data-f="model" value="${esc(it.model)}" placeholder="例：Switch 主機、相機"></label>`}
         ${pickField(it.category === '筆電' ? '年份／規格' : '容量／規格', 'data-f="capacity"', it.capacity, it.category === '筆電' ? [] : IN_CAPS, it._m && it._m.capacity, it.category === '筆電' ? '例：2023 M3 / 16GB / 512GB' : '')}
-        ${pickField('顏色', 'data-f="color"', it.color, IN_COLORS, it._m && it._m.color)}
+        ${pickField('顏色', 'data-f="color"', it.color, it.category === '手機' || it.category === '平板' || it.category === '筆電' ? colorsFor(it.model) : IN_COLORS, it._m && it._m.color)}
       </div>
       <label class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
         <button type="button" class="link" style="font-size:14px" data-scan>📷 掃描自動辨識</button></span>
@@ -363,6 +363,7 @@ function bindForm() {
       const f = el.dataset.f, other = el.value === IN_OTHER;
       it._m = it._m || {}; it._m[f] = other; it[f] = other ? '' : el.value;
       if (other) { drawForm(); $(`[data-i="${card.dataset.i}"] input[data-f="${f}"][data-manual]`)?.focus(); }
+      else if (f === 'model') drawForm(); // 換型號：顏色選項跟著換
     });
     const updPrice = () => {
       it.price = String(itemPrice(it));

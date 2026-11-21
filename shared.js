@@ -55,6 +55,39 @@ const IPAD_MODELS = [ // 與線上估價表的 iPad 型號名稱一致，估價�
   'iPad 11th (A16)', 'iPad 10th', 'iPad 9th', 'iPad 8th', 'iPad 7th', 'iPad 6th', 'iPad mini 7', 'iPad mini 6', 'iPad mini 5',
   'iPad Pro 11吋 第4代', 'iPad Pro 11吋 第3代', 'iPad Pro 11吋 第2代', 'iPad Pro 11吋 第1代',
   'iPad Pro 12.9吋 第6代', 'iPad Pro 12.9吋 第5代', 'iPad Pro 12.9吋 第4代', 'iPad Pro 12.9吋 第3代', '其他 iPad'];
+/* ---------- 顏色（依型號） ---------- */
+const RED = '(PRODUCT)RED 紅色';
+const IPHONE_COLORS = {
+  'iPhone 11': ['黑色', '白色', '紫色', '綠色', '黃色', RED],
+  'iPhone 11 Pro': ['夜幕綠色', '太空灰色', '銀色', '金色'],
+  'iPhone 12': ['黑色', '白色', '藍色', '綠色', '紫色', RED],
+  'iPhone 12 Pro': ['石墨色', '銀色', '金色', '太平洋藍色'],
+  'iPhone 13': ['午夜色', '星光色', '藍色', '粉紅色', '綠色', RED],
+  'iPhone 13 Pro': ['石墨色', '金色', '銀色', '天峰藍色', '松嶺青色'],
+  'iPhone 14': ['午夜色', '星光色', '藍色', '紫色', '黃色', RED],
+  'iPhone 14 Pro': ['太空黑色', '銀色', '金色', '深紫色'],
+  'iPhone 15': ['黑色', '藍色', '綠色', '黃色', '粉紅色'],
+  'iPhone 15 Pro': ['黑色鈦金屬', '白色鈦金屬', '藍色鈦金屬', '原色鈦金屬'],
+  'iPhone 16e': ['黑色', '白色'],
+  'iPhone 16': ['黑色', '白色', '粉紅色', '深青色', '群青色'],
+  'iPhone 16 Pro': ['黑色鈦金屬', '白色鈦金屬', '原色鈦金屬', '沙漠色鈦金屬'],
+  'iPhone 17': ['黑色', '白色', '薰衣草紫色', '霧藍色', '鼠尾草綠色'],
+  'iPhone Air': ['太空黑色', '雲白色', '淺金色', '天藍色'],
+  'iPhone 17 Pro': ['宇宙橙色', '深藍色', '銀色'],
+  'iPhone SE': ['黑色', '白色', '午夜色', '星光色', RED],
+};
+const GENERAL_COLORS = ['黑色', '白色', '銀色', '太空灰色', '太空黑色', '金色', '星光色', '午夜色', '藍色', '綠色', '紫色', '粉紅色', '黃色', '紅色', '橙色'];
+/** 依型號給顏色選項；同系列 mini／Plus／Pro Max 用基本款或 Pro 的顏色 */
+function colorsFor(model) {
+  const m = String(model || '').trim();
+  if (IPHONE_COLORS[m]) return IPHONE_COLORS[m];
+  const key = m.replace(/\s*(mini|Plus|Max)$/i, '').replace(/\s*Pro Max$/i, ' Pro');
+  if (IPHONE_COLORS[key]) return IPHONE_COLORS[key];
+  if (/SE/.test(m)) return IPHONE_COLORS['iPhone SE'];
+  return GENERAL_COLORS;
+}
+const OTHER_OPT = '__other';
+
 const CAPACITIES = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 const IPHONE_APPEARANCE = ['完全無刮傷', '外觀小刮傷', '外觀有凹撞傷'];
 const IPHONE_ISSUES = ['功能都完全正常', '無法開機運作', '螢幕有破裂', '機身進過水', '按鍵功能不正常', '相機功能不正常', '其他問題'];

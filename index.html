@@ -122,7 +122,7 @@
 </footer>
 
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122b"></script>
+<script src="shared.js?v=20261122c"></script>
 <script>
 const app = $('#app');
 
@@ -367,7 +367,7 @@ const FIELDS = {
   iPhone: [
     { k: 'model', label: 'iPhone 型號', type: 'select', options: IPHONE_MODELS, req: true },
     { k: 'capacity', label: '容量', type: 'chips', options: CAPACITIES },
-    { k: 'color', label: '顏色', type: 'text', ph: '例：午夜色、天峰藍' },
+    { k: 'color', label: '顏色', type: 'color' },
     { k: 'newOrUsed', label: '全新或二手', type: 'chips', options: NEW_USED },
     { k: 'imei', label: 'IMEI 碼', type: 'text', req: true, ph: '15 碼數字', inputmode: 'numeric', hint: '設定 → 一般 → 關於本機，或撥號 *#06#。無法開機可免填。' },
     { k: 'appearance', label: '外觀狀況', type: 'chips', options: IPHONE_APPEARANCE },
@@ -378,7 +378,7 @@ const FIELDS = {
     { k: 'model', label: 'iPad 型號', type: 'select', options: IPAD_MODELS, req: true },
     { k: 'connectivity', label: '連線能力版本', type: 'chips', options: IPAD_CONNECTIVITY, req: true },
     { k: 'capacity', label: '容量', type: 'chips', options: CAPACITIES, req: true },
-    { k: 'color', label: '顏色', type: 'text', req: true, ph: '例：太空灰' },
+    { k: 'color', label: '顏色', type: 'color', req: true },
     { k: 'newOrUsed', label: '全新或二手', type: 'chips', options: NEW_USED },
     { k: 'issueNote', label: '功能或外觀描述', type: 'textarea', ph: '例：螢幕無刮傷、邊框有小凹痕' },
   ],
@@ -404,6 +404,14 @@ function fieldHTML(f, it, i) {
   const label = `<span>${esc(f.label)}${f.req ? '<em>*</em>' : ''}</span>`;
   let ctl = '';
   if (f.type === 'select') ctl = `<select class="input" data-k="${f.k}">${opts(f.options, v, '請選擇')}</select>`;
+  else if (f.type === 'color') { // 依型號的顏色下拉；選「其他」可自行填寫
+    const list = colorsFor(it.model), manual = it._colorOther || (v && !list.includes(v));
+    ctl = `<select class="input" data-color>
+        <option value="" ${!v && !manual ? 'selected' : ''}>請選擇顏色</option>
+        ${list.map(c => `<option ${!manual && v === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+        <option value="${OTHER_OPT}" ${manual ? 'selected' : ''}>其他（自行填寫）</option></select>
+      <input class="input" data-k="color" value="${esc(manual ? v : '')}" placeholder="請輸入顏色" maxlength="30" style="margin-top:6px" ${manual ? '' : 'hidden'}>`;
+  }
   else if (f.type === 'text') ctl = `<input class="input" data-k="${f.k}" value="${esc(v)}" placeholder="${esc(f.ph || '')}" ${f.inputmode ? `inputmode="${f.inputmode}"` : ''} maxlength="60">`;
   else if (f.type === 'textarea') ctl = `<textarea class="input" data-k="${f.k}" placeholder="${esc(f.ph || '')}" maxlength="300">${esc(v)}</textarea>`;
   else if (f.type === 'chips') ctl = chips(name, f.options, v);
@@ -434,6 +442,11 @@ function syncItems() {
     FIELDS[it.category].forEach(f => {
       if (f.type === 'chips') it[f.k] = ($(`input[name="${f.k}-${i}"]:checked`, card) || {}).value || '';
       else if (f.type === 'multi') it[f.k] = $$(`input[name="${f.k}-${i}"]:checked`, card).map(x => x.value);
+      else if (f.type === 'color') {
+        const sel = $('[data-color]', card);
+        it._colorOther = !!sel && sel.value === OTHER_OPT;
+        it.color = it._colorOther ? ($('[data-k="color"]', card).value || '').trim() : (sel ? sel.value : '');
+      }
       else it[f.k] = ($(`[data-k="${f.k}"]`, card) || {}).value?.trim() || '';
     });
   });
@@ -567,7 +580,15 @@ function renderBook() {
       if (!est) { try { est = await api('priceTable'); } catch (e) { $('#estBox').innerHTML = `<p class="small muted">估價表載入失敗，請用下方「自己填寫」。</p>`; return; } }
       if ($('#estBox')) drawEstimate($('#estBox'), true);
     })();
-    $('#items').addEventListener('change', () => { syncItems(); saveDraft(draft); });
+    $('#items').addEventListener('change', e => {
+      if (e.target.matches('[data-color]')) {
+        const inp = e.target.parentElement.querySelector('[data-k="color"]');
+        inp.hidden = e.target.value !== OTHER_OPT;
+        if (!inp.hidden) inp.focus();
+      }
+      syncItems(); saveDraft(draft);
+      if (e.target.matches('[data-k="model"]')) renderBook(); // 換型號：顏色選項跟著換
+    });
   } else if (s === 1 || s === 2) {
     $(s === 1 ? '#contact' : '#bank').addEventListener('input', () => syncAll());
   }
@@ -584,7 +605,7 @@ function renderBook() {
       const c = draft.contact;
       const { order } = await api('createOrder', { order: {
         ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: undefined, slot: c.slot || '不指定',
-        items: draft.items.map(({ est: _e, ...it }) => it), bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
+        items: draft.items.map(({ est: _e, _colorOther: _c, ...it }) => it), bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
       store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
       renderSuccess(order);
     } catch (e) {
