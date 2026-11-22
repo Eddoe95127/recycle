@@ -198,6 +198,29 @@
   .id-slot .ph, .id-slot .ph-add { width: 100%; aspect-ratio: 86/54; }
   .id-slot .ph img { height: 100%; aspect-ratio: auto; }
   .edit-bar { display: flex; gap: 8px; margin-left: auto; }
+  /* 人資 */
+  .hr-clock { text-align: center; padding: 26px 18px; }
+  .hr-now { font-size: 52px; font-weight: 800; letter-spacing: 1px; line-height: 1.1; }
+  .hr-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 12px; }
+  .hr-btn { border: 2px solid var(--line, #e5e5ea); background: #fff; border-radius: 18px; padding: 22px 10px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; font: inherit; }
+  .hr-btn b { font-size: 20px; } .hr-btn small { color: var(--muted); font-size: 13px; }
+  .hr-btn.on.in { background: #0a84ff; border-color: #0a84ff; color: #fff; } .hr-btn.on.out { background: #1d1d1f; border-color: #1d1d1f; color: #fff; }
+  .hr-btn.on small { color: rgba(255,255,255,.8); } .hr-btn:disabled { opacity: .6; }
+  .hr-list { list-style: none; margin: 0; padding: 0; } .hr-list li { padding: 8px 0; border-top: 1px solid var(--line, #eee); font-size: 14px; } .hr-list li:first-child { border-top: 0; }
+  .hr-mini { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; } .hr-mini b { font-size: 20px; } .hr-mini .btn { margin-left: auto; }
+  .hr-top { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; } .hr-top .card { margin: 0 0 12px; }
+  .hr-al { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
+  .hr-al b { display: block; font-size: 26px; } .hr-al span { font-size: 12px; color: var(--muted); } .hr-al div:first-child b { color: #0a84ff; }
+  .hr-apply-btns { display: grid; gap: 8px; }
+  .hr-month { display: flex; gap: 6px; align-items: center; } .hr-month .input { width: auto; min-height: 36px; padding: 6px 10px; }
+  .hr-days tr.off td { color: var(--muted); background: #fafafa; } .hr-days tr.bad td { background: #fff4f3; } .hr-days tr.warn td { background: #fffaf0; }
+  .hr-red { color: #c9372c; font-weight: 600; }
+  .hr-reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; } .hr-req { margin: 0; }
+  .hr-req-h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .hr-req-a { display: flex; gap: 8px; margin-top: 10px; }
+  .hr-slips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hr-net { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 8px; border-bottom: 2px solid var(--ink, #1d1d1f); }
+  .hr-net b { font-size: 26px; }
+  @media (max-width: 760px) { .hr-top { grid-template-columns: 1fr; } .hr-now { font-size: 44px; } }
   .edit-log { list-style: none; margin: 0; padding: 0; } .edit-log li { padding: 10px 0; border-top: 1px solid var(--line, #eee); font-size: 14px; line-height: 1.6; } .edit-log li:first-child { border-top: 0; padding-top: 0; }
   tr.au-del td { background: #fff6f5; }
   .show-m { display: none; } @media (max-width: 640px) { .show-m { display: block; } }
@@ -343,10 +366,12 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261123b"></script>
-<script src="store.js?v=20261123c"></script>
+<script src="shared.js?v=20261123c"></script>
+<script src="store.js?v=20261123d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123c"></script>
+<script src="hr-calc.js?v=20261123a"></script>
+<script src="hr.js?v=20261123c"></script>
 <script src="repair.js?v=20261123c"></script>
 <script>
 const app = $('#app');
@@ -372,7 +397,7 @@ let me = null; // { name, role, via, perms, permDefs, rolePresets }
 const P = p => !!me && me.perms.includes(p);
 const isBoss = () => !!me && me.role === '老闆';
 const SHOP = new URLSearchParams(location.search).has('shop'); // 門市工作台模式
-const SHOP_PAGES = ['intake', 'intake/new', 'repair', 'repair/new', 'stock', 'account'];
+const SHOP_PAGES = ['intake', 'intake/new', 'repair', 'repair/new', 'stock', 'account', 'hr/clock', 'hr/me'];
 if (SHOP) {
   document.body.classList.add('shop');
   document.title = '門市工作台｜iPhone收購中心';
@@ -406,16 +431,17 @@ async function start() {
 
 function route() {
   const page = location.hash.slice(1);
+  $('#shopName').textContent = page.startsWith('repair') ? '佛斯特先生-獨立維修中心' : CFG.SHOP_NAME; // 維修作業頁顯示維修中心名稱
   closeDrawer();
   if (SHOP && !SHOP_PAGES.includes(page)) {
     if (P('create_intake') || canStoreView()) { location.hash = '#intake'; return; }
     if (P('repair')) { location.hash = '#repair'; return; }
-    app.innerHTML = `<div class="card gate">您的帳號沒有門市收購權限，請老闆在「員工帳號」勾選「門市收購登記」。<br><br><a class="btn btn-ghost btn-sm" href="admin.html">前往後台</a></div>`;
-    return;
+    location.hash = '#hr/clock'; return; // 沒有收購／維修權限的員工：只有打卡與我的出勤
   }
   $('#refresh').hidden = page === 'users' || page === 'account';
   if (page === 'users' && P('manage_users')) return usersPage();
   if (page === 'account') return accountPage();
+  if (isHrRoute(page)) return hrRoute(page);
   if (isStoreRoute(page)) return storeRoute(page);
   $('#refresh').onclick = () => load(true);
   orders = [];
@@ -428,6 +454,7 @@ function pagesNav(cur) {
       ['buy', '🛒 收購作業', [(P('create_intake') || canStoreView()) && ['intake', '收購單列表'], P('create_intake') && ['intake/new', '＋ 新增收購單']]],
       ['fix', '🔧 維修作業', [P('repair') && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
       ['stock', '📦 庫存', [canStoreView() && ['stock', '庫存']]],
+      ['hr', '⏰ 打卡', [['hr/clock', '打卡'], ['hr/me', '我的出勤與請假']]],
       ['me', '⚙️ 我的帳號', [['account', '我的帳號']]],
     ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
     const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];
@@ -440,6 +467,8 @@ function pagesNav(cur) {
     ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '價格管理']]],
     ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
     ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], !P('edit_prices') && P('edit_stock') && ['prices', '建議售價表'], P('view_cost') && ['report', '報表']]],
+    ['hr', '👥 人資', [['hr/clock', '打卡'], ['hr/me', '我的出勤'], P('hr_manage') && ['hr/approve', '審核'], P('hr_manage') && ['hr/attendance', '出勤總表'],
+      P('hr_manage') && ['hr/staff', '員工資料'], P('payroll') && ['hr/payroll', '薪資'], P('hr_manage') && ['hr/settings', '打卡設定']]],
     ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
   ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
   const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];

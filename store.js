@@ -52,7 +52,7 @@ function storeRoute(page) {
 /** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
 const showCost = () => P('view_cost') && !SHOP;
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
-const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair', 'edit_order', 'delete_order'].some(P);
+const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair', 'edit_order', 'delete_order', 'hr_manage', 'payroll'].some(P);
 const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
 const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-US');
 
