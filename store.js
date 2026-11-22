@@ -89,7 +89,7 @@ function drawIntakeTable() {
     || (qp.length >= 3 && String(o.phone || '').replace(/\D/g, '').includes(qp)));
   $('#inTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>單號</th><th>出售人</th><th>商品</th><th class="hide-m">金額</th><th>付款</th><th class="hide-m">經手</th></tr></thead><tbody>
     ${list.map(o => `<tr data-in="${esc(o.id)}"><td><b class="num">${esc(o.id)}</b><div class="sub">${esc(o.createdAt)}</div></td>
-      <td>${esc(o.seller)}<div class="sub num">${esc(o.phone)}</div></td>
+      <td>${o.trade ? '<span class="pill" style="margin-right:4px">同行</span>' : ''}${esc(o.seller)}<div class="sub num">${esc(o.phone)}</div></td>
       <td>${esc(o.items[0]?.model || '')}${o.items.length > 1 ? ` <span class="sub">+${o.items.length - 1}</span>` : ''}</td>
       <td class="num hide-m">${nt(o.total)}</td>
       <td>${o.payment === '轉帳' ? `<span class="pill ${o.remit === '已匯款' ? '' : 'warn'}">${esc(o.remit)}</span>` : '<span class="pill off">現金</span>'}</td>
@@ -126,11 +126,11 @@ function intakeDrawer(o) {
           <div class="small muted">${esc(it.category)}${it.serial ? '・' + esc(it.serial) : ''}${it.notes ? '・' + esc(it.notes) : ''}</div>
           <div class="ph-grid" style="margin-top:8px">${it.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="商品照片"></div>`).join('')}</div></div>`).join('')}</div>
       ${intakeEvalHTML(o) ? `<div class="card">${intakeEvalHTML(o)}</div>` : ''}
-      <div class="card"><h3>證件與簽名</h3>
+      ${o.trade ? '<div class="card"><h3>證件與簽名</h3><p class="small" style="margin:0"><span class="pill">同行收購</span> 免核對證件、免出售人簽名</p></div>' : `<div class="card"><h3>證件與簽名</h3>
         <p class="small" style="margin:0 0 8px">${o.verified ? '✓ 門市已核對證件' : ''}${o.noticeAt ? `・出售人已確認個資告知（${esc(fmtTime(o.noticeAt))}）` : ''}</p>
         ${o.masked.id ? `<p>${NOPE}　<span class="small muted">已附 ${o.masked.id} 張證件照</span></p>` : o.idPhotos.length ? `<div class="ph-grid">${o.idPhotos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="證件"></div>`).join('')}</div>` : '<p class="small muted">未附證件照片</p>'}
         <div class="grid2" style="margin-top:10px"><div><div class="small muted">出售人簽名</div><img class="sig-img" data-photo="${esc(o.sellerSign)}" alt="出售人簽名"></div>
-          <div><div class="small muted">經手人</div>${o.staffSign ? `<img class="sig-img" data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<p style="margin:6px 0 0">${esc(o.staff)}</p>`}</div></div></div>
+          <div><div class="small muted">經手人</div>${o.staffSign ? `<img class="sig-img" data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<p style="margin:6px 0 0">${esc(o.staff)}</p>`}</div></div></div>`}
       ${P('create_intake') ? mailBox(o) : ''}
       ${P('edit_payment') && o.payment === '轉帳' ? remitBox(o) : ''}
       ${editLogHTML(o)}
@@ -377,7 +377,7 @@ function intakeEvalHTML(o, compact) {
     }).join('')}</div>`;
 }
 const newDraft = () => ({ requestId: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random(), seller: '', phone: '', email: '', payment: '', bank: '', account: '', period: IN_PERIODS[1], payDate: '',
-  items: [newItem()], idPhotos: [], noticeAt: '', verified: false, agreed: false, sellerSign: '', staffSign: '' });
+  items: [newItem()], idPhotos: [], noticeAt: '', verified: false, agreed: false, sellerSign: '', staffSign: '', trade: false });
 
 let inPrefill = null; // 從搜尋手機號碼帶過來
 function intakeForm() {
@@ -390,7 +390,7 @@ window.addEventListener('beforeunload', e => { if (dr && !drDone && location.has
 function drawForm() {
   if (drDone) return drawDone();
   const keepY = window.scrollY;
-  const steps = ['商品與交易', '證件核對', '確認與簽名'];
+  const steps = dr.trade ? ['商品與交易', '同行免證件', '確認'] : ['商品與交易', '證件核對', '確認與簽名'];
   app.innerHTML = `${pagesNav('intake/new')}
     <div class="in-wrap${drStep === 3 ? ' sign-step' : ''}">
       <div class="in-steps">${steps.map((s, i) => `<div class="${i + 1 === drStep ? 'on' : i + 1 < drStep ? 'done' : ''}"><i>${i + 1 < drStep ? '✓' : i + 1}</i>${s}</div>`).join('')}</div>
@@ -420,8 +420,10 @@ function pickField(label, attr, val, options, manual, ph = '') {
 const IN_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const fld = (label, key, val, extra = '') => `<label class="field"><span>${label}</span><input class="input" data-k="${key}" value="${esc(val)}" ${extra}></label>`;
 function stepItems() {
-  return `<div class="card"><h3>出售人與付款</h3>
-      <div class="grid2">${fld('出售人姓名 *', 'seller', dr.seller, 'autocomplete="off"')}${fld('聯絡電話', 'phone', dr.phone, 'type="tel" inputmode="tel" placeholder="選填"')}</div>
+  return `<div class="card"><h3>收購對象</h3>
+      <div class="cond-seg">${[[false, '一般客人', '核對證件、客人簽名'], [true, '同行收購', '免拍證件、免客人簽名']].map(([v, l, s]) => `<label><input type="radio" name="buyerType" data-trade="${v ? 1 : 0}" ${!!dr.trade === v ? 'checked' : ''}><span><b>${l}</b><small>${s}</small></span></label>`).join('')}</div></div>
+    <div class="card"><h3>${dr.trade ? '同行與付款' : '出售人與付款'}</h3>
+      <div class="grid2">${fld(dr.trade ? '同行店家／聯絡人 *' : '出售人姓名 *', 'seller', dr.seller, `autocomplete="off" ${dr.trade ? 'placeholder="例：○○通訊 王先生"' : ''}`)}${fld('聯絡電話', 'phone', dr.phone, 'type="tel" inputmode="tel" placeholder="選填"')}</div>
       ${fld('電子信箱', 'email', dr.email, 'type="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="選填，填寫後收購單完成會自動寄給客人"')}
       <div class="field"><span>付款方式 *</span><div class="chips">${['現金', '轉帳'].map(p => `<label class="chip"><input type="radio" name="pay" value="${p}" ${dr.payment === p ? 'checked' : ''}><span>${p}</span></label>`).join('')}</div></div>
       ${dr.payment === '轉帳' ? `<div class="grid2">
@@ -474,18 +476,20 @@ function stepId() {
 }
 function stepSign() {
   return `<div class="card"><h3>核對內容</h3><dl class="kv">
-      <dt>出售人</dt><dd>${esc(dr.seller)}${dr.phone ? '　' + esc(dr.phone) : ''}</dd>
+      <dt>${dr.trade ? '同行' : '出售人'}</dt><dd>${dr.trade ? '<span class="pill">同行收購</span> ' : ''}${esc(dr.seller)}${dr.phone ? '　' + esc(dr.phone) : ''}</dd>
       ${dr.email ? `<dt>寄送收購單</dt><dd>${esc(dr.email)}</dd>` : ''}
       <dt>付款</dt><dd>${esc(dr.payment)}${dr.payment === '轉帳' ? `　${esc(dr.bank)} ${esc(dr.account)}（${esc(dr.period === '指定日期' ? dr.payDate : dr.period)}）` : ''}</dd>
       ${dr.items.map((it, i) => { const bad = it.checks.filter(c => c.r === 'bad'); return `<dt>商品 ${i + 1}</dt><dd>${esc(itemName(it))}${it.serial ? `<br><span class="small muted">${esc(it.serial)}</span>` : ''}<span class="num" style="float:right">NT$ ${money(it.price)}</span>
         <div class="small muted" style="margin-top:2px">${[...(isNewItem(it) ? ['全新未拆封'] : [it.grade && '外觀 ' + it.grade + ' ' + GRADE_TEXT[it.grade], it.battery && '電池 ' + it.battery + '%', bad.length ? '異常：' + bad.map(c => c.label).join('、') : '功能檢測皆正常']), it.deductions.filter(d => numv(d.amount)).map(d => `${d.reason} −${money(d.amount)}`).join('、')].filter(Boolean).map(esc).join('｜')}</div></dd>`; }).join('')}
       <dt>合計</dt><dd class="num"><b style="font-size:18px">NT$ ${money(sumDraft())}</b></dd></dl></div>
-    <div class="card"><h3>二手商品收購條款</h3><ol class="terms-ol">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
+    ${dr.trade ? `<div class="card"><h3>同行收購確認</h3><p class="small muted" style="margin:0 0 10px">同行收購免核對證件、免出售人簽名，收購單會標示「同行」。</p>
+      <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 已與同行核對商品、金額與付款方式 *</label>
+      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b></p></div>` : `<div class="card"><h3>二手商品收購條款</h3><ol class="terms-ol">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
       <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 雙方已核對商品、金額與付款方式，同意上述條款，並以電子方式簽署 *</label></div>
     <div class="card"><h3>簽名</h3><div>
       <div><div style="display:flex;justify-content:space-between;align-items:center"><b>出售人簽名（請出售人在框內簽名）</b><button type="button" class="link" data-clear="sellerSign" style="font-size:14px">清除重簽</button></div>
         <canvas class="sig-pad sig-big" data-sig="sellerSign" width="1200" height="480"></canvas></div>
-      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b></p></div>`;
+      <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b></p></div>`}`;
 }
 
 function bindForm() {
@@ -575,7 +579,8 @@ function bindForm() {
   if ($('#agreeOk')) $('#agreeOk').onchange = e => { dr.agreed = e.target.checked; };
   $$('[data-sig]', body).forEach(c => sigPad(c, dr[c.dataset.sig], url => { dr[c.dataset.sig] = url; }));
   $$('[data-clear]', body).forEach(b => b.onclick = () => { dr[b.dataset.clear] = ''; drawForm(); });
-  if ($('#inBack')) $('#inBack').onclick = () => { drStep--; drawForm(); };
+  if ($('#inBack')) $('#inBack').onclick = () => { drStep = dr.trade && drStep === 3 ? 1 : drStep - 1; drawForm(); };
+  $$('[data-trade]', body).forEach(r => r.onchange = () => { dr.trade = r.dataset.trade === '1'; if (dr.trade) { dr.idPhotos = []; dr.verified = false; dr.noticeAt = ''; dr.sellerSign = ''; } drawForm(); });
   $('#inNext').onclick = () => nextStep(err);
 }
 
@@ -603,9 +608,9 @@ function nextStep(err) {
     }
   }
   if (drStep === 2 && !dr.verified) return err('請勾選「已當面核對出售人證件」');
-  if (drStep < 3) { drStep++; return drawForm(); }
-  if (!dr.agreed) return err('請勾選同意條款與電子簽署');
-  if (!dr.sellerSign) return err('請出售人完成簽名');
+  if (drStep < 3) { drStep = dr.trade ? 3 : drStep + 1; return drawForm(); } // 同行收購跳過證件步驟
+  if (!dr.agreed) return err(dr.trade ? '請勾選已核對商品、金額與付款方式' : '請勾選同意條款與電子簽署');
+  if (!dr.trade && !dr.sellerSign) return err('請出售人完成簽名');
   submitIntake(err);
 }
 async function submitIntake(err) {
@@ -614,7 +619,7 @@ async function submitIntake(err) {
   const btn = $('#inNext'); btn.disabled = true; btn.textContent = '上傳中，請勿關閉…';
   try {
     const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => ({ ...it, deductions: (it.deductions || []).map(({ _other, _auto, ...d }) => d) }));
-    const ids = [dr.idPhotos[0], dr.idPhotos[1]].filter(Boolean);
+    const ids = dr.trade ? [] : [dr.idPhotos[0], dr.idPhotos[1]].filter(Boolean);
     const r = await api('intakeCreate', { ...dr, items, idPhotos: ids, account: dr.account.replace(/[\s-]/g, '') });
     drDone = r.intake;
     drDone._local = { items: dr.items.map(it => it.photos), ids, sellerSign: dr.sellerSign, staffSign: dr.staffSign };
@@ -942,9 +947,9 @@ async function showReceipt(o, kind) {
       <tr class="rc-total"><td colspan="4">合計</td><td class="num" style="text-align:right">${o.total == null ? '—' : 'NT$ ' + money(o.total)}</td></tr></tbody></table>
     ${intakeEvalHTML(o, true)}
     <ol class="terms-ol small">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
-    <p class="small">✓ 門市已當面核對出售人證件　✓ 雙方同意上述條款並以電子方式簽署（${esc(o.terms)}）</p>
+    <p class="small">${o.trade ? '✓ 同行收購（免核對證件、免出售人簽名）' : `✓ 門市已當面核對出售人證件　✓ 雙方同意上述條款並以電子方式簽署（${esc(o.terms)}）`}</p>
     ${o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : ''}
-    <div class="rc-sign"><div><img data-photo="${esc(o.sellerSign)}" alt="出售人簽名"><span>出售人 ${esc(o.seller)}</span></div>
+    <div class="rc-sign"><div>${o.sellerSign ? `<img data-photo="${esc(o.sellerSign)}" alt="出售人簽名">` : '<div class="rc-staff">同行收購</div>'}<span>出售人 ${esc(o.seller)}</span></div>
       <div>${o.staffSign ? `<img data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<div class="rc-staff">${esc(o.staff)}</div>`}<span>經手人${o.staffSign ? ' ' + esc(o.staff) : ''}</span></div></div>
   </div><div class="no-print" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
     <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
