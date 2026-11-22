@@ -8,9 +8,9 @@ const PZ_ALL_TABS = [['buy', '💰 收購價格', 'edit_prices'], ['rules', '⚙
 const pzTabs = () => PZ_ALL_TABS.filter(t => !t[2] || P(t[2]));
 const PZ_TABS = PZ_ALL_TABS;
 const SALE_CATS = ['手機', '平板', '筆電', '其他 3C', '其他商品'];
-const saleCatOf = c => ({ iPhone: '手機', iPad: '平板', Mac: '筆電', 'Apple Watch': '其他 3C', 'AirPods／配件': '其他 3C' }[c] || (SALE_CATS.includes(c) ? c : '其他商品'));
+const saleCatOf = c => ({ iPhone: '手機', iPad: '平板', Mac: '筆電', 'Apple Watch': '其他 3C', 'AirPods／配件': '其他 3C', Samsung: '手機', OPPO: '手機', Google: '手機', Sony: '手機', '小米': '手機', vivo: '手機', realme: '手機', ASUS: '手機' }[c] || (SALE_CATS.includes(c) ? c : '其他商品'));
 const saleKey = (m, c) => (String(m || '') + '|' + String(c || '')).toLowerCase().replace(/\s+/g, '');
-const PZ_BUY_CATS = ['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods／配件', 'Samsung', 'OPPO', 'Google', '其他'];
+const PZ_BUY_CATS = ['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods／配件', 'Samsung', 'OPPO', 'Google', 'Sony', '小米', 'vivo', 'realme', 'ASUS', '其他'];
 const PZ_REPAIR_CATS = ['手機', '平板', '筆電', '其他 3C'];
 const PZ_BUY_FIELDS = ['price', 'newPrice', 'battery', 'acc', 'accItems'];
 let pz = { tab: 'buy', q: '', cat: '', buy: null, rules: null, buyOrig: {}, rulesOrig: '', repair: null, repairOrig: {}, repairFromSite: false, log: null, logType: '', logQ: '', sale: null, saleOrig: {}, saleStock: [], saleOnlyStock: true };
