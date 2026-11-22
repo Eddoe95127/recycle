@@ -347,7 +347,7 @@ function rpProgressHTML(o, can) {
   const next = { '待維修': ['維修中', '🔧 開始維修'], '維修中': ['待取件', `✅ 維修完成，通知取件${o.email ? '（寄信）' : ''}`] }[o.status];
   const back = { '維修中': '待維修', '待取件': '維修中', '無法維修': '維修中' }[o.status];
   const others = [
-    o.status !== '無法維修' && o.status !== '待取件' && ['無法維修', '改為「無法維修」'],
+    o.status !== '無法維修' && o.status !== '待取件' && ['無法維修', `改為「無法維修」${o.email ? '（寄信）' : ''}`],
     back && [back, `退回「${back}」`],
     ['已取消', '取消維修單'],
   ].filter(Boolean);
@@ -434,14 +434,14 @@ function repairDrawer(o) {
       const msg = {
         '維修中': o.status === '待維修' ? `開始維修 ${o.id}？\n\n狀態會改為「維修中」。` : `退回「維修中」？`,
         '待取件': `確定已維修完成？\n\n狀態會改為「待取件」${o.email ? '，並寄信通知客人來取件' : ''}。`,
-        '無法維修': `改為「無法維修」？\n\n之後仍可在下方辦理取件（退回裝置、收檢測費）。`,
+        '無法維修': `改為「無法維修」？\n\n${o.email ? '會寄信通知客人來取回裝置；' : ''}之後在下方辦理取件（退回裝置、收檢測費）。`,
         '待維修': `退回「待維修」？`,
         '已取消': `取消這張維修單？\n\n取消後就不能再更新進度。`,
       }[st] || `改為「${st}」？`;
       const okText = { '待取件': '確定完修', '已取消': '取消維修單', '無法維修': '改為無法維修' }[st] || '確定';
       if (!(await ask(msg, okText, '返回'))) return;
       b.disabled = true;
-      try { const n = await save({ status: st }); if (n) { toast(st === '待取件' && n.email ? '已更新，並寄信通知客人取件' : '已更新為「' + st + '」'); repairDrawer(n); refreshRepairList(); } }
+      try { const n = await save({ status: st }); if (n) { toast((st === '待取件' || st === '無法維修') && n.email ? '已更新，並寄信通知客人來取件' : '已更新為「' + st + '」'); repairDrawer(n); refreshRepairList(); } }
       catch (x) { if (x.auth) return start(); toast(x.message); b.disabled = false; }
     });
     let pkSign = '';

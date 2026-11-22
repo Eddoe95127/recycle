@@ -13,7 +13,7 @@
   document.write('<link rel="manifest" href="' + (shop ? 'shop' : 'admin') + '.webmanifest">'
     + '<link rel="apple-touch-icon" href="icons/' + (shop ? 'icon' : 'admin') + '-180.png">'
     + '<link rel="icon" href="icons/' + (shop ? 'icon' : 'admin') + '-192.png">'
-    + '<meta name="apple-mobile-web-app-title" content="' + (shop ? '門市收購' : '收購後台') + '">');
+    + '<meta name="apple-mobile-web-app-title" content="' + (shop ? '門市收購' : '佛斯特WPR') + '">');
 })();
 </script>
 <meta name="theme-color" content="#f5f5f7">
@@ -193,6 +193,10 @@
   .rp-more summary { cursor: pointer; font-size: 13px; color: var(--muted); list-style: none; text-align: center; padding: 4px; }
   .rp-more summary::-webkit-details-marker { display: none; } .rp-more summary::after { content: ' ▾'; } .rp-more[open] summary::after { content: ' ▴'; }
   .rp-more-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  .id-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .id-slot { display: grid; gap: 6px; } .id-slot > b { font-size: 14px; }
+  .id-slot .ph, .id-slot .ph-add { width: 100%; aspect-ratio: 86/54; }
+  .id-slot .ph img { height: 100%; aspect-ratio: auto; }
   .rp-acts { display: flex; gap: 8px; flex-wrap: wrap; }
   .sig-mid { aspect-ratio: auto; height: clamp(260px, 42vh, 520px); border-width: 3px; margin-top: 8px; border-radius: 16px; }
   .pill.ok { background: #e8f7ee; color: #1f7a45; }
@@ -309,10 +313,10 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122g"></script>
-<script src="store.js?v=20261122u"></script>
+<script src="shared.js?v=20261122i"></script>
+<script src="store.js?v=20261122v"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122m"></script>
+<script src="repair.js?v=20261122n"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -474,7 +478,7 @@ function mountPassword(box, forced) {
     ${forced ? '<p class="muted small" style="margin:4px 0 16px">老闆給的是暫時密碼，改成只有您知道的密碼後才能開始使用。</p>' : ''}
     <form id="pwForm">
       <label class="field"><span>目前的密碼</span><input class="input" name="old" type="password" autocomplete="current-password" required></label>
-      <label class="field"><span>新密碼（至少 8 個字）</span><input class="input" name="np" type="password" autocomplete="new-password" required></label>
+      <label class="field"><span>新密碼</span><input class="input" name="np" type="password" autocomplete="new-password" required></label>
       <label class="field"><span>再輸入一次新密碼</span><input class="input" name="np2" type="password" autocomplete="new-password" required></label>
       <div class="err" id="pwErr"></div>
       <button class="btn btn-dark ${forced ? 'btn-block' : ''}" id="pwBtn">更新密碼</button>
@@ -484,7 +488,7 @@ function mountPassword(box, forced) {
   f.onsubmit = async e => {
     e.preventDefault();
     const err = m => { $('#pwErr', box).textContent = m; };
-    if (f.elements.np.value.length < 8) return err('新密碼至少 8 個字');
+    if (!f.elements.np.value) return err('請輸入新密碼');
     if (f.elements.np.value !== f.elements.np2.value) return err('兩次輸入的新密碼不一樣');
     const b = $('#pwBtn', box); b.disabled = true; err('');
     try {

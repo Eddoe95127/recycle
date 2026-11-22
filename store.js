@@ -345,10 +345,11 @@ function stepId() {
       <dl class="kv notice-kv">${IN_NOTICE.map(([h, b]) => `<dt>${esc(h)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>
       <label class="check"><input type="checkbox" id="noticeOk" ${dr.noticeAt ? 'checked' : ''}> 出售人已閱讀並了解上述告知</label>
     </div>
-    <div class="card"><h3>證件照片（正面，最多 2 張）</h3>
+    <div class="card"><h3>證件照片（正面、反面）</h3>
       <p class="small muted" style="margin:0 0 8px">會自動加上「僅限收購使用」與日期浮水印</p>
-      <div class="ph-grid">${dr.idPhotos.map((p, j) => `<div class="ph"><img src="${p}" alt="證件"><button class="ph-del" data-delid="${j}" aria-label="刪除">✕</button></div>`).join('')}
-        ${dr.idPhotos.length < 2 ? `<label class="ph-add ${dr.noticeAt ? '' : 'disabled'}">📷 拍證件<input type="file" accept="image/*" capture="environment" hidden data-id-add ${dr.noticeAt ? '' : 'disabled'}></label>` : ''}</div>
+      <div class="id-slots">${['正面', '反面'].map((l, j) => `<div class="id-slot"><b>${l}</b>
+        ${dr.idPhotos[j] ? `<div class="ph"><img src="${dr.idPhotos[j]}" alt="證件${l}"><button class="ph-del" data-delid="${j}" aria-label="刪除">✕</button></div>`
+          : `<label class="ph-add ${dr.noticeAt ? '' : 'disabled'}">📷 拍${l}<input type="file" accept="image/*" capture="environment" hidden data-id-slot="${j}" ${dr.noticeAt ? '' : 'disabled'}></label>`}</div>`).join('')}</div>
       <label class="check" style="margin-top:12px"><input type="checkbox" id="verifiedOk" ${dr.verified ? 'checked' : ''}> 我已當面核對出售人證件與本人相符 *</label>
     </div>`;
 }
@@ -448,9 +449,10 @@ function bindForm() {
   if ($('#addItem')) $('#addItem').onclick = () => { dr.items.push(newItem()); drawForm(); setTimeout(() => $$('[data-i]').pop()?.scrollIntoView({ behavior: 'smooth' }), 50); };
   if ($('#noticeOk')) $('#noticeOk').onchange = e => { dr.noticeAt = e.target.checked ? new Date().toISOString() : ''; if (!e.target.checked) dr.idPhotos = []; drawForm(); };
   if ($('#verifiedOk')) $('#verifiedOk').onchange = e => { dr.verified = e.target.checked; };
-  $$('[data-delid]', body).forEach(b => b.onclick = () => { dr.idPhotos.splice(+b.dataset.delid, 1); drawForm(); });
-  const idIn = $('[data-id-add]', body);
-  if (idIn) idIn.onchange = async () => { try { dr.idPhotos.push(await watermarkImage(idIn.files[0], 1400)); } catch (e) { toast(e.message); } drawForm(); };
+  $$('[data-delid]', body).forEach(b => b.onclick = () => { dr.idPhotos[+b.dataset.delid] = ''; drawForm(); });
+  $$('[data-id-slot]', body).forEach(inp => inp.onchange = async () => { // 正面＝第 1 張、反面＝第 2 張
+    try { dr.idPhotos[+inp.dataset.idSlot] = await watermarkImage(inp.files[0], 1400); } catch (e) { toast(e.message); } drawForm();
+  });
   if ($('#agreeOk')) $('#agreeOk').onchange = e => { dr.agreed = e.target.checked; };
   $$('[data-sig]', body).forEach(c => sigPad(c, dr[c.dataset.sig], url => { dr[c.dataset.sig] = url; }));
   $$('[data-clear]', body).forEach(b => b.onclick = () => { dr[b.dataset.clear] = ''; drawForm(); });
@@ -493,9 +495,10 @@ async function submitIntake(err) {
   const btn = $('#inNext'); btn.disabled = true; btn.textContent = '上傳中，請勿關閉…';
   try {
     const items = dr.items.map(({ _m, _est, _estSel, _open, ...it }) => ({ ...it, deductions: (it.deductions || []).map(({ _other, _auto, ...d }) => d) }));
-    const r = await api('intakeCreate', { ...dr, items, account: dr.account.replace(/[\s-]/g, '') });
+    const ids = [dr.idPhotos[0], dr.idPhotos[1]].filter(Boolean);
+    const r = await api('intakeCreate', { ...dr, items, idPhotos: ids, account: dr.account.replace(/[\s-]/g, '') });
     drDone = r.intake;
-    drDone._local = { items: dr.items.map(it => it.photos), ids: dr.idPhotos, sellerSign: dr.sellerSign, staffSign: dr.staffSign };
+    drDone._local = { items: dr.items.map(it => it.photos), ids, sellerSign: dr.sellerSign, staffSign: dr.staffSign };
     intakes.unshift(r.intake);
     stockCache = null;
     drawForm();

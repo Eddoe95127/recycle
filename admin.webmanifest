@@ -1,7 +1,7 @@
 {
   "id": "admin",
-  "name": "iPhone收購中心 收購後台",
-  "short_name": "收購後台",
+  "name": "佛斯特WPR",
+  "short_name": "佛斯特WPR",
   "description": "訂單、門市收購單、庫存、估價表與帳號管理",
   "lang": "zh-Hant-TW",
   "start_url": "admin.html?app=1",

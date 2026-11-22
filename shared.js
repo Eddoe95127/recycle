@@ -639,7 +639,7 @@ async function mockApiInner(action, d) {
       const u = mockUsers.find(x => x.username === mockMe);
       if (!u) throw new Error('老闆帳號使用 LINE／Google 登入，不需要密碼');
       if (u.pw !== d.oldPassword) throw new Error('目前的密碼不正確');
-      if (String(d.newPassword || '').length < 8) throw new Error('新密碼至少 8 個字');
+      if (!String(d.newPassword || '')) throw new Error('請輸入新密碼');
       if (d.newPassword === d.oldPassword) throw new Error('新密碼不能和舊密碼相同');
       u.pw = d.newPassword; u.mustChange = false;
       return { ok: true, session: 'mock', user: { name: u.name, via: 'Staff' } };
@@ -652,7 +652,7 @@ async function mockApiInner(action, d) {
       let u = mockUsers.find(x => x.username === username);
       if (v.isNew && u) throw new Error('這個帳號已經存在');
       if (!u) { if (!v.password) throw new Error('請設定初始密碼'); u = { username, createdAt: now(), lastLogin: '' }; mockUsers.push(u); }
-      if (v.password) { if (String(v.password).length < 8) throw new Error('密碼至少 8 個字'); u.pw = v.password; u.mustChange = true; }
+      if (v.password) { if (!String(v.password)) throw new Error('請輸入密碼'); u.pw = v.password; u.mustChange = true; }
       Object.assign(u, { name: v.name || username, role: v.role || '自訂', perms: (v.perms || []).filter(p => MOCK_PERMS[p]), enabled: v.enabled !== false });
       const { pw, ...pub } = u; return { ok: true, user: pub };
     }
@@ -736,7 +736,7 @@ async function mockApiInner(action, d) {
       if (d.items) { o.items = d.items; o.quote = d.items.reduce((t, x) => t + (Number(x.amount) || 0), 0); }
       if (d.parts) { o.parts = d.parts; o.partsCost = d.parts.reduce((t, p) => t + (Number(p.cost) || 0), 0); }
       if (d.note != null) o.note = d.note;
-      if (d.status && d.status !== o.status) { if (d.status === '待取件') { o.doneAt = now(); if (o.email) o.mailLog = `${now()} 已寄送（完修通知）→ ${o.email}（模擬）\n` + o.mailLog; } o.status = d.status; o.history.unshift(`${now()}｜${d.status}｜${s.name}`); }
+      if (d.status && d.status !== o.status) { if (d.status === '待取件' || d.status === '無法維修') { o.doneAt = now(); if (o.email) o.mailLog = `${now()} 已寄送（${d.status === '待取件' ? '完修通知' : '無法維修通知'}）→ ${o.email}（模擬）\n` + o.mailLog; } o.status = d.status; o.history.unshift(`${now()}｜${d.status}｜${s.name}`); }
       return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
     }
     case 'repairPickup': {
