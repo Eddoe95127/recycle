@@ -523,7 +523,7 @@ mockDB.find(o => o.id === 'AR261115002').report = {
 
 { const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
 // 預覽用員工帳號（密碼都是 password123）
-const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', edit_intake: '修改門市收購單（出售人、付款、商品資料，會留下修改紀錄）', delete_intake: '刪除門市收購單（需填原因，會留下紀錄）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）', repair: '門市維修作業（建立維修單、更新進度、取件與保固查詢）', edit_repair: '修改維修單基本資料（客戶、裝置、故障，會留下修改紀錄）', delete_repair: '刪除維修單（需填原因，會留下紀錄）' };
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', edit_order: '修改宅配訂單客戶資料（姓名、聯絡、地址、匯款帳戶，會留下操作紀錄）', delete_order: '刪除宅配訂單（需填原因，會留下紀錄）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', edit_intake: '修改門市收購單（出售人、付款、商品資料，會留下修改紀錄）', delete_intake: '刪除門市收購單（需填原因，會留下紀錄）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）', repair: '門市維修作業（建立維修單、更新進度、取件與保固查詢）', edit_repair: '修改維修單基本資料（客戶、裝置、故障，會留下修改紀錄）', delete_repair: '刪除維修單（需填原因，會留下紀錄）' };
 const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake', 'repair'], '維修技師': ['repair'] };
 const mockUsers = [
   { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
@@ -596,6 +596,7 @@ async function mockApiInner(action, d) {
     if (!s.perms.includes('view_contact')) { ['phone', 'email', 'city', 'address'].forEach(k => a[k] = ''); a.masked.contact = true; }
     if (!s.perms.includes('view_id')) { a.masked.id = !!(o.idNo || o.idPhoto); a.idNo = ''; a.idPhoto = ''; }
     if (!s.perms.includes('view_bank')) { a.masked.bank = !!o.bankAccount; ['bankName', 'bankBranch', 'bankAccount', 'bankHolder'].forEach(k => a[k] = ''); }
+    a.edits = auditOf('宅配訂單', o.id, s);
     return a;
   };
   const storeOk = s => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(p => s.perms.includes(p));
@@ -666,7 +667,23 @@ async function mockApiInner(action, d) {
       Object.assign(u, { name: v.name || username, role: v.role || '自訂', perms: (v.perms || []).filter(p => MOCK_PERMS[p]), enabled: v.enabled !== false });
       const { pw, ...pub } = u; return { ok: true, user: pub };
     }
-    case 'adminList': need(); return { ok: true, orders: [...mockDB].reverse().map(adm), statuses: STATUS_LIST };
+    case 'adminList': need(); return { ok: true, orders: mockDB.filter(o => !o.deletedAt).reverse().map(adm), statuses: STATUS_LIST };
+    case 'orderEdit': {
+      const s = need('edit_order'), o = mockDB.find(x => x.id === d.id && !x.deletedAt), f = d.fields || {};
+      if (f.name !== undefined && !f.name) throw new Error('姓名不可空白');
+      if (f.phone !== undefined && !/^09\d{8}$/.test(f.phone.replace(/[\s-]/g, ''))) throw new Error('手機號碼格式不正確');
+      const diffs = diffOf(o, f, { name: '姓名', phone: '手機', email: 'Email', idNo: '身分證字號', city: '縣市', address: '地址', slot: '收件時段', note: '客戶備註', bankName: '銀行名稱', bankBranch: '銀行分行', bankAccount: '銀行帳號', bankHolder: '銀行戶名' }, { phone: 1, email: 1, idNo: 1, address: 1, bankAccount: 1 });
+      if (!diffs.length) throw new Error('沒有任何修改');
+      Object.assign(o, f); addAudit(s, '宅配訂單', o.id, '修改', diffs, d.reason);
+      return { ok: true, order: adm(o) };
+    }
+    case 'orderDelete': {
+      const s = need('delete_order'), o = mockDB.find(x => x.id === d.id && !x.deletedAt);
+      if (!d.reason) throw new Error('請填寫刪除原因');
+      Object.assign(o, { deletedAt: now(), deletedBy: s.name, deleteReason: d.reason });
+      addAudit(s, '宅配訂單', o.id, '刪除', [], d.reason, `刪除宅配訂單：${o.name}（${o.status}，${o.createdAt} 建立）`);
+      return { ok: true };
+    }
     case 'photo': if (!mockPhotos[d.fileId]) throw new Error('找不到照片'); return { ok: true, dataUrl: mockPhotos[d.fileId] };
     case 'adminUploadPhoto': { need('edit_report'); const id = 'up' + Date.now() + Math.random().toString(36).slice(2, 6); mockPhotos[id] = d.dataUrl; return { ok: true, fileId: id }; }
     case 'adminDeletePhoto': need('edit_report'); return { ok: true };
@@ -752,7 +769,7 @@ async function mockApiInner(action, d) {
     }
     case 'auditList': {
       const s = need();
-      if (!['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair'].some(p => s.perms.includes(p))) throw new Error('您沒有這項權限');
+      if (!['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair', 'edit_order', 'delete_order'].some(p => s.perms.includes(p))) throw new Error('您沒有這項權限');
       return { ok: true, logs: [...mockAudit].reverse().map(r => auditOut(r, s)) };
     }
     case 'intakeCreate': {

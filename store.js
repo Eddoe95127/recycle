@@ -52,7 +52,7 @@ function storeRoute(page) {
 /** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
 const showCost = () => P('view_cost') && !SHOP;
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
-const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair'].some(P);
+const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair', 'edit_order', 'delete_order'].some(P);
 const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
 const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-US');
 
@@ -142,9 +142,9 @@ function intakeDrawer(o) {
     if (!reason) return;
     try {
       await api('intakeDelete', { id: o.id, reason });
-      intakes = intakes.filter(x => x.id !== o.id); stockCache = null;
+      intakes = intakes.filter(x => x.id !== o.id); stockCache = null; rpData = null; // 統計、報表、庫存都重新計算
       closeDrawer(); toast('已刪除收購單 ' + o.id);
-      if ($('#inTbl')) drawIntakeTable(); else if (location.hash === '#remit' && $('#rmTbl')) drawRemitTable();
+      if (location.hash === '#intake') intakePage(); else if (location.hash === '#remit' && $('#rmTbl')) drawRemitTable();
     } catch (e) { if (e.auth) return start(); toast(e.message); }
   };
   const ms = $('#mailSend', d);
@@ -222,8 +222,9 @@ function intakeEdit(o) {
     try {
       const r = await api('intakeEdit', { id: o.id, fields, items, reason: $('#efReason', d).value.trim() });
       const i = intakes.findIndex(x => x.id === o.id); if (i >= 0) intakes[i] = r.intake;
-      stockCache = null; toast('已儲存修改'); intakeDrawer(r.intake);
-      if ($('#inTbl')) drawIntakeTable();
+      stockCache = null; rpData = null; toast('已儲存修改');
+      if (location.hash === '#intake') intakePage(); // 金額改了：上方今日統計一起更新
+      intakeDrawer(r.intake);
     } catch (x) { if (x.auth) return start(); $('#efErr', d).textContent = x.message; btn.disabled = false; btn.textContent = '儲存修改'; }
   };
 }

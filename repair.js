@@ -418,7 +418,7 @@ function repairDrawer(o) {
       if (!reason) return;
       try {
         await api('repairDelete', { id: o.id, reason });
-        repairs = repairs.filter(x => x.id !== o.id);
+        repairs = repairs.filter(x => x.id !== o.id); rpData = null;
         closeDrawer(); toast('已刪除維修單 ' + o.id); refreshRepairList();
       } catch (x) { if (x.auth) return start(); toast(x.message); }
     };
@@ -515,4 +515,4 @@ function repairEdit(o) {
     } catch (x) { if (x.auth) return start(); $('#efErr', d).textContent = x.message; btn.disabled = false; btn.textContent = '儲存修改'; }
   };
 }
-function refreshRepairList() { if (location.hash === '#repair' && $('#rpTbl')) drawRepairList(); }
+function refreshRepairList() { rpData = null; if (location.hash === '#repair' && $('#rpTbl')) repairPage(); } // 連同上方統計一起更新

@@ -317,10 +317,10 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122k"></script>
-<script src="store.js?v=20261122w"></script>
+<script src="shared.js?v=20261122l"></script>
+<script src="store.js?v=20261122y"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122o"></script>
+<script src="repair.js?v=20261122p"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -680,6 +680,7 @@ function openDrawer(id) {
   d.innerHTML = `
     <div class="d-head"><b class="num">${esc(o.id)}</b>${badge(o.status)}<button class="d-close" aria-label="關閉">✕</button></div>
     <div class="d-body">
+      ${P('edit_order') || P('delete_order') ? `<div class="card" style="display:flex;align-items:center;gap:8px"><b style="font-size:15px">訂單資料</b>${editBarHTML(P('edit_order'), P('delete_order'))}</div>` : ''}
       <div class="card">
         ${stepperHTML(o.status)}
         ${next === '已報價'
@@ -748,6 +749,7 @@ function openDrawer(id) {
         <h3>狀態紀錄</h3>
         <ul class="timeline" style="--c:${statusColor(o.status)}">${[...o.history].reverse().map(h => `<li><b>${esc(h.status)}</b>${h.by ? `<span class="tl-by">${esc(h.by)}</span>` : ''}<time>${esc(h.time)}</time></li>`).join('')}</ul>
       </div>
+      ${editLogHTML(o)}
     </div>
     <div class="d-foot"><span class="err" id="dErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="save">儲存</button></div>`;
   d.classList.add('show'); $('#scrim').classList.add('show');
@@ -759,6 +761,49 @@ function openDrawer(id) {
   if ($('#repView')) $('#repView').onclick = () => previewReport(sent || rp, sent ? '' : '（草稿，客戶看不到）');
   if ($('#repNext')) $('#repNext').onclick = () => openReport(o);
   if ($('#nextBtn')) $('#nextBtn').onclick = () => save(o, next);
+  if ($('[data-edit]', d)) $('[data-edit]', d).onclick = () => orderEdit(o);
+  if ($('[data-del]', d)) $('[data-del]', d).onclick = async () => {
+    const reason = await askReason(`刪除宅配訂單 ${o.id}（${o.name}・${o.status}）？\n\n客戶端也會看不到這筆訂單，並留下刪除紀錄。`, '確定刪除');
+    if (!reason) return;
+    try {
+      await api('orderDelete', { id: o.id, reason });
+      orders = orders.filter(x => x.id !== o.id); stockCache = null; rpData = null;
+      closeDrawer(); toast('已刪除訂單 ' + o.id); renderBoard();
+    } catch (e) { if (e.auth) return start(); toast(e.message); }
+  };
+}
+
+/** 宅配訂單：修改客戶資料（在抽屜裡編輯） */
+function orderEdit(o) {
+  const d = $('#drawer'), m = o.masked || {};
+  const inp = (label, k, extra = '') => `<label class="field"><span>${label}</span><input class="input" data-ef="${k}" value="${esc(o[k] == null ? '' : o[k])}" ${extra}></label>`;
+  $('.d-foot', d).hidden = true;
+  $('.d-body', d).innerHTML = `
+    <div class="card"><h3>✏️ 修改訂單客戶資料</h3><p class="small muted" style="margin:-4px 0 12px">狀態、物流、報價請在訂單明細操作；商品內容以檢測報告為準。儲存後會留下操作紀錄。</p>
+      ${inp('姓名 *', 'name')}
+      ${m.contact ? '<p class="small muted">您沒有查看聯絡資料的權限，手機、Email、地址不能修改</p>' : `<div class="grid2">${inp('手機 *', 'phone', 'inputmode="tel"')}${inp('Email *', 'email', 'type="email" autocapitalize="off"')}</div>
+      <div class="grid2"><label class="field"><span>縣市 *</span><select class="input" data-ef="city">${opts(CITIES, o.city)}</select></label>${inp('地址 *', 'address')}</div>`}
+      <label class="field"><span>收件時段</span><select class="input" data-ef="slot">${opts(SLOTS, o.slot)}</select></label>
+      <label class="field"><span>客戶備註</span><textarea class="input" data-ef="note" rows="2">${esc(o.note)}</textarea></label>
+      ${m.id ? '' : inp('身分證字號', 'idNo', 'autocapitalize="characters"')}</div>
+    ${m.bank ? '' : `<div class="card"><h3>匯款帳戶</h3>
+      <div class="grid2">${inp('銀行名稱', 'bankName')}${inp('分行', 'bankBranch')}</div>
+      <div class="grid2">${inp('帳號', 'bankAccount', 'inputmode="numeric"')}${inp('戶名', 'bankHolder')}</div></div>`}
+    <div class="card"><label class="field"><span>修改原因（選填）</span><textarea class="input" id="efReason" rows="2" placeholder="例：客戶更正地址、帳號打錯"></textarea></label>
+      <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="efCancel" style="flex:1">取消</button><button class="btn btn-dark" id="efSave" style="flex:2">儲存修改</button></div>
+      <p class="err" id="efErr"></p></div>`;
+  $('.d-body', d).scrollTop = 0;
+  $('#efCancel', d).onclick = () => openDrawer(o.id);
+  $('#efSave', d).onclick = async e => {
+    const btn = e.currentTarget, fields = {};
+    $$('[data-ef]', d).forEach(el => { fields[el.dataset.ef] = el.value.trim(); });
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const r = await api('orderEdit', { id: o.id, fields, reason: $('#efReason', d).value.trim() });
+      const i = orders.findIndex(x => x.id === o.id); if (i >= 0) orders[i] = r.order;
+      toast('已儲存修改'); renderTable(); openDrawer(o.id);
+    } catch (x) { if (x.auth) return start(); $('#efErr', d).textContent = x.message; btn.disabled = false; btn.textContent = '儲存修改'; }
+  };
 }
 function previewReport(r, label) {
   const w = document.createElement('div'); w.className = 'lightbox prev';
