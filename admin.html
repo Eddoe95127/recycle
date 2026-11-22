@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>收購後台｜iPhone收購中心</title>
+<title>佛斯特ERP</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <script>/* 加到主畫面：門市工作台（?shop=1）與收購後台用不同的 App 名稱、圖示 */
@@ -13,7 +13,7 @@
   document.write('<link rel="manifest" href="' + (shop ? 'shop' : 'admin') + '.webmanifest">'
     + '<link rel="apple-touch-icon" href="icons/' + (shop ? 'icon' : 'admin') + '-180.png">'
     + '<link rel="icon" href="icons/' + (shop ? 'icon' : 'admin') + '-192.png">'
-    + '<meta name="apple-mobile-web-app-title" content="' + (shop ? '門市收購' : '佛斯特WPR') + '">');
+    + '<meta name="apple-mobile-web-app-title" content="' + (shop ? '門市收購' : '佛斯特ERP') + '">');
 })();
 </script>
 <meta name="theme-color" content="#f5f5f7">
@@ -421,7 +421,7 @@ function pagesNav(cur) {
 function staffLoginPage(denied) {
   $('#who').textContent = ''; $('#logout').hidden = true; $('#refresh').hidden = true;
   app.innerHTML = `<div class="card staff-login rise">
-    <h2 class="card-title" style="font-size:22px">${SHOP ? '門市工作台登入' : '收購後台登入'}</h2>
+    <h2 class="card-title" style="font-size:22px">${SHOP ? '門市工作台登入' : '佛斯特ERP 登入'}</h2>
     <p class="muted" style="margin:6px 0 20px">請輸入老闆給您的員工帳號與密碼</p>
     ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
       ${denied.via === 'LINE' ? `<details style="margin-top:6px"><summary>我是老闆，要開通這個 LINE 帳號</summary>
