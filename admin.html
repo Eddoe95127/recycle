@@ -290,6 +290,32 @@
   .shop-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 28px; border-radius: 20px; background: #1d1d1f; color: #fff; text-decoration: none; margin-bottom: 16px; box-shadow: var(--shadow); }
   .shop-cta b { font-size: 24px; display: block; } .shop-cta small { opacity: .7; font-size: 14px; } .shop-cta span.go { font-size: 34px; }
   .pr-grid { align-items: start; gap: 14px; }
+  /* 價格管理 */
+  .pz-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .pz-tabs { display: flex; gap: 4px; background: #f2f2f4; padding: 4px; border-radius: 12px; flex-wrap: wrap; }
+  .pz-tabs button { border: 0; background: transparent; padding: 8px 14px; border-radius: 9px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2, #555); cursor: pointer; position: relative; }
+  .pz-tabs button.on { background: #fff; color: var(--ink, #1d1d1f); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .pz-tabs button i { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #ff9f0a; }
+  .pz-hint { margin: 0 4px 10px; }
+  .pz-tool { align-items: center; flex-wrap: wrap; } .pz-tool #pzQ, .pz-tool #pzLQ { max-width: 280px; }
+  .pz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+  .pz-card { padding: 14px; margin: 0; }
+  .pz-card-h { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .pz-model { flex: 1; font-weight: 700; font-size: 16px; border-color: transparent; background: #f7f7f9; }
+  .pz-cat { width: auto; max-width: 120px; font-size: 13px; padding: 6px 8px; min-height: 34px; }
+  .pz-t { width: 100%; border-collapse: collapse; }
+  .pz-t th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 2px 4px 4px; }
+  .pz-t td { padding: 3px 4px; } .pz-t .input { min-height: 36px; padding: 6px 8px; font-size: 15px; }
+  .pz-t td:last-child { width: 30px; }
+  .input.pz-chg { background: #fff6d6; border-color: #f5c84b; }
+  .pz-card-f { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .pz-adv { font-size: 13px; width: 100%; } .pz-adv summary { cursor: pointer; color: var(--muted); }
+  .pz-foot .pz-count { flex: 1; font-size: 14px; color: var(--muted); } .pz-foot .pz-count.on { color: #8a5300; font-weight: 600; }
+  .pz-up { color: #c9372c; font-weight: 600; font-size: 13px; } .pz-down { color: #1a7f37; font-weight: 600; font-size: 13px; }
+  .pz-trend { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line, #eee); color: #0a84ff; }
+  .pz-trend:first-of-type { border-top: 0; } .pz-trend > div { color: var(--ink); font-size: 14px; } .pz-trend svg { flex: none; max-width: 50%; }
+  .pz-batch { max-width: 420px; text-align: left; }
+  @media (max-width: 640px) { .pz-grid { grid-template-columns: 1fr; } .pz-tabs { width: 100%; } .pz-tabs button { flex: 1; padding: 8px 6px; font-size: 13px; } }
   .pr-table td { padding: 4px 6px; } .pr-table .input { min-height: 36px; padding: 6px 8px; font-size: 14px; }
   .pr-table tr.same td:nth-child(2) .input { color: #8e8e93; }
   .pr-rule { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -317,10 +343,11 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122l"></script>
-<script src="store.js?v=20261122y"></script>
+<script src="shared.js?v=20261123b"></script>
+<script src="store.js?v=20261123c"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122p"></script>
+<script src="pricing.js?v=20261123c"></script>
+<script src="repair.js?v=20261123c"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -410,9 +437,9 @@ function pagesNav(cur) {
   }
   // 完整後台：大分類 → 點進去顯示可查詢的項目
   const groups = [
-    ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表']]],
+    ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '價格管理']]],
     ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
-    ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], P('view_cost') && ['report', '報表']]],
+    ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], !P('edit_prices') && P('edit_stock') && ['prices', '建議售價表'], P('view_cost') && ['report', '報表']]],
     ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
   ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
   const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];

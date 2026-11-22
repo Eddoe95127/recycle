@@ -43,7 +43,7 @@ function storeRoute(page) {
   if (page === 'repair' && (P('repair') || P('view_cost'))) { $('#refresh').onclick = () => repairPage(true); return repairPage(); }
   if (page === 'intake' && canStoreView()) { $('#refresh').onclick = () => intakePage(true); return intakePage(); }
   if (page === 'stock' && canStoreView()) { $('#refresh').onclick = () => stockPage(true); return stockPage(); }
-  if (page === 'prices' && P('edit_prices')) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
+  if (page === 'prices' && (P('edit_prices') || P('edit_stock'))) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
   if (page === 'remit' && P('edit_payment')) { $('#refresh').onclick = () => remitPage(true); return remitPage(); }
   if (page === 'report' && showCost()) { $('#refresh').onclick = () => reportPage(true); return reportPage(); }
   if (page === 'audit' && canAudit() && !SHOP) { $('#refresh').onclick = () => auditPage(true); return auditPage(); }
@@ -70,7 +70,7 @@ async function intakePage(refresh) {
   app.innerHTML = `${pagesNav('intake')}
     ${SHOP && P('create_intake') ? '<a class="shop-cta" href="#intake/new"><div><b>＋ 新增收購單</b><small>客人在現場：填商品 → 核對證件 → 雙方簽名 → 列印收購聯</small></div><span class="go">→</span></a>' : ''}
     <div class="toolbar" style="align-items:center">
-      <input class="input" id="inQ" placeholder="搜尋 單號／出售人／型號／IMEI" value="${esc(inQuery)}">
+      <input class="input" id="inQ" placeholder="搜尋 手機號碼／單號／出售人／型號／IMEI" value="${esc(inQuery)}">
       ${P('create_intake') && !SHOP ? '<a class="btn btn-dark" href="#intake/new" style="white-space:nowrap">＋ 新增收購單</a>' : ''}
     </div>
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
@@ -83,8 +83,10 @@ async function intakePage(refresh) {
   drawIntakeTable();
 }
 function drawIntakeTable() {
-  const q = inQuery.trim().toLowerCase();
-  const list = intakes.filter(o => !q || [o.id, o.seller, o.staff, ...o.items.map(it => it.model + ' ' + it.serial)].join(' ').toLowerCase().includes(q));
+  const q = inQuery.trim().toLowerCase(), qp = q.replace(/\D/g, '');
+  const isPhone = /^0\d{3,9}$/.test(q.replace(/[\s-]/g, '')); // 輸入的是手機號碼（可以只打前幾碼）
+  const list = intakes.filter(o => !q || [o.id, o.seller, o.staff, ...o.items.map(it => it.model + ' ' + it.serial)].join(' ').toLowerCase().includes(q)
+    || (qp.length >= 3 && String(o.phone || '').replace(/\D/g, '').includes(qp)));
   $('#inTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>單號</th><th>出售人</th><th>商品</th><th class="hide-m">金額</th><th>付款</th><th class="hide-m">經手</th></tr></thead><tbody>
     ${list.map(o => `<tr data-in="${esc(o.id)}"><td><b class="num">${esc(o.id)}</b><div class="sub">${esc(o.createdAt)}</div></td>
       <td>${esc(o.seller)}<div class="sub num">${esc(o.phone)}</div></td>
@@ -92,7 +94,9 @@ function drawIntakeTable() {
       <td class="num hide-m">${nt(o.total)}</td>
       <td>${o.payment === '轉帳' ? `<span class="pill ${o.remit === '已匯款' ? '' : 'warn'}">${esc(o.remit)}</span>` : '<span class="pill off">現金</span>'}</td>
       <td class="sub hide-m">${esc(o.staff)}</td></tr>`).join('')}
-    </tbody></table>` : `<div class="card empty">${intakes.length ? '沒有符合的收購單' : '還沒有門市收購單'}</div>`;
+    </tbody></table>` : `<div class="card empty">${intakes.length ? '沒有符合的收購單' : '還沒有門市收購單'}${isPhone && P('create_intake') ? `<br><br><button class="btn btn-dark" id="inNewPhone">＋ 用 ${esc(q)} 新增收購單</button>` : ''}</div>`;
+  if (list.length && isPhone && P('create_intake')) $('#inTbl').insertAdjacentHTML('beforeend', `<p style="margin:8px 4px;text-align:center"><button class="link" id="inNewPhone">＋ 用 ${esc(q)} 再新增一張收購單</button></p>`);
+  if ($('#inNewPhone')) $('#inNewPhone').onclick = () => { inPrefill = { phone: q.replace(/[\s-]/g, ''), seller: (list[0] || {}).seller || '' }; location.hash = '#intake/new'; };
   $$('[data-in]').forEach(tr => tr.onclick = () => intakeDrawer(intakes.find(o => o.id === tr.dataset.in)));
 }
 
@@ -375,8 +379,10 @@ function intakeEvalHTML(o, compact) {
 const newDraft = () => ({ requestId: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random(), seller: '', phone: '', email: '', payment: '', bank: '', account: '', period: IN_PERIODS[1], payDate: '',
   items: [newItem()], idPhotos: [], noticeAt: '', verified: false, agreed: false, sellerSign: '', staffSign: '' });
 
+let inPrefill = null; // 從搜尋手機號碼帶過來
 function intakeForm() {
   if (!dr || drDone) { dr = newDraft(); drStep = 1; drDone = null; }
+  if (inPrefill) { if (!dr.phone) dr.phone = inPrefill.phone; if (!dr.seller && inPrefill.seller) dr.seller = inPrefill.seller; inPrefill = null; }
   drawForm();
 }
 window.addEventListener('beforeunload', e => { if (dr && !drDone && location.hash === '#intake/new' && (dr.seller || dr.items[0].model)) { e.preventDefault(); e.returnValue = ''; } });
@@ -978,7 +984,7 @@ const byName = (a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true });
 async function stockPage(refresh) {
   if (refresh || !stockCache) {
     app.innerHTML = pagesNav('stock') + '<div class="spinner"></div>';
-    try { stockCache = (await api('stockList')).items; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('stock') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+    try { const res = await api('stockList'); stockCache = res.items; if (res.cardFee != null) stFee = res.cardFee; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('stock') + `<div class="card empty">${esc(e.message)}</div>`; return; }
     if (refresh) toast('已更新');
   }
   const active = stockCache.filter(r => r.status !== '已售出');
@@ -998,7 +1004,7 @@ async function stockPage(refresh) {
       ${stView === 'list' ? `<select class="input st-model" id="stModel"><option value="">全部型號</option>${modelOptions()}</select>` : ''}
       <div class="tabs">${stView === 'list' ? [['active', '在庫'], ['整理中', '整理中'], ['已售出', '已售出'], ['all', '全部']].map(([k, l]) => `<button data-st="${k}" class="${stStatus === k ? 'on' : ''}">${l}</button>`).join('') : ''}
         ${[['', '全部來源'], ['門市', '門市'], ['宅配', '宅配']].map(([k, l]) => `<button data-src="${k}" class="${stSource === k ? 'on' : ''}">${l}</button>`).join('')}
-        ${P('edit_stock') ? '<button id="csv">⬇ 匯出盤點 CSV</button>' : ''}</div>
+        ${P('edit_stock') ? `<button id="csv">⬇ 匯出盤點 CSV</button><button id="feeBtn">💳 刷卡手續費 ${esc(stFee)}%</button>` : ''}</div>
     </div><div id="stTbl"></div>`;
   $('#stQ').oninput = e => { stQuery = e.target.value; drawStock(); };
   $$('[data-view]').forEach(b => b.onclick = () => { stView = b.dataset.view; stockPage(); });
@@ -1006,6 +1012,7 @@ async function stockPage(refresh) {
   $$('[data-st]').forEach(b => b.onclick = () => { stStatus = b.dataset.st; stockPage(); });
   $$('[data-src]').forEach(b => b.onclick = () => { stSource = b.dataset.src; stockPage(); });
   if ($('#csv')) $('#csv').onclick = exportCsv;
+  if ($('#feeBtn')) $('#feeBtn').onclick = () => setCardFee();
   drawStock();
 }
 /** 型號下拉：每個型號後面標在庫數量 */
@@ -1026,30 +1033,35 @@ function drawModelSummary() {
   const g = {};
   stockVisible(true).forEach(r => {
     const k = r.model || '（未填型號）';
-    const x = g[k] = g[k] || { model: k, cat: r.category || '', a: 0, p: 0, s: 0, cost: 0, caps: {} };
+    const x = g[k] = g[k] || { model: k, cat: r.category || '', a: 0, p: 0, s: 0, cost: 0, caps: {}, sg: [], noSg: 0 };
     if (r.status === '在庫') x.a++; else if (r.status === '整理中') x.p++; else x.s++;
+    if (r.status !== '已售出') { if (r.suggestCash) x.sg.push(r.suggestCash); else x.noSg++; }
     if (r.status !== '已售出') { x.cost += r.cost || 0; const c = r.capacity || '—'; x.caps[c] = (x.caps[c] || 0) + 1; }
   });
   const rows = Object.values(g).sort((a, b) => byName(a.cat, b.cat) || byName(a.model, b.model));
   const cost = showCost();
   const tot = rows.reduce((t, x) => ({ a: t.a + x.a, p: t.p + x.p, s: t.s + x.s, cost: t.cost + x.cost }), { a: 0, p: 0, s: 0, cost: 0 });
-  $('#stTbl').innerHTML = rows.length ? `<table class="st-sum"><thead><tr><th>型號</th><th class="hide-m">在庫規格</th><th class="c">在庫</th><th class="c">整理中</th><th class="c">已售出</th>${cost ? '<th class="hide-m" style="text-align:right">在庫成本</th>' : ''}</tr></thead><tbody>
+  const sgRange = x => x.sg.length ? `NT$ ${money(Math.min(...x.sg))}${Math.max(...x.sg) !== Math.min(...x.sg) ? '–' + money(Math.max(...x.sg)) : ''}${x.noSg ? `<div class="sub">${x.noSg} 台未設定</div>` : ''}` : (x.a + x.p ? '<span class="sub">未設定</span>' : '—');
+  $('#stTbl').innerHTML = rows.length ? `<table class="st-sum"><thead><tr><th>型號</th><th class="hide-m">在庫規格</th><th class="c">在庫</th><th class="c">整理中</th><th class="c">已售出</th><th>建議售價（現金）</th>${cost ? '<th class="hide-m" style="text-align:right">在庫成本</th>' : ''}</tr></thead><tbody>
     ${rows.map(x => `<tr data-model="${esc(x.model)}"><td><b>${esc(x.model)}</b><div class="sub">${esc(x.cat)}</div></td>
       <td class="sub hide-m">${Object.keys(x.caps).sort(byName).map(c => `${esc(c)}×${x.caps[c]}`).join('、') || '—'}</td>
       <td class="c num"><b>${x.a || '—'}</b></td><td class="c num">${x.p || '—'}</td><td class="c num sub">${x.s || '—'}</td>
+      <td class="num">${sgRange(x)}${P('edit_stock') && x.a + x.p ? `<div><button class="link" data-sgb="${esc(x.model)}" style="font-size:13px">設定售價</button></div>` : ''}</td>
       ${cost ? `<td class="num hide-m" style="text-align:right">${x.cost ? nt(x.cost) : '—'}</td>` : ''}</tr>`).join('')}
-    <tr class="st-tot"><td><b>合計 ${rows.length} 個型號</b></td><td class="hide-m"></td><td class="c num"><b>${tot.a}</b></td><td class="c num">${tot.p}</td><td class="c num">${tot.s}</td>${cost ? `<td class="num hide-m" style="text-align:right"><b>${nt(tot.cost)}</b></td>` : ''}</tr>
+    <tr class="st-tot"><td><b>合計 ${rows.length} 個型號</b></td><td class="hide-m"></td><td class="c num"><b>${tot.a}</b></td><td class="c num">${tot.p}</td><td class="c num">${tot.s}</td><td></td>${cost ? `<td class="num hide-m" style="text-align:right"><b>${nt(tot.cost)}</b></td>` : ''}</tr>
     </tbody></table><p class="small muted" style="margin:8px 4px">點型號可查看該型號的每一台明細</p>` : '<div class="card empty">沒有符合的庫存</div>';
-  $$('[data-model]').forEach(tr => tr.onclick = () => { stModel = tr.dataset.model; stView = 'list'; stStatus = 'all'; stockPage(); });
+  $$('[data-model]').forEach(tr => tr.onclick = e => { if (e.target.closest('[data-sgb]')) return; stModel = tr.dataset.model; stView = 'list'; stStatus = 'all'; stockPage(); });
+  $$('[data-sgb]').forEach(b => b.onclick = () => suggestBatch(b.dataset.sgb));
 }
 function drawStock() {
   if (stView === 'model') return drawModelSummary();
   const list = stockVisible();
-  $('#stTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>商品</th><th class="hide-m">IMEI／序號</th><th>來源</th>${showCost() ? '<th class="hide-m">成本</th>' : ''}<th>狀態</th></tr></thead><tbody>
+  $('#stTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>商品</th><th class="hide-m">IMEI／序號</th><th class="hide-m">來源</th>${showCost() ? '<th class="hide-m">成本</th>' : ''}<th>建議售價</th><th>狀態</th></tr></thead><tbody>
     ${list.map(r => `<tr data-sku="${esc(r.sku)}"><td><b>${esc(r.model)}</b> <span class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</span><div class="sub">${esc(r.sku)}・入庫 ${esc(r.inAt.slice(0, 10))}</div></td>
       <td class="num sub hide-m">${esc(r.serial || '—')}</td>
-      <td><span class="pill ${r.source === '宅配' ? '' : 'off'}">${esc(r.source)}</span></td>
+      <td class="hide-m"><span class="pill ${r.source === '宅配' ? '' : 'off'}">${esc(r.source)}</span></td>
       ${showCost() ? `<td class="num hide-m">${nt(r.cost)}</td>` : ''}
+      <td>${r.status === '已售出' ? '<span class="sub">—</span>' : suggestHTML(r)}</td>
       <td>${stockBadge(r)}${r.status === '已售出' ? `<div class="sub">${esc(r.saleDate)} ${esc(r.channel)}${r.salePrice != null && r.salePrice !== '' ? ' NT$' + money(r.salePrice) : ''}</div>` : ''}</td></tr>`).join('')}
     </tbody></table>` : '<div class="card empty">沒有符合的庫存</div>';
   $$('[data-sku]').forEach(tr => tr.onclick = () => stockDrawer(stockCache.find(r => r.sku === tr.dataset.sku)));
@@ -1065,6 +1077,7 @@ function stockDrawer(r) {
         <dt>狀況</dt><dd>${esc(r.notes || '—')}</dd>${showCost() ? `<dt>收購成本</dt><dd class="num">${nt(r.cost)}</dd>` : ''}<dt>入庫</dt><dd>${esc(r.inAt)}</dd>
         <dt>最後更新</dt><dd>${esc(r.updatedAt)}・${esc(r.updatedBy)}</dd></dl>
         ${r.photos.length ? `<div class="ph-grid" style="margin-top:10px">${r.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="商品照片"></div>`).join('')}</div>` : ''}</div>
+      ${suggestCard(r)}
       ${can ? `<div class="card"><h3>庫存狀態</h3>
         <div class="chips">${['在庫', '整理中', '已售出'].map(s => `<label class="chip"><input type="radio" name="sst" value="${s}" ${r.status === s ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div>
         <div id="saleBox" ${r.status === '已售出' ? '' : 'hidden'} style="margin-top:12px"><div class="grid2">
@@ -1080,6 +1093,7 @@ function stockDrawer(r) {
   d.classList.add('show'); $('#scrim').classList.add('show');
   $('.d-close', d).onclick = closeDrawer;
   loadPhotos(d);
+  bindSuggest(d, r, it => { stockDrawer(it); if ($('#stTbl')) drawStock(); });
   const ref = $('[data-ref]', d);
   ref.onclick = async e => {
     e.preventDefault();
@@ -1106,8 +1120,8 @@ function stockDrawer(r) {
 function exportCsv() {
   const cell = v => { const s = String(v ?? ''); return '"' + (/^[=+\-@]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"'; };
   const cost = showCost();
-  const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本'] : []), '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
-  const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost] : []), r.status, r.saleDate, r.channel, r.salePrice ?? '']);
+  const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本'] : []), '建議售價現金', '建議售價刷卡', '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
+  const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost] : []), r.suggestCash || '', r.suggestCard || '', r.status, r.saleDate, r.channel, r.salePrice ?? '']);
   const blob = new Blob(['﻿' + [head, ...rows].map(x => x.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `庫存盤點-${localDay()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -1295,79 +1309,4 @@ function drawRemitTable() {
       <td class="sub hide-m">${o.remit === '已匯款' ? esc(o.remitAt) : esc(o.period === '指定日期' ? o.payDate : o.period)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="card empty">沒有${rmFilter}的門市收購單</div>`;
   $$('[data-rm]').forEach(tr => tr.onclick = () => intakeDrawer(intakes.find(o => o.id === tr.dataset.rm)));
-}
-
-/* ============================== 線上估價表（後台） ============================== */
-let pr = null, prDirty = false, prFilter = '';
-window.addEventListener('beforeunload', e => { if (prDirty && location.hash === '#prices') { e.preventDefault(); e.returnValue = ''; } });
-async function pricesPage(refresh) {
-  if (prDirty && refresh && !(await ask('有尚未儲存的修改，確定要重新載入？', '重新載入'))) return;
-  app.innerHTML = pagesNav('prices') + '<div class="spinner"></div>';
-  try { pr = await api('adminPrices'); prDirty = false; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('prices') + `<div class="card empty">${esc(e.message)}</div>`; return; }
-  drawPrices();
-}
-function drawPrices() {
-  const q = prFilter.trim().toLowerCase();
-  const filled = pr.rows.filter(r => Number(r.price) > 0 || Number(r.newPrice) > 0).length;
-  pr.rules.accessories = pr.rules.accessories || [];
-  const ruleRows = (key, withInspect) => pr.rules[key].map((x, i) => `<div class="pr-rule" data-rk="${key}" data-ri="${i}">
-      <input class="input" data-rf="label" value="${esc(x.label)}" placeholder="選項名稱">
-      ${key === 'battery' ? `<label class="pr-pct"><span>下限</span><input class="input num" data-rf="min" inputmode="numeric" value="${esc(x.min ?? '')}"><span>%</span></label>` : ''}
-      ${key === 'accessories' ? '' : `<label class="pr-pct">${key === 'battery' ? '<span>未達標準</span>' : ''}<input class="input num" data-rf="pct" inputmode="numeric" value="${esc(x.pct ?? '')}" ${x.inspect ? 'disabled' : ''}><span>${key === 'issues' ? '% 扣' : '%'}</span></label>`}
-      ${withInspect ? `<label class="check small"><input type="checkbox" data-rf="inspect" ${x.inspect ? 'checked' : ''}> 需檢測</label>` : ''}
-      <button type="button" class="ph-del static" data-rdel aria-label="刪除">✕</button></div>`).join('') +
-    `<button type="button" class="link" data-radd="${key}" style="font-size:13px">＋ 新增選項</button>`;
-  app.innerHTML = `${pagesNav('prices')}
-    <div class="card"><h3>線上估價表 <span class="small muted" style="font-weight:400">已填價格 ${filled} / ${pr.rows.length} 列（空白的不會顯示給客戶）</span></h3>
-      <p class="small muted" style="margin:0">「最高收購價」＝外觀無刮傷、電池 90% 以上、功能都正常的價格。客戶看到的預估價＝最高收購價 × 外觀% × 電池% ×（1 − 故障扣%），電池達到型號要求不扣；再往下顯示 ${esc(pr.rules.spread)}% 的區間。</p></div>
-    <div class="grid2 pr-grid">
-      <div class="card"><h3>價格</h3>
-        <div class="toolbar" style="margin-bottom:8px"><input class="input" id="prQ" placeholder="搜尋型號" value="${esc(prFilter)}"><button class="btn btn-ghost btn-sm" id="prAdd">＋ 新增一列</button></div>
-        <table class="table pr-table"><thead><tr><th>類別</th><th>型號</th><th>容量</th><th>最高收購價</th><th>全新價</th><th>電池要求%</th><th>配件扣款</th><th>配件項目</th><th></th></tr></thead><tbody>
-        ${pr.rows.map((r, i) => !q || (r.model + ' ' + r.capacity + ' ' + r.category).toLowerCase().includes(q) ? `<tr data-pi="${i}" class="${i && pr.rows[i - 1].model === r.model ? 'same' : ''}">
-          <td><select class="input" data-pf="category">${[...new Set(['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods／配件', 'Samsung', 'OPPO', 'Google', '其他', ...pr.rows.map(x => x.category)])].map(c => `<option ${r.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
-          <td><input class="input" data-pf="model" value="${esc(r.model)}"></td>
-          <td><input class="input" data-pf="capacity" value="${esc(r.capacity)}" style="max-width:90px"></td>
-          <td><input class="input num" data-pf="price" inputmode="numeric" value="${esc(r.price || '')}" placeholder="未填" style="max-width:110px"></td>
-          <td><input class="input num" data-pf="newPrice" inputmode="numeric" value="${esc(r.newPrice || '')}" placeholder="—" title="全新未拆封收購價（空白＝不收全新）" style="max-width:100px"></td>
-          <td><input class="input num" data-pf="battery" inputmode="numeric" value="${esc(r.battery ?? '')}" placeholder="${esc(pr.rules.batteryDefault ?? 90)}" title="0＝不看電池；空白＝預設" style="max-width:70px"></td>
-          <td><input class="input num" data-pf="acc" inputmode="numeric" value="${esc(r.acc || '')}" placeholder="0" title="每缺一項盒子／配件扣多少" style="max-width:80px"></td>
-          <td><input class="input" data-pf="accItems" value="${esc(r.accItems || '')}" placeholder="全部" title="只扣哪些項目（用逗號分隔），空白＝全部" style="max-width:130px"></td>
-          <td><button type="button" class="ph-del static" data-pdel="${i}" aria-label="刪除">✕</button></td></tr>` : '').join('')}
-        </tbody></table></div>
-      <div>
-        <div class="card"><h3>外觀</h3>${ruleRows('appearance')}</div>
-        <div class="card"><h3>電池健康度</h3><p class="small muted" style="margin:-4px 0 10px">客戶選的級距「下限」達到該型號的「電池要求%」就不扣；未達才乘「未達標準 %」。型號的電池要求填在左邊價格表（0＝不看電池，空白＝預設 ${esc(pr.rules.batteryDefault ?? 90)}%）。</p>${ruleRows('battery')}</div>
-        <div class="card"><h3>盒子與配件</h3><p class="small muted" style="margin:-4px 0 10px">客戶勾選缺少的項目，每項扣該型號的「配件扣款」金額。左邊「配件項目」空白＝下面全部項目都算；只扣某幾項就填項目名稱（例：沒有原廠盒子）；各項金額不同可寫「沒有原廠盒子:1500,沒有原廠充電器:2000」；填「無」＝不扣。iPhone／iPad／Mac 以外的類別不問配件。</p>${ruleRows('accessories')}</div>
-        <div class="card"><h3>故障</h3><p class="small muted" style="margin:-4px 0 10px">勾「需檢測」＝不顯示價格，改顯示「需實際檢測後報價」</p>${ruleRows('issues', true)}</div>
-        <div class="card"><h3>其他</h3>
-          <div class="grid2"><label class="field"><span>價格區間（%）</span><input class="input num" id="prSpread" inputmode="numeric" value="${esc(pr.rules.spread)}" style="max-width:100px"></label>
-          <label class="field"><span>預設電池要求（%）</span><input class="input num" id="prBatDef" inputmode="numeric" value="${esc(pr.rules.batteryDefault ?? 90)}" style="max-width:100px"></label></div>
-          <label class="field" style="margin:0"><span>給客戶的說明</span><textarea class="input" id="prNote">${esc(pr.rules.note)}</textarea></label></div>
-      </div>
-    </div>
-    <div class="in-foot"><span class="err" id="prErr" style="flex:1;margin:0">${prDirty ? '有尚未儲存的修改' : ''}</span>
-      <a class="btn btn-ghost" href="index.html#/estimate" target="_blank">看客戶畫面 ↗</a><button class="btn btn-dark" id="prSave">儲存並上線</button></div>`;
-  const dirty = () => { prDirty = true; $('#prErr').textContent = '有尚未儲存的修改'; };
-  $('#prQ').oninput = e => { prFilter = e.target.value; const pos = e.target.selectionStart; drawPrices(); const n = $('#prQ'); n.focus(); n.setSelectionRange(pos, pos); };
-  $$('[data-pi]').forEach(tr => { const r = pr.rows[+tr.dataset.pi]; $$('[data-pf]', tr).forEach(el => el.oninput = el.onchange = () => { r[el.dataset.pf] = ['price', 'battery', 'acc', 'newPrice'].includes(el.dataset.pf) ? el.value.replace(/[^\d]/g, '') : el.value; dirty(); }); });
-  $$('[data-pdel]').forEach(b => b.onclick = () => { pr.rows.splice(+b.dataset.pdel, 1); prDirty = true; drawPrices(); });
-  $('#prAdd').onclick = () => { pr.rows.unshift({ category: 'iPhone', model: prFilter || '', capacity: '', price: '', note: '' }); prDirty = true; drawPrices(); $('[data-pi="0"] [data-pf=model]')?.focus(); };
-  $$('[data-rk]').forEach(row => {
-    const x = pr.rules[row.dataset.rk][+row.dataset.ri];
-    $$('[data-rf]', row).forEach(el => el.oninput = el.onchange = () => {
-      if (el.dataset.rf === 'inspect') { x.inspect = el.checked; prDirty = true; drawPrices(); return; }
-      x[el.dataset.rf] = ['pct', 'min'].includes(el.dataset.rf) ? el.value.replace(/[^\d]/g, '') : el.value; dirty();
-    });
-    $('[data-rdel]', row).onclick = () => { pr.rules[row.dataset.rk].splice(+row.dataset.ri, 1); prDirty = true; drawPrices(); };
-  });
-  $$('[data-radd]').forEach(b => b.onclick = () => { pr.rules[b.dataset.radd].push(b.dataset.radd === 'accessories' ? { label: '' } : b.dataset.radd === 'battery' ? { label: '', min: 0, pct: 80 } : { label: '', pct: b.dataset.radd === 'issues' ? 10 : 90 }); prDirty = true; drawPrices(); });
-  $('#prSpread').oninput = e => { pr.rules.spread = e.target.value.replace(/[^\d]/g, ''); dirty(); };
-  $('#prBatDef').oninput = e => { pr.rules.batteryDefault = e.target.value.replace(/[^\d]/g, ''); dirty(); };
-  $('#prNote').oninput = e => { pr.rules.note = e.target.value; dirty(); };
-  $('#prSave').onclick = async () => {
-    const b = $('#prSave'); b.disabled = true; $('#prErr').textContent = '儲存中…';
-    try { pr = await api('adminSavePrices', { rows: pr.rows, rules: pr.rules }); prDirty = false; toast('已儲存，客戶網站 10 分鐘內更新'); drawPrices(); }
-    catch (e) { if (e.auth) return start(); $('#prErr').textContent = e.message; b.disabled = false; }
-  };
 }

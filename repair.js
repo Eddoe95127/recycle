@@ -32,7 +32,7 @@ const REPAIR_NOTES = ['螢幕密碼已告知', '已關閉尋找', '客人已備�
 const priceListOf = (cat, model) => ((typeof REPAIR_PRICES !== 'undefined' && REPAIR_PRICES[cat]) || {})[model] || [];
 const repairModelsOf = cat => Object.keys((typeof REPAIR_PRICES !== 'undefined' && REPAIR_PRICES[cat]) || {});
 let repairs = [], rpQuery = '', rpStatus = 'open', rp = null, rpBusy = false, rpDone = null;
-async function loadRepairs() { repairs = (await api('repairList')).repairs; }
+async function loadRepairs() { ensureRepairPrices(); repairs = (await api('repairList')).repairs; }
 
 /** 保固狀態 */
 function warrantyOf(o) {
@@ -64,7 +64,7 @@ async function repairPage(refresh) {
     </div>
     ${P('repair') ? '<a class="btn btn-dark btn-block" href="#repair/new" style="margin-bottom:14px">＋ 新增維修單</a>' : ''}
     <div class="toolbar">
-      <input class="input" id="rpQ" placeholder="保固查詢：輸入 IMEI／序號、電話、姓名或單號" value="${esc(rpQuery)}">
+      <input class="input" id="rpQ" placeholder="搜尋 手機號碼／IMEI／序號／姓名／單號（保固查詢）" value="${esc(rpQuery)}">
       <div class="tabs">${[['open', '處理中'], ['待取件', '待取件'], ['已取件', '已取件'], ['all', '全部']].map(([k, l]) => `<button data-rs="${k}" class="${rpStatus === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     </div><div id="rpTbl"></div>`;
   $('#rpQ').oninput = e => { rpQuery = e.target.value; drawRepairList(); };
@@ -87,6 +87,18 @@ function drawRepairList() {
       <td><b>${esc(rpDev(o))}</b>${o.serial ? `<div class="sub num">${esc(o.serial)}</div>` : ''}<div class="sub">${esc(rpItemText(o))}</div></td>
       <td>${rpBadge(o)}${wBadge(o) ? '<div style="margin-top:4px">' + wBadge(o) + '</div>' : ''}${o.promise && !['已取件', '已取消'].includes(o.status) ? `<div class="sub">預計：${esc(o.promise)}</div>` : ''}</td></tr>`).join('')}
     </tbody></table>` : `<div class="card empty">${q ? '查無維修紀錄' : '目前沒有維修單'}</div>`);
+  const isPhone = /^0\d{3,9}$/.test(q.replace(/[\s-]/g, ''));
+  if (isPhone && P('repair')) {
+    $('#rpTbl').insertAdjacentHTML('beforeend', `<p style="margin:8px 4px;text-align:center"><button class="${list.length ? 'link' : 'btn btn-dark'}" id="rpNewPhone">＋ 用 ${esc(q)} ${list.length ? '再' : ''}新增維修單</button></p>`);
+    $('#rpNewPhone').onclick = () => {
+      const last = list[0] || {}; // 老客人：帶入上次的姓名與信箱
+      if (!rp || rpDone) rp = newRepair();
+      if (!rp.phone) rp.phone = q.replace(/[\s-]/g, '');
+      if (!rp.customer && last.customer) rp.customer = last.customer;
+      if (!rp.email && last.email) rp.email = last.email;
+      location.hash = '#repair/new';
+    };
+  }
   $$('[data-rid]').forEach(tr => tr.onclick = () => repairDrawer(repairs.find(o => o.id === tr.dataset.rid)));
 }
 
@@ -98,6 +110,7 @@ const INSPECT_NOTE = '如之後確認後維修報價，則不收取檢測費';
 /** 列表、紀錄上的項目文字 */
 const rpItemText = o => o.items.map(x => x.name).join('、') || (o.inspect ? '檢測後另行報價' : o.issue);
 async function repairForm() {
+  await ensureRepairPrices();
   if (!rp) rp = newRepair();
   rpDone = null;
   if (!repairs.length) { try { await loadRepairs(); } catch (e) { /* 查不到歷史紀錄不影響登記 */ } }
