@@ -197,6 +197,10 @@
   .id-slot { display: grid; gap: 6px; } .id-slot > b { font-size: 14px; }
   .id-slot .ph, .id-slot .ph-add { width: 100%; aspect-ratio: 86/54; }
   .id-slot .ph img { height: 100%; aspect-ratio: auto; }
+  .edit-bar { display: flex; gap: 8px; margin-left: auto; }
+  .edit-log { list-style: none; margin: 0; padding: 0; } .edit-log li { padding: 10px 0; border-top: 1px solid var(--line, #eee); font-size: 14px; line-height: 1.6; } .edit-log li:first-child { border-top: 0; padding-top: 0; }
+  tr.au-del td { background: #fff6f5; }
+  .show-m { display: none; } @media (max-width: 640px) { .show-m { display: block; } }
   .rp-acts { display: flex; gap: 8px; flex-wrap: wrap; }
   .sig-mid { aspect-ratio: auto; height: clamp(260px, 42vh, 520px); border-width: 3px; margin-top: 8px; border-radius: 16px; }
   .pill.ok { background: #e8f7ee; color: #1f7a45; }
@@ -313,10 +317,10 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261122i"></script>
-<script src="store.js?v=20261122v"></script>
+<script src="shared.js?v=20261122k"></script>
+<script src="store.js?v=20261122w"></script>
 <script src="repair-prices.js?v=20261122a"></script>
-<script src="repair.js?v=20261122n"></script>
+<script src="repair.js?v=20261122o"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -409,7 +413,7 @@ function pagesNav(cur) {
     ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '估價表']]],
     ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
     ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], P('view_cost') && ['report', '報表']]],
-    ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], ['account', '我的帳號']]],
+    ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
   ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
   const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];
   return `<nav class="nav-groups">${groups.map(([k, l, subs]) => `<a href="#${subs[0][0]}" class="${k === curGroup[0] ? 'on' : ''}">${l}</a>`).join('')}
@@ -466,8 +470,24 @@ function accountPage() {
       <p class="small muted" style="margin:0 0 12px">${isBoss() ? `老闆帳號（${esc(me.via)} 登入），擁有全部權限。` : '您目前可以：'}</p>
       ${isBoss() ? '' : `<ul style="margin:0;padding-left:20px;line-height:1.9">${me.perms.map(p => `<li>${esc(me.permDefs[p] || p)}</li>`).join('')}<li>查看訂單列表、商品與狀態、寫內部備註</li></ul>`}
     </div>
+    ${me.canEditSelf ? `<div class="card" style="max-width:560px"><h3>我的資料</h3>
+      <label class="field"><span>顯示名稱</span><div style="display:flex;gap:8px"><input class="input" id="myName" value="${esc(me.name)}" maxlength="30" style="flex:1"><button class="btn btn-dark btn-sm" id="myNameSave">儲存</button></div>
+        <small class="muted">會顯示在右上角，以及之後建立的收購單、維修單「經手人／收件人員」</small></label>
+      ${isStaff ? `<p class="small muted" style="margin:4px 0 0">登入帳號：<b class="num">${esc(me.userId)}</b>。要調整自己的權限，請到 <a href="#users">員工帳號</a>。</p>` : ''}</div>`
+      : isStaff ? '<div class="card" style="max-width:560px"><p class="small muted" style="margin:0">顯示名稱與權限請找老闆或管理者修改。</p></div>' : ''}
     ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}`;
   if (isStaff) mountPassword($('#pwBox'), false);
+  if ($('#myNameSave')) $('#myNameSave').onclick = async e => {
+    const name = $('#myName').value.trim();
+    if (!name) return toast('請填寫顯示名稱');
+    e.currentTarget.disabled = true;
+    try {
+      const r = await api('updateMyProfile', { name });
+      me.name = r.name;
+      $('#who').innerHTML = `${esc(me.name)}<span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role || '員工')}</span>`;
+      toast('已更新顯示名稱'); accountPage();
+    } catch (x) { if (x.auth) return start(); toast(x.message); e.currentTarget.disabled = false; }
+  };
 }
 function passwordPage(forced) {
   app.innerHTML = '<div class="card staff-login rise" id="pwBox"></div>';

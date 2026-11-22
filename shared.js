@@ -523,7 +523,7 @@ mockDB.find(o => o.id === 'AR261115002').report = {
 
 { const r = mockDB.find(o => o.id === 'AR261115002').report; r.sent = { ...JSON.parse(JSON.stringify(r)), sentAt: r.updatedAt }; }
 // 預覽用員工帳號（密碼都是 password123）
-const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）', repair: '門市維修作業（建立維修單、更新進度、取件與保固查詢）' };
+const MOCK_PERMS = { view_contact: '查看客戶電話、Email、地址', view_id: '查看身分證字號與照片', view_bank: '查看匯款帳戶', edit_shipping: '處理物流（安排取件、已取件、到店、寄回）', edit_report: '填寫檢測報告、上傳照片、送出報價', edit_payment: '匯款作業（宅配標記已付款、門市標記已匯款與上傳截圖）', edit_any: '任意修改宅配訂單狀態（含取消）', manage_users: '管理員工帳號與權限', create_intake: '門市收購登記（建立收購單、列印收購聯）', edit_intake: '修改門市收購單（出售人、付款、商品資料，會留下修改紀錄）', delete_intake: '刪除門市收購單（需填原因，會留下紀錄）', view_cost: '查看收購金額與成本', edit_stock: '管理庫存（改庫存狀態、登記銷售、匯出盤點）', edit_prices: '維護線上估價表（價格與扣款規則）', repair: '門市維修作業（建立維修單、更新進度、取件與保固查詢）', edit_repair: '修改維修單基本資料（客戶、裝置、故障，會留下修改紀錄）', delete_repair: '刪除維修單（需填原因，會留下紀錄）' };
 const MOCK_PRESETS = { '店長': Object.keys(MOCK_PERMS).filter(k => k !== 'manage_users'), '檢測人員': ['edit_report'], '物流客服': ['view_contact', 'edit_shipping'], '會計': ['view_id', 'view_bank', 'edit_payment', 'view_cost'], '門市店員': ['create_intake', 'repair'], '維修技師': ['repair'] };
 const mockUsers = [
   { username: 'tech1', name: '阿傑', role: '檢測人員', perms: MOCK_PRESETS['檢測人員'], enabled: true, mustChange: false, createdAt: '2026-11-20 10:00', lastLogin: '2026-11-21 09:12', pw: 'password123' },
@@ -548,7 +548,8 @@ let mockPrices = [['iPhone 11', '64GB', 2000, 0, 300, '沒有原廠盒子'], ['i
     { category: 'Samsung', model: 'Galaxy S24 Ultra', capacity: '12G/256G', price: 11100, newPrice: 0, battery: '', acc: '', accItems: '', note: '' },
     { category: 'Apple Watch', model: 'Apple Watch 12', capacity: '42mm GPS', price: 0, newPrice: 9500, battery: '', acc: '', accItems: '', note: '' },
   ]);
-const mockRepairs = [];
+const mockRepairs = [], mockAudit = [];
+let mockOwnerName = '老闆';
 const mockIntakes = [], mockStock = [
   { sku: 'AR261112001-1', source: '宅配', ref: 'AR261112001', inAt: '2026-11-15 11:00', category: '手機', model: 'iPhone 15 Pro', capacity: '256GB', color: '原色鈦金屬', serial: '356789012345678', notes: '外觀 A', cost: 18800, status: '已售出', saleDate: '2026-11-18', channel: '蝦皮', salePrice: 21500, updatedAt: '2026-11-18 14:00', updatedBy: '老闆', photos: [] },
 ];
@@ -588,7 +589,7 @@ async function mockApiInner(action, d) {
   const now = () => { const x = new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0') + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
   const find = id => { const o = mockDB.find(x => x.id === id); if (!o) throw new Error('找不到此訂單'); return o; };
   const setStatus = (o, s, by) => { if (s && s !== o.status) { o.status = s; o.updatedAt = now(); o.history.push({ time: o.updatedAt, status: s, by: by || '客戶' }); } };
-  const me = () => { const u = mockUsers.find(x => x.username === mockMe); return u ? { ...u, via: 'Staff' } : { username: '', name: '老闆', role: '老闆', via: 'LINE', perms: Object.keys(MOCK_PERMS), mustChange: false }; };
+  const me = () => { const u = mockUsers.find(x => x.username === mockMe); return u ? { ...u, via: 'Staff' } : { username: '', name: mockOwnerName, role: '老闆', via: 'LINE', perms: Object.keys(MOCK_PERMS), mustChange: false }; };
   const need = p => { const s = me(); if (s.mustChange) throw new Error('請先修改密碼'); if (p && !s.perms.includes(p)) throw new Error('您沒有這項權限'); return s; };
   const adm = o => {
     const s = me(), a = { ...o, history: [...o.history], masked: {} };
@@ -607,8 +608,16 @@ async function mockApiInner(action, d) {
     if (!s.perms.includes('view_id')) { a.masked.id = a.idPhotos.length; a.idPhotos = []; }
     if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.total = null; a.items.forEach(it => { it.price = null; it.base = null; (it.deductions || []).forEach(x => { x.amount = null; }); }); }
     if (!s.perms.includes('edit_payment') && !s.perms.includes('view_bank')) a.proofs = [];
+    a.edits = auditOf('收購單', o.id, s);
     return a;
   };
+  const auditLine = (x, s) => x.s ? `${x.f}：已修改` : x.c && !s.perms.includes('view_cost') ? `${x.f}：已修改（🔒 金額）` : `${x.f}：${x.a || '（空白）'} → ${x.b || '（空白）'}`;
+  const auditOut = (r, s) => ({ ...r, lines: r.diffs.length ? r.diffs.map(x => auditLine(x, s)) : r.detail.split('\n') });
+  const auditOf = (kind, id, s) => mockAudit.filter(r => r.kind === kind && r.ref === id).reverse().map(r => auditOut(r, s));
+  const addAudit = (s, kind, ref, action, diffs, reason, detail = '') => mockAudit.push({ at: now(), by: s.name, kind, ref, action, diffs, reason: reason || '', detail });
+  const diffOf = (o, n, labels, secret = {}, cost = {}) => Object.keys(labels).filter(k => n[k] !== undefined && String(o[k] ?? '') !== String(n[k] ?? ''))
+    .map(k => secret[k] ? { f: labels[k], a: '', b: '', s: 1 } : { f: labels[k], a: String(o[k] ?? ''), b: String(n[k] ?? ''), c: cost[k] ? 1 : 0 });
+  const rpOut = (o, s) => { const a = JSON.parse(JSON.stringify(o)); a.masked = {}; if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.partsCost = null; a.parts.forEach(p => { p.cost = null; }); } a.edits = auditOf('維修單', o.id, s); return a; };
   const stOut = (r, s) => ({ ...r, cost: s.perms.includes('view_cost') ? r.cost : null, salePrice: s.perms.includes('view_cost') || s.perms.includes('edit_stock') ? r.salePrice : null });
   const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history], report: o.report ? (o.report.sent || null) : null });
   switch (action) {
@@ -633,7 +642,7 @@ async function mockApiInner(action, d) {
     }
     case 'adminWhoami': {
       const s = me();
-      return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS };
+      return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, canEditSelf: s.role === '老闆' || s.perms.includes('manage_users'), role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS };
     }
     case 'staffChangePassword': {
       const u = mockUsers.find(x => x.username === mockMe);
@@ -644,6 +653,7 @@ async function mockApiInner(action, d) {
       u.pw = d.newPassword; u.mustChange = false;
       return { ok: true, session: 'mock', user: { name: u.name, via: 'Staff' } };
     }
+    case 'updateMyProfile': { const s = need(); if (!d.name) throw new Error('請填寫顯示名稱'); if (s.via === 'Staff') { if (!s.perms.includes('manage_users')) throw new Error('顯示名稱請找老闆或管理者修改'); mockUsers.find(x => x.username === s.username).name = d.name; } else mockOwnerName = d.name; return { ok: true, name: d.name }; }
     case 'adminUsers': need('manage_users'); return { ok: true, users: mockUsers.map(({ pw, ...u }) => ({ ...u, perms: [...u.perms] })) };
     case 'adminSaveUser': {
       need('manage_users');
@@ -693,7 +703,58 @@ async function mockApiInner(action, d) {
     case 'priceTable': return { ok: true, rows: mockPrices.filter(r => r.price > 0 || r.newPrice > 0), rules: mockPriceRules };
     case 'adminPrices': need('edit_prices'); return { ok: true, rows: mockPrices.map(r => ({ ...r })), rules: JSON.parse(JSON.stringify(mockPriceRules)) };
     case 'adminSavePrices': { need('edit_prices'); mockPrices = d.rows.filter(r => r.model).map(r => ({ ...r, price: Number(String(r.price).replace(/[^\d]/g, '')) || 0 })); if (d.rules) Object.assign(mockPriceRules, d.rules); return { ok: true, rows: mockPrices, rules: mockPriceRules }; }
-    case 'intakeList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, intakes: [...mockIntakes].reverse().map(o => inOut(o, s)) }; }
+    case 'intakeList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, intakes: mockIntakes.filter(o => !o.deletedAt).reverse().map(o => inOut(o, s)) }; }
+    case 'intakeEdit': {
+      const s = need('edit_intake'), o = mockIntakes.find(x => x.id === d.id && !x.deletedAt), f = d.fields || {};
+      if (!o) throw new Error('找不到這張收購單');
+      if (f.seller !== undefined && !f.seller) throw new Error('出售人姓名不可空白');
+      if (f.payment && f.payment !== o.payment && o.remit === '已匯款') throw new Error('已匯款的收購單不能改付款方式');
+      const pay = f.payment || o.payment, n = { ...f };
+      if (pay === '轉帳') { if (o.payment !== '轉帳') n.remit = '待匯款'; } else { Object.assign(n, { bank: '', account: '', period: '', payDate: '' }); if (o.payment !== '現金') n.remit = ''; }
+      const diffs = diffOf(o, n, { seller: '出售人', phone: '電話', email: '電子信箱', payment: '付款方式', bank: '收款銀行', account: '收款帳號', period: '匯款期限', payDate: '指定日期' }, { phone: 1, email: 1, account: 1 });
+      const L = { model: '品名／型號', capacity: '容量', color: '顏色', serial: 'IMEI／序號', notes: '狀況說明', price: '收購金額' };
+      (d.items || []).forEach((x, i) => { const it = o.items[i]; if (!it) return; const nv = { ...x }; if (!s.perms.includes('view_cost') || nv.price === '') delete nv.price; else if (nv.price !== undefined) nv.price = Number(nv.price);
+        diffs.push(...diffOf(it, nv, Object.fromEntries(Object.entries(L).map(([k, l]) => [k, `商品${i + 1} ${l}`])), {}, { price: 1 })); Object.assign(it, nv); });
+      if (!diffs.length) throw new Error('沒有任何修改');
+      Object.keys(n).forEach(k => { o[k] = n[k]; });
+      o.total = o.items.reduce((t, it) => t + (Number(it.price) || 0), 0);
+      mockStock.filter(r => r.ref === o.id).forEach(r => { const it = o.items[Number(r.sku.split('-').pop()) - 1]; if (it) Object.assign(r, { model: it.model, capacity: it.capacity, color: it.color, serial: it.serial, cost: it.price, updatedAt: now(), updatedBy: s.name }); });
+      addAudit(s, '收購單', o.id, '修改', diffs, d.reason);
+      return { ok: true, intake: inOut(o, s) };
+    }
+    case 'intakeDelete': {
+      const s = need('delete_intake'), o = mockIntakes.find(x => x.id === d.id && !x.deletedAt);
+      if (!d.reason) throw new Error('請填寫刪除原因');
+      const st = mockStock.filter(r => r.ref === o.id);
+      if (st.some(r => r.status === '已售出')) throw new Error('這張單的商品已經售出，不能刪除；請先到庫存改回「在庫」');
+      Object.assign(o, { deletedAt: now(), deletedBy: s.name, deleteReason: d.reason });
+      st.forEach(r => { r.status = '已刪除'; });
+      addAudit(s, '收購單', o.id, '刪除', [], d.reason, `刪除收購單：出售人 ${o.seller}（${o.createdAt}）\n商品：${o.items.map(it => it.model).join('、')}${st.length ? `\n庫存 ${st.length} 件一併標記為已刪除` : ''}`);
+      return { ok: true };
+    }
+    case 'repairEdit': {
+      const s = need('edit_repair'), o = mockRepairs.find(x => x.id === d.id && !x.deletedAt), f = { ...(d.fields || {}) };
+      if (!f.customer) throw new Error('客戶姓名不可空白');
+      if (!/^0\d{8,9}$/.test(String(f.phone || '').replace(/[\s-]/g, ''))) throw new Error('請填寫正確的聯絡電話');
+      f.inspectFee = f.inspect ? Number(f.inspectFee) || 0 : 0;
+      const diffs = diffOf(o, f, { customer: '客戶姓名', phone: '電話', email: '電子信箱', category: '類別', model: '型號', capacity: '容量', color: '顏色', serial: 'IMEI／序號', issue: '故障描述', condition: '外觀與配件', promise: '預計完成', inspect: '檢測後報價', inspectFee: '檢測費' });
+      if (!diffs.length) throw new Error('沒有任何修改');
+      Object.assign(o, f);
+      addAudit(s, '維修單', o.id, '修改', diffs, d.reason);
+      return { ok: true, repair: rpOut(o, s) };
+    }
+    case 'repairDelete': {
+      const s = need('delete_repair'), o = mockRepairs.find(x => x.id === d.id && !x.deletedAt);
+      if (!d.reason) throw new Error('請填寫刪除原因');
+      Object.assign(o, { deletedAt: now(), deletedBy: s.name, deleteReason: d.reason });
+      addAudit(s, '維修單', o.id, '刪除', [], d.reason, `刪除維修單：${o.customer}・${o.model}（${o.status}，${o.createdAt} 收件）`);
+      return { ok: true };
+    }
+    case 'auditList': {
+      const s = need();
+      if (!['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair'].some(p => s.perms.includes(p))) throw new Error('您沒有這項權限');
+      return { ok: true, logs: [...mockAudit].reverse().map(r => auditOut(r, s)) };
+    }
     case 'intakeCreate': {
       const s = need('create_intake');
       if (!d.seller) throw new Error('請填寫出售人姓名');
@@ -715,7 +776,7 @@ async function mockApiInner(action, d) {
       const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
       return { ok: true, name: `二手商品收購單_${d.id}_${d.kind === 'shop' ? '門市存聯' : '客戶聯'}.pdf`, data: btoa(pdf) };
     }
-    case 'repairList': { const s = need(); return { ok: true, repairs: [...mockRepairs].reverse().map(o => { const a = JSON.parse(JSON.stringify(o)); a.masked = {}; if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.partsCost = null; a.parts.forEach(p => { p.cost = null; }); } return a; }) }; }
+    case 'repairList': { const s = need(); return { ok: true, repairs: mockRepairs.filter(o => !o.deletedAt).reverse().map(o => rpOut(o, s)) }; }
     case 'repairCreate': {
       const s = need('repair');
       if (!d.customer) throw new Error('請填寫客戶姓名');
@@ -728,16 +789,19 @@ async function mockApiInner(action, d) {
         doneAt: '', pickupAt: '', pickupBy: '', warrantyEnd: '', note: d.note || '', history: [`${now()}｜待維修（收件）｜${s.name}`], photos: (d.photos || []).map(save), dropSign: save(d.dropSign), pickSign: '',
         mailLog: d.email ? `${now()} 已寄送（收件）→ ${d.email}（模擬）` : '', masked: {} };
       mockRepairs.push(o);
-      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+      return { ok: true, repair: rpOut(o, need()) };
     }
     case 'repairUpdate': {
       const s = need('repair'), o = mockRepairs.find(x => x.id === d.id);
       if (d.expected && d.expected !== o.status) throw new Error('這張維修單剛被其他人更新，請重新整理');
+      const txt = it => (it || []).map(x => `${x.name} NT$${x.amount}`).join('、'), before = { items: txt(o.items), parts: (o.parts || []).map(p => p.name).join('、'), note: o.note };
+      const after = { items: d.items ? txt(d.items) : undefined, parts: d.parts ? d.parts.map(p => p.name).join('、') : undefined, note: d.note != null ? d.note : undefined };
+      const rdiff = diffOf(before, after, { items: '維修項目', parts: '使用零件', note: '內部備註' }); if (rdiff.length) addAudit(s, '維修單', o.id, '修改', rdiff, '');
       if (d.items) { o.items = d.items; o.quote = d.items.reduce((t, x) => t + (Number(x.amount) || 0), 0); }
       if (d.parts) { o.parts = d.parts; o.partsCost = d.parts.reduce((t, p) => t + (Number(p.cost) || 0), 0); }
       if (d.note != null) o.note = d.note;
       if (d.status && d.status !== o.status) { if (d.status === '待取件' || d.status === '無法維修') { o.doneAt = now(); if (o.email) o.mailLog = `${now()} 已寄送（${d.status === '待取件' ? '完修通知' : '無法維修通知'}）→ ${o.email}（模擬）\n` + o.mailLog; } o.status = d.status; o.history.unshift(`${now()}｜${d.status}｜${s.name}`); }
-      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+      return { ok: true, repair: rpOut(o, need()) };
     }
     case 'repairPickup': {
       const s = need('repair'), o = mockRepairs.find(x => x.id === d.id);
@@ -749,7 +813,7 @@ async function mockApiInner(action, d) {
       o.fee = Number(d.fee) || 0; o.payment = o.fee ? d.payment : ''; o.pickupAt = now(); o.pickupBy = s.name; o.doneAt = o.doneAt || o.pickupAt; o.status = '已取件';
       const k = 'rk' + Date.now(); mockPhotos[k] = d.pickSign; o.pickSign = k; o.history.unshift(`${now()}｜已取件｜${s.name}`);
       if (o.email) o.mailLog = `${now()} 已寄送（取件保固）→ ${o.email}（模擬）\n` + o.mailLog;
-      return { ok: true, repair: JSON.parse(JSON.stringify(o)) };
+      return { ok: true, repair: rpOut(o, need()) };
     }
     case 'repairPdf': {
       need();
@@ -769,7 +833,7 @@ async function mockApiInner(action, d) {
       if (d.status) { o.remit = d.status; o.remitAt = d.status === '已匯款' ? now() : ''; o.remitBy = d.status === '已匯款' ? s.name : ''; }
       return { ok: true, intake: inOut(o, s) };
     }
-    case 'stockList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, items: [...mockStock].reverse().map(r => stOut(r, s)) }; }
+    case 'stockList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, items: mockStock.filter(r => r.status !== '已刪除').reverse().map(r => stOut(r, s)) }; }
     case 'stockUpdate': {
       const s = need('edit_stock'), r = mockStock.find(x => x.sku === d.sku);
       if (d.expected && d.expected !== r.status) throw new Error('這件商品剛被其他人改過，請重新整理');

@@ -371,7 +371,8 @@ function repairDrawer(o) {
       ${wBadge(o) ? `<div class="card" style="text-align:center">${wBadge(o)}</div>` : ''}
       <div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-dark btn-sm" data-rpdf="drop">📄 送修單</button>
-        ${o.status === '已取件' ? '<button class="btn btn-dark btn-sm" data-rpdf="pickup">📄 取件單／保固憑證</button>' : ''}</div></div>
+        ${o.status === '已取件' ? '<button class="btn btn-dark btn-sm" data-rpdf="pickup">📄 取件單／保固憑證</button>' : ''}
+        ${editBarHTML(P('edit_repair'), P('delete_repair'))}</div></div>
       <div class="card"><h3>客戶與裝置</h3><dl class="kv">
         <dt>客戶</dt><dd>${esc(o.customer)}</dd><dt>電話</dt><dd class="num"><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></dd>
         ${o.email ? `<dt>信箱</dt><dd>${esc(o.email)}</dd>` : ''}
@@ -404,12 +405,23 @@ function repairDrawer(o) {
       <div class="card"><h3>紀錄</h3><ul class="small muted" style="margin:0;padding-left:18px">${o.history.map(h => `<li>${esc(h.replace(/｜/g, '・'))}</li>`).join('')}${o.mailLog ? o.mailLog.split('\n').map(l => `<li>✉️ ${esc(l)}</li>`).join('') : ''}</ul></div>
       <div class="card"><h3>簽名</h3><div class="grid2"><div><div class="small muted">送修簽名</div><img class="sig-img" data-photo="${esc(o.dropSign)}" alt="送修簽名"></div>
         <div><div class="small muted">取件簽名</div>${o.pickSign ? `<img class="sig-img" data-photo="${esc(o.pickSign)}" alt="取件簽名">` : '<p class="small muted">尚未取件</p>'}</div></div></div>
+      ${editLogHTML(o)}
     </div>`;
     $('.d-body', d).scrollTop = keep;
     d.classList.add('show'); $('#scrim').classList.add('show');
     $('.d-close', d).onclick = closeDrawer;
     loadPhotos(d);
     $$('[data-rpdf]', d).forEach(b => b.onclick = () => rpPreview(o, b.dataset.rpdf));
+    if ($('[data-edit]', d)) $('[data-edit]', d).onclick = () => repairEdit(o);
+    if ($('[data-del]', d)) $('[data-del]', d).onclick = async () => {
+      const reason = await askReason(`刪除維修單 ${o.id}（${o.customer}・${rpDev(o)}）？\n\n會留下刪除紀錄。`, '確定刪除');
+      if (!reason) return;
+      try {
+        await api('repairDelete', { id: o.id, reason });
+        repairs = repairs.filter(x => x.id !== o.id);
+        closeDrawer(); toast('已刪除維修單 ' + o.id); refreshRepairList();
+      } catch (x) { if (x.auth) return start(); toast(x.message); }
+    };
     if (!can) return;
     const itemsRoot = $('[data-items="d"]', d);
     if (itemsRoot) bindItemsEditor(itemsRoot, ed.items, draw);
@@ -466,5 +478,41 @@ function repairDrawer(o) {
     }
   };
   draw();
+}
+/** 維修單基本資料修改（在抽屜裡編輯） */
+function repairEdit(o) {
+  const d = $('#drawer');
+  const inp = (label, k, extra = '') => `<label class="field"><span>${label}</span><input class="input" data-ef="${k}" value="${esc(o[k] == null ? '' : o[k])}" ${extra}></label>`;
+  $('.d-body', d).innerHTML = `
+    <div class="card"><h3>✏️ 修改維修單</h3><p class="small muted" style="margin:-4px 0 12px">進度、維修項目、零件請在維修單明細操作；照片與簽名不能修改。儲存後會留下操作紀錄。</p>
+      <div class="grid2">${inp('客戶姓名 *', 'customer')}${inp('聯絡電話 *', 'phone', 'inputmode="tel"')}</div>
+      ${inp('電子信箱', 'email', 'type="email" autocapitalize="off"')}</div>
+    <div class="card"><h3>裝置</h3>
+      <label class="field"><span>類別</span><select class="input" data-ef="category">${opts(Object.keys(IN_CATS), o.category)}</select></label>
+      ${inp('型號 *', 'model')}
+      <div class="grid2">${inp('容量／規格', 'capacity')}${inp('顏色', 'color')}</div>
+      ${inp('IMEI／序號', 'serial')}
+      <label class="field"><span>故障描述 *</span><textarea class="input" data-ef="issue" rows="3">${esc(o.issue)}</textarea></label>
+      <label class="field"><span>外觀與配件</span><textarea class="input" data-ef="condition" rows="2">${esc(o.condition)}</textarea></label>
+      ${inp('預計完成', 'promise')}
+      <label class="check" style="margin-top:4px"><input type="checkbox" id="efInspect" ${o.inspect ? 'checked' : ''}><span>檢測後另行報價</span></label>
+      <div id="efFeeBox" ${o.inspect ? '' : 'hidden'}><label class="field"><span>檢測費（NT$）</span><input class="input num" id="efFee" inputmode="numeric" value="${esc(o.inspectFee || 0)}"></label></div></div>
+    <div class="card"><label class="field"><span>修改原因（選填）</span><textarea class="input" id="efReason" rows="2" placeholder="例：電話打錯、客人更正型號"></textarea></label>
+      <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="efCancel" style="flex:1">取消</button><button class="btn btn-dark" id="efSave" style="flex:2">儲存修改</button></div>
+      <p class="err" id="efErr"></p></div>`;
+  $('.d-body', d).scrollTop = 0;
+  $('#efInspect', d).onchange = e => { $('#efFeeBox', d).hidden = !e.target.checked; };
+  $('#efCancel', d).onclick = () => repairDrawer(o);
+  $('#efSave', d).onclick = async e => {
+    const btn = e.currentTarget, fields = {};
+    $$('[data-ef]', d).forEach(el => { fields[el.dataset.ef] = el.value.trim(); });
+    fields.inspect = $('#efInspect', d).checked; fields.inspectFee = numv($('#efFee', d).value);
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const r = await api('repairEdit', { id: o.id, fields, reason: $('#efReason', d).value.trim() });
+      const i = repairs.findIndex(x => x.id === o.id); if (i >= 0) repairs[i] = r.repair;
+      toast('已儲存修改'); repairDrawer(r.repair); refreshRepairList();
+    } catch (x) { if (x.auth) return start(); $('#efErr', d).textContent = x.message; btn.disabled = false; btn.textContent = '儲存修改'; }
+  };
 }
 function refreshRepairList() { if (location.hash === '#repair' && $('#rpTbl')) drawRepairList(); }

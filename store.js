@@ -35,7 +35,7 @@ const IN_NOTICE = [
   ['您的權利', '您可依個資法第 3 條請求查詢、閱覽、製給複本、補充更正、停止利用或刪除，請洽門市或客服。'],
 ];
 
-const isStoreRoute = page => ['intake', 'intake/new', 'repair', 'repair/new', 'stock', 'remit', 'prices', 'report'].includes(page);
+const isStoreRoute = page => ['intake', 'intake/new', 'repair', 'repair/new', 'stock', 'remit', 'prices', 'report', 'audit'].includes(page);
 function storeRoute(page) {
   $('#refresh').hidden = page === 'intake/new';
   if (page === 'intake/new' && P('create_intake')) return intakeForm();
@@ -46,11 +46,13 @@ function storeRoute(page) {
   if (page === 'prices' && P('edit_prices')) { $('#refresh').onclick = () => pricesPage(true); return pricesPage(); }
   if (page === 'remit' && P('edit_payment')) { $('#refresh').onclick = () => remitPage(true); return remitPage(); }
   if (page === 'report' && showCost()) { $('#refresh').onclick = () => reportPage(true); return reportPage(); }
+  if (page === 'audit' && canAudit() && !SHOP) { $('#refresh').onclick = () => auditPage(true); return auditPage(); }
   location.hash = '';
 }
 /** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
 const showCost = () => P('view_cost') && !SHOP;
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
+const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair'].some(P);
 const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
 const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-US');
 
@@ -103,7 +105,8 @@ function intakeDrawer(o) {
     <div class="d-body">
       <div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-dark btn-sm" data-rc="shop">列印門市存聯</button>
-        <button class="btn btn-ghost btn-sm" data-rc="customer">列印客戶聯</button></div>
+        <button class="btn btn-ghost btn-sm" data-rc="customer">列印客戶聯</button>
+        ${editBarHTML(P('edit_intake'), P('delete_intake'))}</div>
         ${o.masked.cost ? '<p class="small muted" style="margin:8px 0 0">您沒有查看金額的權限，收購聯上的金額會隱藏</p>' : ''}</div>
       <div class="card"><h3>交易</h3><dl class="kv">
         <dt>建立時間</dt><dd>${esc(o.createdAt)}</dd><dt>經手人</dt><dd>${esc(o.staff)}</dd>
@@ -126,12 +129,24 @@ function intakeDrawer(o) {
           <div><div class="small muted">經手人</div>${o.staffSign ? `<img class="sig-img" data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<p style="margin:6px 0 0">${esc(o.staff)}</p>`}</div></div></div>
       ${P('create_intake') ? mailBox(o) : ''}
       ${P('edit_payment') && o.payment === '轉帳' ? remitBox(o) : ''}
+      ${editLogHTML(o)}
     </div>`;
   d.classList.add('show'); $('#scrim').classList.add('show');
   $('.d-close', d).onclick = closeDrawer;
   $$('[data-rc]', d).forEach(b => b.onclick = () => showReceipt(o, b.dataset.rc));
   loadPhotos(d);
   bindRemit(d, o, () => intakeDrawer(intakes.find(x => x.id === o.id)));
+  if ($('[data-edit]', d)) $('[data-edit]', d).onclick = () => intakeEdit(o);
+  if ($('[data-del]', d)) $('[data-del]', d).onclick = async () => {
+    const reason = await askReason(`刪除收購單 ${o.id}（${o.seller}）？\n\n庫存中的商品會一併移除，並留下刪除紀錄。`, '確定刪除');
+    if (!reason) return;
+    try {
+      await api('intakeDelete', { id: o.id, reason });
+      intakes = intakes.filter(x => x.id !== o.id); stockCache = null;
+      closeDrawer(); toast('已刪除收購單 ' + o.id);
+      if ($('#inTbl')) drawIntakeTable(); else if (location.hash === '#remit' && $('#rmTbl')) drawRemitTable();
+    } catch (e) { if (e.auth) return start(); toast(e.message); }
+  };
   const ms = $('#mailSend', d);
   if (ms) ms.onclick = async () => {
     const email = $('#mailTo', d).value.trim();
@@ -145,6 +160,103 @@ function intakeDrawer(o) {
     } catch (e) { if (e.auth) return start(); toast(e.message); ms.disabled = false; ms.textContent = '寄送'; }
   };
 }
+/* ---------- 修改／刪除與修改紀錄（收購單、維修單共用） ---------- */
+function editBarHTML(canEdit, canDel) {
+  if (!canEdit && !canDel) return '';
+  return `<div class="edit-bar">${canEdit ? '<button class="btn btn-ghost btn-sm" data-edit>✏️ 修改</button>' : ''}${canDel ? '<button class="btn btn-danger btn-sm" data-del>🗑 刪除</button>' : ''}</div>`;
+}
+function editLogHTML(o) {
+  const l = o.edits || [];
+  if (!l.length) return '';
+  return `<div class="card"><h3>操作紀錄（${l.length}）</h3><ul class="edit-log">${l.map(x => `<li>
+    <div class="small"><b>${esc(x.action)}</b>・${esc(x.at)}・${esc(x.by)}</div>${x.lines.map(t => `<div>${esc(t)}</div>`).join('')}
+    ${x.reason ? `<div class="small muted">原因：${esc(x.reason)}</div>` : ''}</li>`).join('')}</ul></div>`;
+}
+/** 刪除前填原因（必填），取消回傳 null */
+function askReason(message, okText) {
+  return new Promise(res => {
+    const w = document.createElement('div');
+    w.className = 'ask-wrap';
+    w.innerHTML = `<div class="ask-box" role="dialog" aria-modal="true"><p>${esc(message).replace(/\n/g, '<br>')}</p>
+      <textarea class="input" rows="3" placeholder="刪除原因（必填），例：重複建單、客人取消交易"></textarea><p class="err" style="margin:6px 0 10px;text-align:left"></p>
+      <div class="ask-btns"><button type="button" class="btn btn-ghost" data-v="0">返回</button><button type="button" class="btn btn-dark" data-v="1" style="background:var(--red, #e5484d)">${esc(okText)}</button></div></div>`;
+    const ta = w.querySelector('textarea');
+    w.onclick = e => {
+      const v = e.target.dataset && e.target.dataset.v;
+      if (e.target === w || v === '0') { w.remove(); res(null); }
+      else if (v === '1') { if (!ta.value.trim()) { w.querySelector('.err').textContent = '請填寫刪除原因'; ta.focus(); return; } w.remove(); res(ta.value.trim()); }
+    };
+    document.body.appendChild(w); ta.focus();
+  });
+}
+/** 收購單修改（在抽屜裡編輯） */
+function intakeEdit(o) {
+  const d = $('#drawer'), cost = P('view_cost') && !o.masked.cost;
+  const inp = (label, attr, val, extra = '') => `<label class="field"><span>${label}</span><input class="input" ${attr} value="${esc(val == null ? '' : val)}" ${extra}></label>`;
+  $('.d-body', d).innerHTML = `
+    <div class="card"><h3>✏️ 修改收購單</h3><p class="small muted" style="margin:-4px 0 12px">照片、證件與簽名不能修改。儲存後會留下操作紀錄（經手人、時間、改了什麼）。</p>
+      ${inp('出售人姓名 *', 'data-ef="seller"', o.seller)}
+      <div class="grid2">${o.masked.phone ? '' : inp('聯絡電話', 'data-ef="phone" inputmode="tel"', o.phone)}${o.masked.email ? '' : inp('電子信箱', 'data-ef="email" type="email" autocapitalize="off"', o.email)}</div>
+      <div class="field"><span>付款方式</span>${o.remit === '已匯款' ? `<p style="margin:4px 0 0">${esc(o.payment)}<span class="small muted">（已匯款，不能修改）</span></p>` : chips('efpay', ['現金', '轉帳'], o.payment)}</div>
+      <div id="efBank" ${o.payment === '轉帳' ? '' : 'hidden'}>
+        <div class="grid2">${inp('收款銀行', 'data-ef="bank"', o.bank)}${o.masked.account ? '' : inp('收款帳號', 'data-ef="account" inputmode="numeric"', o.account)}</div>
+        <div class="grid2"><label class="field"><span>匯款期限</span><select class="input" data-ef="period">${opts(IN_PERIODS, o.period)}</select></label>${inp('指定日期', 'data-ef="payDate" type="date"', o.payDate)}</div></div></div>
+    ${o.items.map((it, i) => `<div class="card"><h3>商品 ${i + 1}</h3>
+      ${inp('品名／型號 *', `data-ei="${i}" data-k="model"`, it.model)}
+      <div class="grid2">${inp('容量／規格', `data-ei="${i}" data-k="capacity"`, it.capacity)}${inp('顏色', `data-ei="${i}" data-k="color"`, it.color)}</div>
+      ${inp('IMEI／序號', `data-ei="${i}" data-k="serial"`, it.serial)}
+      ${inp('狀況說明', `data-ei="${i}" data-k="notes"`, it.notes)}
+      ${cost ? inp('收購金額（NT$）', `data-ei="${i}" data-k="price" inputmode="numeric"`, it.price) : ''}</div>`).join('')}
+    <div class="card"><label class="field"><span>修改原因（選填）</span><textarea class="input" id="efReason" rows="2" placeholder="例：IMEI 打錯、客人更正電話"></textarea></label>
+      <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="efCancel" style="flex:1">取消</button><button class="btn btn-dark" id="efSave" style="flex:2">儲存修改</button></div>
+      <p class="err" id="efErr"></p></div>`;
+  $('.d-body', d).scrollTop = 0;
+  $$('input[name=efpay]', d).forEach(r => r.onchange = () => { $('#efBank', d).hidden = r.value !== '轉帳'; });
+  $('#efCancel', d).onclick = () => intakeDrawer(o);
+  $('#efSave', d).onclick = async e => {
+    const btn = e.currentTarget, fields = {}, items = o.items.map(() => ({}));
+    $$('[data-ef]', d).forEach(el => { fields[el.dataset.ef] = el.value.trim(); });
+    const pay = $('input[name=efpay]:checked', d); if (pay) fields.payment = pay.value;
+    $$('[data-ei]', d).forEach(el => { items[+el.dataset.ei][el.dataset.k] = el.value.trim(); });
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const r = await api('intakeEdit', { id: o.id, fields, items, reason: $('#efReason', d).value.trim() });
+      const i = intakes.findIndex(x => x.id === o.id); if (i >= 0) intakes[i] = r.intake;
+      stockCache = null; toast('已儲存修改'); intakeDrawer(r.intake);
+      if ($('#inTbl')) drawIntakeTable();
+    } catch (x) { if (x.auth) return start(); $('#efErr', d).textContent = x.message; btn.disabled = false; btn.textContent = '儲存修改'; }
+  };
+}
+
+/* ---------- 操作紀錄總表（完整後台・系統設定） ---------- */
+let auditLogs = null, auQuery = '', auKind = '';
+async function auditPage(refresh) {
+  if (refresh || !auditLogs) {
+    app.innerHTML = pagesNav('audit') + '<div class="spinner"></div>';
+    try { auditLogs = (await api('auditList')).logs; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('audit') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+    if (refresh) toast('已更新');
+  }
+  app.innerHTML = `${pagesNav('audit')}
+    <div class="toolbar" style="align-items:center"><input class="input" id="auQ" placeholder="搜尋 單號／經手人／內容" value="${esc(auQuery)}">
+      <select class="input" id="auK" style="max-width:140px">${opts(['收購單', '維修單', '庫存', '宅配訂單', '員工帳號', '估價表'], auKind, '全部類別')}</select></div>
+    <p class="small muted" style="margin:0 0 10px">後台每一次操作（建立、修改、刪除、匯款、進度、取件、列印、登入…）都會記錄時間與經手人，也存在試算表「操作紀錄」分頁。紀錄無法從後台修改或刪除。</p>
+    <div id="auTbl"></div>`;
+  $('#auQ').oninput = e => { auQuery = e.target.value; drawAudit(); };
+  $('#auK').onchange = e => { auKind = e.target.value; drawAudit(); };
+  drawAudit();
+}
+function drawAudit() {
+  const q = auQuery.trim().toLowerCase();
+  const list = auditLogs.filter(x => (!auKind || x.kind === auKind) && (!q || [x.ref, x.by, x.action, x.reason, ...x.lines].join(' ').toLowerCase().includes(q)));
+  $('#auTbl').innerHTML = list.length ? `<table class="table"><thead><tr><th>時間</th><th>單號</th><th>動作</th><th>內容</th><th class="hide-m">經手人</th></tr></thead><tbody>
+    ${list.map(x => `<tr class="${x.action === '刪除' ? 'au-del' : ''}"><td class="sub num" style="white-space:nowrap">${esc(x.at)}</td>
+      <td><b class="num">${esc(x.ref)}</b><div class="sub">${esc(x.kind)}</div></td>
+      <td><span class="pill ${x.action === '刪除' || x.action === '登入失敗' ? 'warn' : x.action === '修改' ? '' : 'off'}">${esc(x.action)}</span></td>
+      <td class="small">${x.lines.map(t => `<div>${esc(t)}</div>`).join('')}${x.reason ? `<div class="sub">原因：${esc(x.reason)}</div>` : ''}<div class="sub show-m">${esc(x.by)}</div></td>
+      <td class="sub hide-m">${esc(x.by)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="card empty">${auditLogs.length ? '沒有符合的紀錄' : '還沒有任何操作紀錄'}</div>`;
+}
+
 /** 寄送紀錄（第一行是最新的） */
 const mailLines = o => String(o.mailLog || '').split('\n').filter(Boolean);
 function mailNote(o) {
