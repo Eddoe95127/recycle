@@ -406,6 +406,14 @@ async function hrSettingsPage() {
       <button class="btn btn-ghost btn-sm" id="hsHere">📍 使用我目前的位置</button> <span class="small muted" id="hsInfo"></span>
       ${S.lat ? `<p class="small" style="margin:10px 0 0"><a href="https://www.google.com/maps?q=${encodeURIComponent(S.lat + ',' + S.lng)}" target="_blank" rel="noopener">在地圖上查看目前設定的位置 ↗</a></p>` : ''}
       <label class="field" style="margin-top:12px"><span>打卡範圍（公尺）</span><input class="input num" id="hsRad" inputmode="numeric" value="${esc(S.radius)}" style="max-width:120px"></label></div>
+    <div class="card" style="max-width:620px"><h3>上班時間</h3>
+      <p class="small muted" style="margin:-4px 0 10px">新增的員工會用這個班別；個別員工不同可以到「員工資料」單獨調整。</p>
+      <div class="field"><span>上班日</span><div class="chips">${HRC.WEEK.map((w, i) => `<label class="chip"><input type="checkbox" name="hsWd" value="${i}" ${(S.workdays || [1, 2, 3, 4, 5, 6]).includes(i) ? 'checked' : ''}><span>週${w}</span></label>`).join('')}</div></div>
+      <div class="grid2"><label class="field"><span>上班時間</span><input class="input" type="time" id="hsSt" value="${esc(S.shiftStart || '10:00')}"></label>
+        <label class="field"><span>下班時間</span><input class="input" type="time" id="hsEn" value="${esc(S.shiftEnd || '19:00')}"></label></div>
+      <label class="field"><span>休息（分鐘）</span><input class="input num" id="hsBrk" inputmode="numeric" value="${esc(S.breakMin ?? 60)}" style="max-width:120px"></label>
+      <p class="small muted" id="hsHrs" style="margin:-4px 0 10px"></p>
+      <label class="check"><input type="checkbox" id="hsAll"> 同時套用到所有員工<span class="small muted">（會覆蓋每個人原本的班別）</span></label></div>
     <div class="card" style="max-width:620px"><h3>出勤規則</h3>
       <div class="grid2"><label class="field"><span>遲到寬限（分鐘）</span><input class="input num" id="hsGr" inputmode="numeric" value="${esc(S.grace)}"></label>
         <label class="field"><span>一天工時（小時）</span><input class="input num" id="hsDh" inputmode="numeric" value="${esc(S.dayHours)}"></label></div>
@@ -418,11 +426,16 @@ async function hrSettingsPage() {
     navigator.geolocation.getCurrentPosition(p => { $('#hsLat').value = p.coords.latitude.toFixed(6); $('#hsLng').value = p.coords.longitude.toFixed(6); $('#hsInfo').textContent = `精確度約 ${Math.round(p.coords.accuracy)} 公尺，記得按儲存`; },
       e => { $('#hsInfo').textContent = e.code === 1 ? '請允許網站使用位置' : '定位失敗，請再試一次'; }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   };
+  const hrs = () => { const m = HRC.mins($('#hsEn').value) - HRC.mins($('#hsSt').value) - (Number($('#hsBrk').value) || 0); $('#hsHrs').textContent = m > 0 ? `每天工作 ${Math.floor(m / 60)} 小時${m % 60 ? ' ' + m % 60 + ' 分' : ''}` : '下班時間要晚於上班時間'; };
+  ['hsSt', 'hsEn', 'hsBrk'].forEach(id => { $('#' + id).oninput = hrs; }); hrs();
   $('#hsSave').onclick = async e => {
-    const b = e.currentTarget; b.disabled = true;
+    const b = e.currentTarget, all = $('#hsAll').checked;
+    if (all && !(await ask('把這個上班時間套用到所有員工？\n\n每個人原本在「員工資料」設定的班別都會被覆蓋。', '套用到所有人'))) return;
+    b.disabled = true;
     try {
-      await api('hrSettingsSave', { settings: { lat: $('#hsLat').value.trim(), lng: $('#hsLng').value.trim(), radius: $('#hsRad').value, grace: $('#hsGr').value, dayHours: $('#hsDh').value, since: $('#hsSince').value, lateDeduct: $('#hsLd').checked } });
-      toast('已儲存'); hrSettingsPage();
+      const r = await api('hrSettingsSave', { settings: { lat: $('#hsLat').value.trim(), lng: $('#hsLng').value.trim(), radius: $('#hsRad').value, grace: $('#hsGr').value, dayHours: $('#hsDh').value, since: $('#hsSince').value, lateDeduct: $('#hsLd').checked,
+        workdays: $$('input[name=hsWd]:checked').map(c => Number(c.value)), shiftStart: $('#hsSt').value, shiftEnd: $('#hsEn').value, breakMin: $('#hsBrk').value, applyAll: all } });
+      toast(r.applied ? `已儲存，並套用到 ${r.applied} 位員工` : '已儲存'); hrSettingsPage();
     } catch (y) { if (y.auth) return start(); $('#hsErr').textContent = y.message; b.disabled = false; }
   };
 }

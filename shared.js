@@ -549,7 +549,7 @@ let mockPrices = [['iPhone 11', '64GB', 2000, 0, 300, '沒有原廠盒子'], ['i
     { category: 'Apple Watch', model: 'Apple Watch 12', capacity: '42mm GPS', price: 0, newPrice: 9500, battery: '', acc: '', accItems: '', note: '' },
   ]);
 const mockRepairs = [], mockAudit = [];
-const mockHr = { profiles: {}, clocks: [], reqs: [], slips: [], seq: 0, S: { lat: 25.0339, lng: 121.5645, radius: 200, grace: 5, lateDeduct: false, dayHours: 8, since: '2026-11-01' } };
+const mockHr = { profiles: {}, clocks: [], reqs: [], slips: [], seq: 0, S: { lat: 25.0339, lng: 121.5645, radius: 200, grace: 5, lateDeduct: false, dayHours: 8, since: '2026-11-01', workdays: [1, 2, 3, 4, 5, 6], shiftStart: '10:00', shiftEnd: '19:00', breakMin: 60 } };
 let mockOwnerName = '老闆', mockPriceLog = [], mockRepairPrices = [], mockFee = 3, mockSale = [];
 const mkKey = (m, c) => (String(m || '') + '|' + String(c || '')).toLowerCase().replace(/\s+/g, '');
 const mkCard = c => c ? Math.ceil(c * (1 + mockFee / 100) / 10) * 10 : 0;
@@ -909,7 +909,7 @@ async function mockApiInner(action, d) {
 function mockHrApi(action, d, need, me) {
   const H = mockHr, S = H.S, today = (() => { const t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); })();
   const nowT = () => new Date().toTimeString().slice(0, 8);
-  const prof = u => H.profiles[u] || { username: u, hireDate: '', workdays: [1, 2, 3, 4, 5, 6], shiftStart: '10:00', shiftEnd: '19:00', breakMin: 60, payType: '月薪', salary: '', allowances: [], laborIns: '', healthIns: '', pensionPct: '', leaveAdjust: '', note: '' };
+  const prof = u => H.profiles[u] || { username: u, hireDate: '', workdays: S.workdays.slice(), shiftStart: S.shiftStart, shiftEnd: S.shiftEnd, breakMin: S.breakMin, payType: '月薪', salary: '', allowances: [], laborIns: '', healthIns: '', pensionPct: '', leaveAdjust: '', note: '' };
   const emp = () => { const s = need(); if (s.via !== 'Staff') throw new Error('老闆帳號不用打卡；員工請用自己的員工帳號登入'); return s; };
   const annual = p => { const a = HRC.annualLeave(p.hireDate, today); if (!a) return null; const inR = q => Object.entries(q.split).filter(([k]) => k >= a.from && k <= a.to).reduce((t, [, h]) => t + h, 0);
     const mine = H.reqs.filter(q => q.username === p.username && q.kind === '請假' && q.leaveType === '特休'); const used = mine.filter(q => q.status === '已核准').reduce((t, q) => t + inR(q), 0) / S.dayHours;
@@ -961,7 +961,10 @@ function mockHrApi(action, d, need, me) {
     case 'hrStaffSave': { const s = need('hr_manage'), v = d.profile, p = { ...prof(v.username) }; ['hireDate', 'workdays', 'shiftStart', 'shiftEnd', 'breakMin', 'leaveAdjust', 'note'].forEach(k => { if (v[k] !== undefined) p[k] = v[k]; });
       if (s.perms.includes('payroll')) ['payType', 'salary', 'allowances', 'laborIns', 'healthIns', 'pensionPct'].forEach(k => { if (v[k] !== undefined) p[k] = v[k]; }); H.profiles[v.username] = p; return { ok: true, changes: ['已更新'] }; }
     case 'hrSettings': need('hr_manage'); return { ok: true, settings: { ...S } };
-    case 'hrSettingsSave': { need('hr_manage'); const v = d.settings; Object.assign(S, { lat: Number(v.lat), lng: Number(v.lng), radius: Number(v.radius) || 200, grace: Number(v.grace) || 0, dayHours: Number(v.dayHours) || 8, since: v.since, lateDeduct: !!v.lateDeduct }); return { ok: true, settings: { ...S } }; }
+    case 'hrSettingsSave': { need('hr_manage'); const v = d.settings; if (v.shiftEnd <= v.shiftStart) throw new Error('請填寫正確的上下班時間');
+      Object.assign(S, { lat: Number(v.lat), lng: Number(v.lng), radius: Number(v.radius) || 200, grace: Number(v.grace) || 0, dayHours: Number(v.dayHours) || 8, since: v.since, lateDeduct: !!v.lateDeduct, workdays: v.workdays, shiftStart: v.shiftStart, shiftEnd: v.shiftEnd, breakMin: Number(v.breakMin) || 0 });
+      let applied = 0; if (v.applyAll) staff().forEach(u => { H.profiles[u.username] = { ...prof(u.username), workdays: S.workdays.slice(), shiftStart: S.shiftStart, shiftEnd: S.shiftEnd, breakMin: S.breakMin }; applied++; });
+      return { ok: true, settings: { ...S }, applied }; }
     case 'payrollList': need('payroll'); return { ok: true, month, slips: H.slips.filter(x => x.month === month), missing: staff().filter(u => !H.slips.some(x => x.month === month && x.username === u.username)).map(u => ({ username: u.username, name: u.name, salarySet: !!Number(prof(u.username).salary) })) };
     case 'payrollCompute': { const s = need('payroll'); staff().filter(u => Number(prof(u.username).salary)).forEach(u => { const id = month + '-' + u.username, old = H.slips.find(x => x.id === id); if (old && old.status === '已確認') return; const adj = old ? old.adjustments : [], pay = calc(u.username, month, adj);
         const x = { id, month, username: u.username, name: u.name, status: '草稿', gross: pay.gross, deduct: pay.deduct, net: pay.net, detail: pay, adjustments: adj, note: old ? old.note : '' }; if (old) Object.assign(old, x); else H.slips.push(x); }); return mockHrApi('payrollList', d, need, me); }
