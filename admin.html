@@ -215,6 +215,25 @@
   .hr-month { display: flex; gap: 6px; align-items: center; } .hr-month .input { width: auto; min-height: 36px; padding: 6px 10px; }
   .hr-days tr.off td { color: var(--muted); background: #fafafa; } .hr-days tr.bad td { background: #fff4f3; } .hr-days tr.warn td { background: #fffaf0; }
   .hr-red { color: #c9372c; font-weight: 600; }
+  /* 班表 */
+  .hr-cal-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-w { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
+  .cal-d { min-height: 74px; border-radius: 10px; padding: 5px 6px; background: #f7f7f9; display: flex; flex-direction: column; gap: 2px; font-size: 11px; line-height: 1.3; }
+  .cal-d b { font-size: 13px; } .cal-d.wd { background: #eaf3ff; } .cal-d.off { background: #f4f4f6; color: var(--muted); } .cal-d.lv { background: #eaf8ef; }
+  .cal-d.past { opacity: .75; } .cal-d.today { outline: 2px solid #0a84ff; opacity: 1; }
+  .cal-shift { color: #0a5fb4; font-weight: 600; } .cal-off { color: var(--muted); } .cal-tag.lv { color: #1a7f37; font-weight: 700; }
+  .cal-clk { color: var(--ink-2); } .cal-flag { font-weight: 700; border-radius: 6px; padding: 0 4px; align-self: flex-start; }
+  .cal-flag.bad { background: #ffe1df; color: #c9372c; } .cal-flag.warn { background: #fff1d6; color: #8a5300; }
+  .rs-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .rs-t { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+  .rs-t th, .rs-t td { border: 1px solid var(--line, #e5e5ea); padding: 4px 3px; text-align: center; white-space: nowrap; }
+  .rs-t th { font-weight: 600; background: #fafafa; } .rs-t th span { color: var(--muted); font-weight: 400; } .rs-t th.we { color: #c9372c; }
+  .rs-t .rs-n { text-align: left; padding: 4px 8px; position: sticky; left: 0; background: #fff; z-index: 1; min-width: 92px; }
+  .rs.wd { background: #eaf3ff; color: #0a5fb4; font-weight: 600; } .rs.off { color: #b0b0b5; } .rs.lv { background: #eaf8ef; color: #1a7f37; font-weight: 700; }
+  .rs.bad { background: #ffe1df; color: #c9372c; } .rs.warn { background: #fff1d6; color: #8a5300; }
+  .rs-t .today { outline: 2px solid #0a84ff; outline-offset: -2px; } .rs-sum td { font-weight: 700; background: #fafafa; } .rs-sum td.zero { color: #c9372c; }
+  @media (max-width: 560px) { .cal-d { min-height: 62px; font-size: 10px; padding: 4px; } .cal-d b { font-size: 12px; } }
   .hr-reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; } .hr-req { margin: 0; }
   .hr-req-h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .hr-req-a { display: flex; gap: 8px; margin-top: 10px; }
   .hr-slips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -370,8 +389,8 @@
 <script src="store.js?v=20261123e"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123c"></script>
-<script src="hr-calc.js?v=20261123a"></script>
-<script src="hr.js?v=20261123d"></script>
+<script src="hr-calc.js?v=20261123b"></script>
+<script src="hr.js?v=20261123e"></script>
 <script src="repair.js?v=20261123c"></script>
 <script>
 const app = $('#app');

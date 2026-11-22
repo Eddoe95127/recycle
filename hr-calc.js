@@ -68,7 +68,7 @@ const HRC = (() => {
     }
     return out;
   }
-  const splitOf = r => { if (r.splitObj) return r.splitObj; try { return JSON.parse(r.split || '{}'); } catch (e) { return {}; } };
+  const splitOf = r => { if (r.split && typeof r.split === 'object') return r.split; try { return JSON.parse(r.split || '{}'); } catch (e) { return {}; } };
 
   /** 單日出勤。clocks：當天打卡 [{type:'上班'|'下班', at:'yyyy-MM-dd HH:mm:ss'}]；leaves：已核准的請假 */
   function dayAttendance(p, date, clocks, leaves, S, today) {

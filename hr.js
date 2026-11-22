@@ -34,7 +34,11 @@ async function hrClockPage() {
   const me = await hrLoad('hr/clock', () => api('hrMe', { month: hrMonthNow() }));
   if (!me) return;
   hrState.me = me; hrState.meMonth = me.month;
-  if (me.owner) { app.innerHTML = pagesNav('hr/clock') + `<div class="card empty">老闆帳號不用打卡。<br><span class="small">員工請用自己的員工帳號登入後打卡。${me.hasLocation ? '' : '<br>⚠️ 還沒有設定門市位置，請到「人資 → 打卡設定」設定，員工才能打卡。'}</span></div>`; return; }
+  if (me.owner) {
+    app.innerHTML = pagesNav('hr/clock') + `<div class="card"><p style="margin:0">老闆帳號不用打卡。<span class="small muted">員工請用自己的員工帳號登入後打卡。</span></p>${me.hasLocation ? '' : '<div class="alert" style="margin:10px 0 0">⚠️ 還沒有設定門市位置，請到「人資 → 打卡設定」設定，員工才能打卡。</div>'}</div>
+      <div class="card" id="hrRoster"></div>`;
+    return hrRosterCard(hrMonthNow());
+  }
   const p = me.profile, wd = (p.workdays || []).includes(new Date().getDay());
   const tc = me.todayClocks, lastIn = tc.filter(c => c.type === '上班').pop(), lastOut = tc.filter(c => c.type === '下班').pop();
   const next = !lastIn ? '上班' : !lastOut || lastOut.at < lastIn.at ? '下班' : '上班';
@@ -52,7 +56,11 @@ async function hrClockPage() {
     </div>
     <div class="card"><h3>今天的打卡</h3>${tc.length ? `<ul class="hr-list">${tc.map(c => `<li><b>${esc(c.type)}</b> <span class="num">${esc(c.at.slice(11, 16))}</span> <span class="sub">${c.dist != null ? '距門市 ' + c.dist + ' 公尺' : esc(c.source)}</span></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0">今天還沒有打卡</p>'}</div>
     ${me.annual ? `<div class="card hr-mini"><div><div class="small muted">特休剩餘</div><b class="num">${me.annual.left} 天</b></div><div><div class="small muted">年資</div><b>${esc(p.seniority || '—')}</b></div>
-      <a class="btn btn-ghost btn-sm" href="#hr/me">我的出勤與申請 →</a></div>` : '<div class="card"><a class="btn btn-ghost btn-block" href="#hr/me">我的出勤與申請 →</a></div>'}`;
+      <a class="btn btn-ghost btn-sm" href="#hr/me">我的出勤與申請 →</a></div>` : '<div class="card"><a class="btn btn-ghost btn-block" href="#hr/me">我的出勤與申請 →</a></div>'}
+    <div class="card" id="hrCal">${hrCalendarHTML(me)}</div>
+    ${P('hr_manage') ? '<div class="card" id="hrRoster"></div>' : ''}`;
+  hrBindCal(me);
+  if (P('hr_manage')) hrRosterCard(me.month);
   clearInterval(hrTick);
   const tick = () => { const n = $('#hrNow'); if (!n) return clearInterval(hrTick); n.textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false }); };
   tick(); hrTick = setInterval(tick, 1000);
@@ -74,12 +82,66 @@ function hrDoClock(type, btn) {
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
 }
 
+/* ---------- 本月班表（月曆）＋全員班表 ---------- */
+function hrCalendarHTML(me) {
+  const p = me.profile, days = me.att.days, today = localDay();
+  const lead = HRC.weekday(days[0].date);
+  const cell = d => {
+    const lv = d.leaves.length, past = d.date < today, isToday = d.date === today;
+    let main = '', cls = '';
+    if (lv) { main = d.leaves.map(l => `<span class="cal-tag lv">${esc(l.type)}</span>`).join(''); cls = 'lv'; }
+    else if (d.wd) { main = `<span class="cal-shift">${esc(p.shiftStart)}<br>${esc(p.shiftEnd)}</span>`; cls = 'wd'; }
+    else { main = '<span class="cal-off">休</span>'; cls = 'off'; }
+    const clock = (past || isToday) && (d.in || d.out) ? `<span class="cal-clk">${esc(d.in || '—')}–${esc(d.out || '—')}</span>` : '';
+    const flag = past ? (d.absent ? '<span class="cal-flag bad">曠職</span>' : d.missing ? '<span class="cal-flag bad">缺卡</span>' : d.lateMin ? `<span class="cal-flag warn">遲${d.lateMin}</span>` : d.earlyMin ? '<span class="cal-flag warn">早退</span>' : '') : '';
+    return `<div class="cal-d ${cls}${isToday ? ' today' : ''}${past ? ' past' : ''}"><b>${Number(d.date.slice(8))}</b>${main}${clock}${flag}</div>`;
+  };
+  const work = days.filter(d => d.wd && !d.leaves.length).length, off = days.filter(d => !d.wd).length, lv = days.filter(d => d.leaves.length).length;
+  return `<div class="hr-cal-h"><h3 style="margin:0">本月班表</h3>${hrMonthNav('calM', me.month)}</div>
+    <p class="small muted" style="margin:6px 0 10px">班別 ${esc(p.shiftStart)}–${esc(p.shiftEnd)}・上班 ${work} 天、休假 ${off} 天${lv ? `、請假 ${lv} 天` : ''}</p>
+    <div class="cal-grid">${HRC.WEEK.map(w => `<div class="cal-w">${w}</div>`).join('')}${'<div></div>'.repeat(lead)}${days.map(cell).join('')}</div>`;
+}
+function hrBindCal(me) {
+  const box = $('#hrCal'); if (!box) return;
+  const go = async m => {
+    box.innerHTML = '<div class="spinner"></div>';
+    try { const r = await api('hrMe', { month: m }); box.innerHTML = hrCalendarHTML(r); hrBindCalNav(r); } catch (e) { if (e.auth) return start(); box.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+  };
+  const hrBindCalNav = r => {
+    const el = $('#calM', box); el.onchange = () => go(el.value);
+    $$('[data-mv]', box).forEach(b => b.onclick = () => { const [y, mo] = el.value.split('-').map(Number); const t = new Date(y, mo - 1 + Number(b.dataset.mv), 1); go(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')); });
+  };
+  hrBindCalNav(me);
+}
+/** 全員班表：每位員工一列，每天一格（班／休／假別） */
+async function hrRosterCard(month) {
+  const box = $('#hrRoster'); if (!box) return;
+  box.innerHTML = '<h3>全員班表</h3><div class="spinner"></div>';
+  let r;
+  try { r = await api('hrAttendance', { month }); } catch (e) { if (e.auth) return start(); box.innerHTML = `<h3>全員班表</h3><p class="err">${esc(e.message)}</p>`; return; }
+  const today = localDay(), days = (r.staff[0] && r.staff[0].att.days) || [];
+  const cell = (d, x) => {
+    if (d.leaves.length) return `<td class="rs lv" title="${esc(d.leaves.map(l => l.type + ' ' + l.h + 'h').join('、'))}">${esc(d.leaves[0].type.slice(0, 1))}</td>`;
+    if (!d.wd) return '<td class="rs off">休</td>';
+    const past = d.date < today, bad = past && (d.absent || d.missing), warn = past && (d.lateMin || d.earlyMin);
+    return `<td class="rs wd${d.date === today ? ' today' : ''}${bad ? ' bad' : warn ? ' warn' : ''}" title="${esc(x.shift)}${d.in || d.out ? '　打卡 ' + esc((d.in || '—') + '–' + (d.out || '—')) : ''}">班</td>`;
+  };
+  box.innerHTML = `<div class="hr-cal-h"><h3 style="margin:0">全員班表</h3>${hrMonthNav('rsM', month)}</div>
+    <p class="small muted" style="margin:6px 0 8px">班＝上班日、休＝休假日、其他字＝請假（特＝特休、病＝病假、事＝事假…）；紅色＝曠職或缺卡、橘色＝遲到或早退。手指或滑鼠停在格子上可看打卡時間。</p>
+    ${r.staff.length ? `<div class="rs-wrap"><table class="rs-t"><thead><tr><th class="rs-n">員工</th>${days.map(d => `<th class="${d.date === today ? 'today' : ''}${HRC.weekday(d.date) % 6 === 0 ? ' we' : ''}">${Number(d.date.slice(8))}<br><span>${d.w}</span></th>`).join('')}<th>上班</th></tr></thead>
+      <tbody>${r.staff.map(x => `<tr><td class="rs-n"><b>${esc(x.name)}</b><div class="sub">${esc(x.shift)}</div></td>${x.att.days.map(d => cell(d, x)).join('')}<td class="num"><b>${x.att.days.filter(d => d.wd && !d.leaves.length).length}</b></td></tr>`).join('')}
+      <tr class="rs-sum"><td class="rs-n">當天上班人數</td>${days.map((d, i) => { const n = r.staff.filter(x => x.att.days[i].wd && !x.att.days[i].leaves.length).length; return `<td class="${n ? '' : 'zero'}">${n}</td>`; }).join('')}<td></td></tr></tbody></table></div>`
+      : '<p class="small muted">還沒有員工帳號</p>'}`;
+  const el = $('#rsM', box); el.onchange = () => hrRosterCard(el.value);
+  $$('[data-mv]', box).forEach(b => b.onclick = () => { const [y, mo] = el.value.split('-').map(Number); const t = new Date(y, mo - 1 + Number(b.dataset.mv), 1); hrRosterCard(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')); });
+}
+
 /* ---------- 我的出勤 ---------- */
 const hrMonthNav = (id, m) => `<div class="hr-month"><button class="btn btn-ghost btn-sm" data-mv="-1" aria-label="上個月">‹</button><input class="input" type="month" id="${id}" value="${esc(m)}"><button class="btn btn-ghost btn-sm" data-mv="1" aria-label="下個月">›</button></div>`;
 function hrBindMonth(id, cb) {
   const el = $('#' + id);
   el.onchange = () => cb(el.value);
-  $$('[data-mv]').forEach(b => b.onclick = () => { const [y, m] = el.value.split('-').map(Number); const t = new Date(y, m - 1 + Number(b.dataset.mv), 1); cb(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')); });
+  $$('[data-mv]', el.parentElement).forEach(b => b.onclick = () => { const [y, m] = el.value.split('-').map(Number); const t = new Date(y, m - 1 + Number(b.dataset.mv), 1); cb(t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')); });
 }
 function hrSumCards(s) {
   const lv = Object.entries(s.leaveHours), ot = Object.entries(s.otHours);
