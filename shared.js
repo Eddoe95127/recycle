@@ -312,6 +312,46 @@ function ask(message, okText = '確定', cancelText = '取消') {
     d.querySelector('[data-v="1"]').focus();
   });
 }
+/* ---------- 版本與錯誤回報 ----------
+ * 版本：網頁載入的程式版本（看 store.js／shared.js 網址上的 ?v=），顯示在「我的帳號」，方便確認平板是不是最新版
+ * 錯誤：平板上發生程式錯誤時，畫面跳出提示，並把錯誤送到後台記錄（Apps Script 執行記錄），方便遠端查原因 */
+const appVer = () => [...document.scripts].map(x => (x.src.match(/\?v=(\w+)/) || [])[1]).filter(Boolean).sort().pop() || ''; // 所有程式裡最新的版本
+const errSeen = {};
+function reportErr(msg, stack) {
+  msg = String(msg || '').slice(0, 300);
+  if (!msg || /^Script error\.?$/.test(msg) || errSeen[msg]) return; // 外部程式（LINE、Google）的錯誤看不到內容，不報
+  errSeen[msg] = 1;
+  try { toast('⚠️ 程式錯誤：' + msg + '（請截圖給管理者）'); } catch (e) {}
+  if (typeof MOCK !== 'undefined' && MOCK) return;
+  try {
+    fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify({ action: 'clientLog',
+      msg: [msg, 'v=' + appVer(), location.pathname + location.search.replace(/[?&](code|state|liff[^=]*)=[^&]*/g, '') + location.hash, navigator.userAgent, String(stack || '').slice(0, 800)].join(' ｜ ') }) }).catch(() => {});
+  } catch (e) {}
+}
+window.addEventListener('error', e => reportErr(e.message + (e.filename ? ` @${e.filename.split('/').pop().split('?')[0]}:${e.lineno}` : ''), e.error && e.error.stack));
+window.addEventListener('unhandledrejection', e => { const r = e.reason || {}; if (r.auth) return; reportErr('Promise：' + (r.message || r), r.stack); });
+
+/* ---------- 新版本提示：App 從背景回來時檢查網站有沒有更新，有就提示重新整理 ---------- */
+let verChecked = 0;
+async function checkNewVersion() {
+  if ((typeof MOCK !== 'undefined' && MOCK) || !appVer() || Date.now() - verChecked < 60000 || document.getElementById('newVer')) return;
+  verChecked = Date.now();
+  try {
+    const html = await (await fetch(location.pathname + '?nc=' + Date.now(), { cache: 'no-store' })).text();
+    const theirs = html.match(/(?:store|shared)\.js\?v=\w+/g) || []; // 網站上最新的版本，例如 store.js?v=20261125a
+    const mine = [...document.scripts].map(x => x.src.split('/').pop()); // 目前載入的，例如 store.js?v=20261124f
+    if (!theirs.length || theirs.every(t => mine.includes(t))) return;
+    const b = document.createElement('div');
+    b.id = 'newVer';
+    b.innerHTML = '🔄 系統有新版本，<b>點這裡更新</b>（正在填的單請先完成）';
+    b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top));z-index:500;background:#0a84ff;color:#fff;padding:10px 18px;border-radius:999px;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;max-width:92vw;text-align:center';
+    b.onclick = () => location.reload();
+    document.body.appendChild(b);
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkNewVersion(); });
+setTimeout(checkNewVersion, 15000);
+
 function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); } t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -391,7 +431,7 @@ function logout() {
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'priceTable'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'priceTable', 'clientLog'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };

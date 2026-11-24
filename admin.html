@@ -393,7 +393,7 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261124b"></script>
+<script src="shared.js?v=20261125a"></script>
 <script src="store.js?v=20261124f"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
@@ -578,6 +578,7 @@ function accountPage() {
         <small class="muted">會顯示在右上角，以及之後建立的收購單、維修單「經手人／收件人員」</small></label>
       ${isStaff ? `<p class="small muted" style="margin:4px 0 0">登入帳號：<b class="num">${esc(me.userId)}</b>。要調整自己的權限，請到 <a href="#users">員工帳號</a>。</p>` : ''}</div>`
       : isStaff ? '<div class="card" style="max-width:560px"><p class="small muted" style="margin:0">顯示名稱與權限請找老闆或管理者修改。</p></div>' : ''}
+    <p class="small muted" style="max-width:560px;margin:8px auto 0;text-align:center">系統版本 ${esc(appVer() || '—')}・<a href="#" onclick="location.reload();return false">重新整理</a></p>
     ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}`;
   if (isStaff) mountPassword($('#pwBox'), false);
   if ($('#myNameSave')) $('#myNameSave').onclick = async e => {
