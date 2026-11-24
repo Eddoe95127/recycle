@@ -714,6 +714,7 @@ async function estPick(it) {
   if (!rows.length) { box.innerHTML = '<p>估價表還沒有資料，請到「完整後台 → 估價表」填寫。</p><div class="ask-btns"><button class="btn btn-ghost" data-x>關閉</button></div>'; $('[data-x]', w).onclick = () => w.remove(); return; }
   const sel = it._estSel || { category: '', cond: '', model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] };
   const draw = () => {
+    const keepY = box.scrollTop;
     const cats = [...new Set(rows.map(r => r.category))];
     if (!cats.includes(sel.category)) sel.category = cats[0];
     const inCat = rows.filter(r => r.category === sel.category);
@@ -744,12 +745,13 @@ async function estPick(it) {
         <div class="field"><span>電池健康度 <small class="muted" style="font-weight:400">${req ? `標準 ${req}% 以上` : '此型號不看電池'}</small></span>${chips('battery', rules.battery.map(x => x.label))}</div>
         ${accList.length ? `<div class="field"><span>盒子與配件</span>${chips('missing', accList.map(a => a.label), true, '盒子配件都有')}</div>` : ''}
         <div class="field"><span>功能狀況（可複選）</span>${chips('issues', rules.issues.map(x => x.label), true, '功能都正常')}</div>` : ''}
-      ${plan ? `<table class="rep-price">
+      <div class="est-foot">${plan ? `<table class="rep-price">
           <tr><td>基本收購價${isNew ? '（全新）' : ''}</td><td>NT$ ${money(plan.base)}</td></tr>
           ${plan.deductions.map(d => `<tr class="minus"><td>${esc(d.reason)}</td><td>${d.amount === '' ? '需實際檢測' : '− NT$ ' + money(d.amount)}</td></tr>`).join('')}
           <tr class="sub"><td>收購金額</td><td>NT$ ${money(Math.max(0, plan.base - plan.deductions.reduce((s, d) => s + numv(d.amount), 0)))}</td></tr></table>
         ${plan.inspect ? '<p class="small" style="color:#8a5300;margin:8px 0 0">⚠ 有需檢測的故障，扣款金額請依實際狀況填寫</p>' : ''}` : `<p class="small muted">${sel.model ? '請選擇規格' : '選擇型號後顯示價格'}</p>`}
-      <div class="ask-btns" style="margin-top:14px"><button class="btn btn-ghost" data-x>取消</button><button class="btn btn-dark" data-ok ${plan ? '' : 'disabled'}>帶入此商品</button></div>`;
+      <div class="ask-btns" style="margin-top:12px"><button class="btn btn-ghost" data-x>取消</button><button class="btn btn-dark" data-ok ${plan ? '' : 'disabled'}>帶入此商品</button></div></div>`;
+    box.scrollTop = keepY; // 點選項後保持原本捲動位置（不要跳回最上面）
     $('[data-x]', box).onclick = () => w.remove();
     $('#ieModel', box).onchange = e => { sel.model = e.target.value; sel.capacity = ''; draw(); };
     ['category', 'cond', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=ie_${k}]`, box).forEach(r => r.onchange = () => {
@@ -812,8 +814,19 @@ function estApply(it, sel, row, plan, isNew, rules) {
 }
 
 /** 掃描框：開相機，只辨識框內，連續掃到型號＋IMEI／序號就停 */
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/** iPad／iPhone：直接打開系統相機「拍照」模式，拍一張再辨識（即時鏡頭在 iPad 上不穩，看起來也像在錄影） */
+function snapOcr(it, onDone) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'environment'); inp.hidden = true;
+  inp.onchange = () => { const f = inp.files[0]; inp.remove(); if (f) runOcr(f, it, onDone); };
+  document.body.appendChild(inp);
+  inp.click(); // 必須在按下按鈕的當下呼叫，iPad 才會打開相機
+  setTimeout(() => inp.remove(), 10 * 60000);
+}
 async function scanDevice(it, onDone) {
   if (typeof deviceOcr === 'undefined') return toast('辨識功能載入失敗');
+  if (isIOS()) return snapOcr(it, onDone);
   const w = document.createElement('div');
   w.className = 'scan-wrap';
   w.innerHTML = `<video playsinline muted autoplay></video>
@@ -945,7 +958,12 @@ async function runOcr(file, it, onDone) {
   $('[data-x]', w).onclick = close;
   try {
     const r = await deviceOcr.recognize(file, f => { $('#ocrMsg', w) && ($('#ocrMsg', w).textContent = `辨識中 ${Math.round(f * 100)}%`); }, ctrl.signal);
-    if (!r || (!r.model && !r.serial && !r.imei)) { $('#ocrMsg', w).textContent = '沒有辨識到型號或序號，請拍清楚「設定 → 一般 → 關於本機」畫面，或手動輸入。'; return; }
+    if (!r || (!r.model && !r.serial && !r.imei)) {
+      $('#ocrMsg', w).textContent = '沒有辨識到型號或序號：請靠近一點、避免反光，拍清楚「設定 → 一般 → 關於本機」或盒子上的 IMEI 標籤，或手動輸入。';
+      const again = document.createElement('button'); again.className = 'btn btn-dark'; again.textContent = '📷 再拍一次';
+      again.onclick = () => { close(); isIOS() ? snapOcr(it, onDone) : scanDevice(it, onDone); };
+      $('.ask-btns', w).appendChild(again); return;
+    }
     close(); confirmOcr(it, r, null, onDone);
   } catch (e) { if ($('#ocrMsg', w)) $('#ocrMsg', w).textContent = e.message || '辨識失敗，請手動輸入'; }
 }

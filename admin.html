@@ -160,6 +160,9 @@
   .est-open { margin-bottom: 12px; flex-direction: column; gap: 2px; }
   .est-open small { font-size: 12px; font-weight: 400; opacity: .75; }
   .est-box { max-width: 560px !important; max-height: 88vh; overflow-y: auto; }
+  /* 價格與「帶入此商品」固定在估價視窗底部：二手機選項多、內容比平板畫面高時也按得到 */
+  .est-box .est-foot { position: sticky; bottom: -16px; z-index: 2; background: #fff; margin: 12px -20px -16px; padding: 10px 20px 16px; border-top: 1px solid rgba(0,0,0,.08); box-shadow: 0 -8px 16px rgba(255,255,255,.9); }
+  .est-box .est-foot .rep-price { margin: 0; }
   .est-box .chips { flex-wrap: wrap; }
   .ded-reason { flex: 1; display: grid; gap: 6px; min-width: 0; }
   .st-view { margin: 0 0 10px; }
@@ -391,7 +394,7 @@
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261124b"></script>
-<script src="store.js?v=20261124e"></script>
+<script src="store.js?v=20261124f"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261123b"></script>
