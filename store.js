@@ -459,14 +459,14 @@ function stepItems() {
         ${pickField(it.category === '筆電' ? '年份／規格' : '容量／規格', 'data-f="capacity"', it.capacity, it.category === '筆電' ? [] : IN_CAPS, it._m && it._m.capacity, it.category === '筆電' ? '例：2023 M3 / 16GB / 512GB' : '')}
         ${pickField('顏色', 'data-f="color"', it.color, it.category === '手機' || it.category === '平板' || it.category === '筆電' ? colorsFor(it.model) : IN_COLORS, it._m && it._m.color)}
       </div>
-      <label class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
-        <button type="button" class="link" style="font-size:14px" data-scan>📷 掃描自動辨識</button></span>
-        <input class="input num" data-f="serial" value="${esc(it.serial)}" autocomplete="off" spellcheck="false"></label>
+      <div class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
+        <button type="button" class="link" style="font-size:15px;padding:6px 0" data-scan>📷 掃描自動辨識</button></span>
+        <input class="input num" data-f="serial" value="${esc(it.serial)}" autocomplete="off" spellcheck="false" aria-label="IMEI／序號"></div>
       <div class="field"><span>狀況／配件</span>
         <div class="chips small-chips">${IN_NOTES.map(n => `<button type="button" class="chip-btn" data-note="${esc(n)}">${esc(n)}</button>`).join('')}</div>
         <textarea class="input" data-f="notes" style="margin-top:8px" placeholder="可自行補充">${esc(it.notes)}</textarea></div>
       ${evalBlock(it, i)}
-      <div class="field"><span>外觀照片 *（最多 8 張）</span>
+      <div class="field" data-phf><span>${isNewItem(it) ? '外盒照片 *（拍外盒、封膜，最多 8 張）' : '外觀照片 *（最多 8 張）'}</span>
         <div class="ph-grid">${it.photos.map((p, j) => `<div class="ph"><img src="${p}" alt="商品照片"><button class="ph-del" data-delph="${j}" aria-label="刪除">✕</button></div>`).join('')}
           ${it.photos.length < 8 ? `<label class="ph-add">📷 拍照<input type="file" accept="image/*" capture="environment" hidden data-photo-add></label>
           <label class="ph-add">＋ 相簿<input type="file" accept="image/*" multiple hidden data-photo-add></label>` : ''}</div></div>
@@ -509,7 +509,12 @@ function stepSign() {
 }
 
 function bindForm() {
-  const body = $('#inBody'), err = m => { $('#inErr').textContent = m || ''; };
+  const body = $('#inBody'), err = (m, el) => {
+    $('#inErr').textContent = m || '';
+    if (!m || el === false) return;
+    toast('⚠️ ' + m); // 底部小字在平板上不明顯：跳提示，並捲到要補的欄位
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.remove('need-fix'); void el.offsetWidth; el.classList.add('need-fix'); }
+  };
   $$('[data-k]:not([data-pick])', body).forEach(el => el.oninput = el.onchange = () => { dr[el.dataset.k] = el.value; if (el.dataset.k === 'period') drawForm(); });
   $$('select[data-pick][data-k]', body).forEach(el => el.onchange = () => {
     const k = el.dataset.k, other = el.value === IN_OTHER;
@@ -576,7 +581,7 @@ function bindForm() {
     $$('[data-delph]', card).forEach(b => b.onclick = () => { it.photos.splice(+b.dataset.delph, 1); drawForm(); });
     $$('[data-photo-add]', card).forEach(inp => inp.onchange = async () => {
       const files = [...inp.files].slice(0, 8 - it.photos.length);
-      err('處理照片中…');
+      err('處理照片中…', false);
       for (const f of files) { try { it.photos.push(await resizeImage(f, 1280, 0.8)); } catch (e) { toast(e.message); } }
       err(); drawForm();
     });
@@ -602,28 +607,29 @@ function bindForm() {
 
 function nextStep(err) {
   if (drStep === 1) {
-    if (!dr.seller.trim()) return err('請填寫出售人姓名');
+    const at = sel => $(sel)?.closest('.field, .card') || $(sel);
+    if (!dr.seller.trim()) return err('請填寫出售人姓名', at('[data-k=seller]'));
     dr.email = (dr.email || '').trim();
-    if (dr.email && !IN_EMAIL_RE.test(dr.email)) return err('電子信箱格式不正確，不寄送請留空');
-    if (!dr.payment) return err('請選擇付款方式');
+    if (dr.email && !IN_EMAIL_RE.test(dr.email)) return err('電子信箱格式不正確，不寄送請留空', at('[data-k=email]'));
+    if (!dr.payment) return err('請選擇付款方式', at('input[name=pay]'));
     if (dr.payment === '轉帳') {
-      if (!dr.bank.trim()) return err('請填寫收款銀行');
-      if (!/^\d{6,24}$/.test(dr.account.replace(/[\s-]/g, ''))) return err('收款帳號請輸入 6–24 位數字');
-      if (dr.period === '指定日期' && !dr.payDate) return err('請選擇指定匯款日期');
+      if (!dr.bank.trim()) return err('請填寫收款銀行', at('[data-k=bank]'));
+      if (!/^\d{6,24}$/.test(dr.account.replace(/[\s-]/g, ''))) return err('收款帳號請輸入 6–24 位數字', at('[data-k=account]'));
+      if (dr.period === '指定日期' && !dr.payDate) return err('請選擇指定匯款日期', at('[data-k=payDate]'));
     }
     for (let i = 0; i < dr.items.length; i++) {
-      const it = dr.items[i];
-      if (!it.model.trim()) return err(`請填寫商品 ${i + 1} 的品名／型號`);
+      const it = dr.items[i], c = `[data-i="${i}"] `;
+      if (!it.model.trim()) return err(`請填寫商品 ${i + 1} 的品名／型號`, at(c + '[data-f=model]'));
       it.price = String(itemPrice(it));
-      if (!(numv(it.base) > 0)) return err(`請填寫商品 ${i + 1} 的基本收購價`);
-      if (it.deductions.some(d => numv(d.amount) > 0 && !d.reason.trim())) return err(`請填寫商品 ${i + 1} 的扣減原因`);
+      if (!(numv(it.base) > 0)) return err(`請填寫商品 ${i + 1} 的基本收購價`, at(c + '[data-f=base]'));
+      if (it.deductions.some(d => numv(d.amount) > 0 && !d.reason.trim())) return err(`請填寫商品 ${i + 1} 的扣減原因`, at(c + '[data-f=base]'));
       const noAmt = it.deductions.find(d => d.reason.trim() && String(d.amount).trim() === '');
-      if (noAmt) return err(`請填寫商品 ${i + 1}「${noAmt.reason}」的扣款金額（不扣款請填 0）`);
-      if (!(Number(it.price) > 0)) return err(`商品 ${i + 1} 扣減後的收購金額需大於 0`);
-      if (!it.photos.length) return err(`請拍攝商品 ${i + 1} 的外觀照片`);
+      if (noAmt) return err(`請填寫商品 ${i + 1}「${noAmt.reason}」的扣款金額（不扣款請填 0）`, at(c + '[data-f=base]'));
+      if (!(Number(it.price) > 0)) return err(`商品 ${i + 1} 扣減後的收購金額需大於 0`, at(c + '[data-f=base]'));
+      if (!it.photos.length) return err(`請拍攝商品 ${i + 1} 的${isNewItem(it) ? '外盒' : '外觀'}照片`, $(c + '[data-phf]'));
     }
   }
-  if (drStep === 2 && !dr.verified) return err('請勾選「已當面核對出售人證件」');
+  if (drStep === 2 && !dr.verified) return err('請勾選「已當面核對出售人證件」', $('#verifiedOk')?.closest('label, .card'));
   if (drStep < 3) { drStep = dr.trade ? 3 : drStep + 1; return drawForm(); } // 同行收購跳過證件步驟
   if (!dr.agreed) return err(dr.trade ? '請勾選已核對商品、金額與付款方式' : '請勾選同意條款與電子簽署');
   if (!dr.trade && !dr.sellerSign) return err('請出售人完成簽名');
@@ -799,7 +805,7 @@ function estApply(it, sel, row, plan, isNew, rules) {
     if (c) { c.r = 'bad'; c.note = c.note ? c.note + '、' + l : l; }
   });
   if (sel.issues.length) it._open = true;
-  const notes = [isNew ? '全新未拆封' : '', sel.missing.length ? '缺：' + sel.missing.join('、') : (!isNew && accItemsFor(row, rules).length ? '盒子配件齊全' : ''), sel.battery ? '電池 ' + sel.battery : ''].filter(Boolean);
+  const notes = [isNew ? '全新未拆封' : '', sel.missing.length ? '缺：' + sel.missing.join('、') : (!isNew && accItemsFor(row, rules).length ? '盒子配件齊全' : ''), !isNew && sel.battery ? '電池 ' + sel.battery : ''].filter(Boolean);
   it.notes = [...new Set([...(it.notes ? it.notes.split('、') : []), ...notes])].join('、');
   it._est = [sel.model, sel.capacity, sel.cond].filter(Boolean).join(' ');
   it._estSel = JSON.parse(JSON.stringify(sel));
@@ -818,7 +824,7 @@ async function scanDevice(it, onDone) {
       <p class="scan-msg">正在開啟相機…</p>
       <div class="scan-btns">
         <button type="button" class="btn scan-ghost" data-x>關閉</button>
-        <label class="btn scan-ghost">從相簿選<input type="file" accept="image/*" hidden data-file></label>
+        <label class="btn scan-ghost">📷 拍照／從相簿選<input type="file" accept="image/*" hidden data-file></label>
         <button type="button" class="btn scan-ghost" data-torch hidden>💡 補光</button>
         <button type="button" class="btn btn-dark scan-use" data-use disabled>使用結果</button>
       </div></div>`;
@@ -837,14 +843,21 @@ async function scanDevice(it, onDone) {
   $('[data-use]', w).onclick = finish;
   // 相機
   try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error('no camera api'), { name: 'NoApi' });
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     if (!alive) return stream.getTracks().forEach(t => t.stop());
-    video.srcObject = stream; await video.play();
+    video.srcObject = stream;
+    await Promise.race([video.play(), new Promise(r => setTimeout(r, 4000))]); // iPad 偶爾 play() 一直不回應：不卡住
+    if (!video.videoWidth) await new Promise(r => setTimeout(r, 800));
     const track = stream.getVideoTracks()[0], cap = track.getCapabilities ? track.getCapabilities() : {};
     if (cap.focusMode && cap.focusMode.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
     if (cap.torch) { const b = $('[data-torch]', w); b.hidden = false; let on = false; b.onclick = () => { on = !on; track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {}); b.classList.toggle('on', on); }; }
   } catch (e) {
-    msg('無法開啟相機（請允許相機權限），可改用「從相簿選」照片辨識。'); return;
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    msg(e.name === 'NotAllowedError' ? (ios ? '相機權限被拒絕：請到 iPad「設定 → Safari → 相機」改成「允許」（加到主畫面的 App 關掉重開），或按下面「📷 拍照／從相簿選」。' : '相機權限被拒絕：請在瀏覽器網址列允許相機，或按「📷 拍照／從相簿選」。')
+      : e.name === 'NotReadableError' || e.name === 'AbortError' ? '相機正被其他 App 使用：請關掉其他用到相機的 App 再試，或按「📷 拍照／從相簿選」。'
+      : `無法開啟即時相機（${e.name || e.message}），請按下面「📷 拍照／從相簿選」拍一張 IMEI 畫面來辨識。`);
+    $('[data-file]', w).parentElement.classList.add('btn-dark'); return;
   }
   msg('正在載入辨識工具，第一次使用需要幾秒…');
   try { eng = await deviceOcr.session({ codes: true }); } catch (e) { msg(e.message || '辨識工具載入失敗，請改用「從相簿選」'); return; }

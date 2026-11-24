@@ -153,9 +153,9 @@ function drawRepairForm() {
         ${pickField('容量／規格', 'data-rf="capacity"', rp.capacity, rp.category === '筆電' ? [] : IN_CAPS, rp._m.capacity)}
         ${pickField('顏色', 'data-rf="color"', rp.color, ['手機', '平板', '筆電'].includes(rp.category) ? colorsFor(rp.model) : IN_COLORS, rp._m.color)}
       </div>
-      <label class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
-        <button type="button" class="link" style="font-size:14px" id="rpScan">📷 掃描自動辨識</button></span>
-        <input class="input num" data-r="serial" value="${esc(rp.serial)}" autocomplete="off" spellcheck="false"></label>
+      <div class="field"><span style="display:flex;justify-content:space-between;align-items:center">IMEI／序號
+        <button type="button" class="link" style="font-size:15px;padding:6px 0" id="rpScan">📷 掃描自動辨識</button></span>
+        <input class="input num" data-r="serial" value="${esc(rp.serial)}" autocomplete="off" spellcheck="false" aria-label="IMEI／序號"></div>
     </div>
     <div class="card"><h3>故障與外觀</h3>
       <div class="field"><span>故障描述 *</span>${chipToggle('issue', REPAIR_ISSUES)}
