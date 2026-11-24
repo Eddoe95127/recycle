@@ -385,13 +385,13 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261123e"></script>
-<script src="store.js?v=20261124a"></script>
+<script src="shared.js?v=20261124b"></script>
+<script src="store.js?v=20261124b"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261123b"></script>
 <script src="hr.js?v=20261123e"></script>
-<script src="repair.js?v=20261124a"></script>
+<script src="repair.js?v=20261124b"></script>
 <script>
 const app = $('#app');
 let orders = [];
@@ -424,8 +424,19 @@ if (SHOP) {
   $('.nav .logo').href = 'admin.html?shop=1#intake';
 }
 
+/* 身分與權限：記住上一次的結果，打開 App 時先用它馬上進畫面，背景再向後台確認 */
+const meKey = () => 'admin_me_' + String(auth.session || 'line').slice(-24);
+const meCached = () => { try { const v = JSON.parse(localStorage.getItem(meKey()) || 'null'); return v && v.isAdmin && !v.mustChange ? v : null; } catch (e) { return null; } };
+const meSave = v => { try { Object.keys(localStorage).filter(k => k.startsWith('admin_me_')).forEach(k => localStorage.removeItem(k)); if (v) localStorage.setItem(meKey(), JSON.stringify(v)); } catch (e) {} };
+const meSig = v => v ? JSON.stringify([v.isAdmin, v.mustChange, v.role, v.name, v.perms]) : '';
+function showWho() {
+  $('#who').innerHTML = `${esc(me.name)}<span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role || '員工')}</span>`;
+  $('#logout').hidden = false;
+}
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
+  // 員工帳號已登入：不用等 LINE 載入，直接開始（LINE 在背景載入）
+  if (auth.session) { initLine().catch(() => {}); start(); return; }
   try { await initLine(); } catch (e) { /* LINE 載入失敗不影響帳密登入 */ }
   start();
 })();
@@ -434,14 +445,23 @@ window.addEventListener('hashchange', () => { if (me && me.isAdmin && !me.mustCh
 async function start() {
   closeDrawer();
   if (!isLoggedIn()) return staffLoginPage();
+  const cached = meCached();
+  if (cached) { // 先用上次的權限進畫面，背景確認；權限有變再重新整理畫面
+    me = cached; showWho(); route(); prefetch();
+    api('adminWhoami').then(r => {
+      meSave(r.isAdmin && !r.mustChange ? r : null);
+      if (meSig(r) !== meSig(cached)) { me = null; start(); }
+    }).catch(e => { if (e.auth) { meSave(null); start(); } });
+    return;
+  }
   app.innerHTML = '<div class="spinner"></div>';
   try {
     me = await api('adminWhoami');
     if (!me.isAdmin) return staffLoginPage(me);
-    $('#who').innerHTML = `${esc(me.name)}<span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role || '員工')}</span>`;
-    $('#logout').hidden = false;
+    showWho();
     if (me.mustChange) return passwordPage(true);
-    route();
+    meSave(me);
+    route(); prefetch();
   } catch (e) {
     if (e.auth) return start();
     app.innerHTML = `<div class="card gate empty">${esc(e.message)}<br><br><button class="btn btn-ghost btn-sm" onclick="logout()">重新登入</button></div>`;

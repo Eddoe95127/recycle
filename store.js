@@ -58,7 +58,22 @@ const nt = v => v == null ? '🔒' : 'NT$ ' + Number(v || 0).toLocaleString('en-
 
 /* ============================== 收購單列表 ============================== */
 let intakes = [], inQuery = '';
-async function loadIntakes() { intakes = (await api('intakeList')).intakes; }
+let intakesP = null;
+function loadIntakes() {
+  return intakesP || (intakesP = api('intakeList').then(r => { intakes = r.intakes; }).finally(() => { intakesP = null; }));
+}
+let stockP = null;
+function loadStock() {
+  return stockP || (stockP = api('stockList').then(res => { stockCache = res.items; if (res.cardFee != null) stFee = res.cardFee; return res; }).finally(() => { stockP = null; }));
+}
+/** 登入後在背景先把常用資料載好，切到收購單、維修、庫存時就不用等 */
+function prefetch() {
+  const q = [];
+  if (canStoreView() && !intakes.length) q.push(loadIntakes);
+  if ((P('repair') || P('view_cost')) && !repairs.length) q.push(loadRepairs);
+  if (canStoreView() && !SHOP && !stockCache) q.push(loadStock);
+  setTimeout(() => q.forEach(f => f().catch(() => {})), 300);
+}
 async function intakePage(refresh) {
   if (refresh || !intakes.length) {
     app.innerHTML = pagesNav('intake') + '<div class="spinner"></div>';
@@ -1026,7 +1041,7 @@ const byName = (a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true });
 async function stockPage(refresh) {
   if (refresh || !stockCache) {
     app.innerHTML = pagesNav('stock') + '<div class="spinner"></div>';
-    try { const res = await api('stockList'); stockCache = res.items; if (res.cardFee != null) stFee = res.cardFee; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('stock') + `<div class="card empty">${esc(e.message)}</div>`; return; }
+    try { await loadStock(); } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('stock') + `<div class="card empty">${esc(e.message)}</div>`; return; }
     if (refresh) toast('已更新');
   }
   const active = stockCache.filter(r => r.status !== '已售出');
@@ -1193,11 +1208,9 @@ async function reportPage(refresh) {
   if (refresh || !rpData) {
     app.innerHTML = pagesNav('report') + '<div class="spinner"></div>';
     try {
-      const [st, it] = await Promise.all([api('stockList'), api('intakeList')]);
-      let ords = orders;
-      if (!ords.length) { try { ords = (await api('adminList')).orders; } catch (e) { ords = []; } }
-      let reps = [];
-      try { reps = (await api('repairList')).repairs; } catch (e) { reps = []; }
+      const [st, it, ords, reps] = await Promise.all([api('stockList'), api('intakeList'),
+        orders.length ? orders : api('adminList').then(r => r.orders, () => []),
+        api('repairList').then(r => r.repairs, () => [])]);
       rpData = { stock: st.items, intakes: it.intakes, orders: ords, repairs: reps };
       stockCache = st.items; intakes = it.intakes;
     } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('report') + `<div class="card empty">${esc(e.message)}</div>`; return; }

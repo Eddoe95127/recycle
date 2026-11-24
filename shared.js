@@ -370,7 +370,7 @@ const auth = {
   get session() { return store.get(this.ns + 'session'); },
   get user() { return store.get(this.ns + 'sessionUser') || (liffReady && !MOCK && liff.isLoggedIn() ? { via: 'LINE' } : null); },
   save(r) { store.set(this.ns + 'session', r.session); store.set(this.ns + 'sessionUser', r.user); },
-  clear() { try { localStorage.removeItem(this.ns + 'session'); localStorage.removeItem(this.ns + 'sessionUser'); } catch (e) {} },
+  clear() { try { localStorage.removeItem(this.ns + 'session'); localStorage.removeItem(this.ns + 'sessionUser'); Object.keys(localStorage).filter(k => k.startsWith(this.ns + 'me_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} },
 };
 async function initLine() {
   if (MOCK) { liffReady = true; return; }

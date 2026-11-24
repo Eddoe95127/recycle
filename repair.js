@@ -32,7 +32,11 @@ const REPAIR_NOTES = ['螢幕密碼已告知', '已關閉尋找', '客人已備�
 const priceListOf = (cat, model) => ((typeof REPAIR_PRICES !== 'undefined' && REPAIR_PRICES[cat]) || {})[model] || [];
 const repairModelsOf = cat => Object.keys((typeof REPAIR_PRICES !== 'undefined' && REPAIR_PRICES[cat]) || {});
 let repairs = [], rpQuery = '', rpStatus = 'open', rp = null, rpBusy = false, rpDone = null;
-async function loadRepairs() { ensureRepairPrices(); repairs = (await api('repairList')).repairs; }
+let repairsP = null;
+function loadRepairs() {
+  ensureRepairPrices();
+  return repairsP || (repairsP = api('repairList').then(r => { repairs = r.repairs; }).finally(() => { repairsP = null; }));
+}
 
 /** 保固狀態 */
 function warrantyOf(o) {
