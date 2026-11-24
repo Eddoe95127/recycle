@@ -332,19 +332,8 @@ function rpPreview(o, kind) {
   w.onclick = e => { if (e.target === w || e.target.dataset.close !== undefined) w.remove(); };
   const pr = $('[data-print]', w);
   if (pr) pr.onclick = () => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 1500); };
-  const pb = $('[data-pdf]', w);
-  let file = null;
-  api('repairPdf', { id: o.id, kind }).then(r => {
-    const bin = atob(r.data), bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    file = new File([bytes], r.name, { type: 'application/pdf' });
-    pb.disabled = false; pb.textContent = canSharePdf(file) ? '📤 分享／列印／存 PDF' : '📄 下載 PDF';
-  }).catch(e => { if (e.auth) return start(); pb.textContent = 'PDF 產生失敗：' + e.message; });
-  pb.onclick = async () => {
-    if (!file) return;
-    if (canSharePdf(file)) { try { await navigator.share({ files: [file], title: file.name }); } catch (e) { if (e.name !== 'AbortError') downloadFile(file); } }
-    else downloadFile(file);
-  };
+  pdfCacheClear(o.id); // 維修單內容常變動（進度、項目、取件），每次開都重新產生
+  bindPdfButton($('[data-pdf]', w), 'repairPdf', { id: o.id, kind }, '📤 分享／列印／存 PDF');
   loadPhotos(w);
 }
 

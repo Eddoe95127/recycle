@@ -225,6 +225,7 @@ function intakeEdit(o) {
     btn.disabled = true; btn.textContent = '儲存中…';
     try {
       const r = await api('intakeEdit', { id: o.id, fields, items, reason: $('#efReason', d).value.trim() });
+      pdfCacheClear(o.id);
       const i = intakes.findIndex(x => x.id === o.id); if (i >= 0) intakes[i] = r.intake;
       stockCache = null; rpData = null; toast('已儲存修改');
       if (location.hash === '#intake') intakePage(); // 金額改了：上方今日統計一起更新
@@ -633,6 +634,7 @@ async function submitIntake(err) {
 }
 function drawDone() {
   const o = drDone;
+  getPdf('intakePdf', { id: o.id, kind: 'customer' }).catch(() => {}); // 預先產生客戶聯
   // 剛建立的單：照片直接用本機的，不必再下載
   o.items.forEach((it, i) => it.photos.forEach((id, j) => { if (o._local.items[i]?.[j]) photoCache[id] = o._local.items[i][j]; }));
   o.idPhotos.forEach((id, j) => { if (o._local.ids[j]) photoCache[id] = o._local.ids[j]; });
@@ -927,8 +929,56 @@ const canPrint = () => typeof window.print === 'function' && !isStandalone();
 const canSharePdf = f => !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] }));
 function downloadFile(f) {
   const url = URL.createObjectURL(f), a = document.createElement('a');
-  a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  // iPad／iPhone（尤其加到主畫面的 App）不支援 download，改成開新頁面顯示 PDF（可再按分享列印）
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) { a.href = url; a.target = '_blank'; a.rel = 'noopener'; }
+  else { a.href = url; a.download = f.name; }
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
+
+/* ---------- PDF：背景產生、記住結果、失敗自動重試、可手動重試 ---------- */
+const pdfCache = {}; // key → Promise<File>
+const pdfCacheClear = id => Object.keys(pdfCache).forEach(k => { if (k.includes('"' + id + '"')) delete pdfCache[k]; });
+function getPdf(action, params) {
+  const k = action + JSON.stringify(params);
+  if (!pdfCache[k]) pdfCache[k] = (async () => {
+    for (let i = 0; ; i++) {
+      try {
+        const r = await api(action, params);
+        const bin = atob(r.data), bytes = new Uint8Array(bin.length);
+        for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+        return new File([bytes], r.name, { type: 'application/pdf' });
+      } catch (e) {
+        if (e.auth || i >= 1) throw e; // 失敗自動再試一次（Google 偶爾忙碌）
+        await new Promise(res => setTimeout(res, 1500));
+      }
+    }
+  })().catch(e => { delete pdfCache[k]; throw e; });
+  return pdfCache[k];
+}
+/** 預覽視窗裡的 PDF 按鈕：顯示產生進度（秒數），好了就能按；失敗可按「重試」 */
+function bindPdfButton(pb, action, params, readyLabel) {
+  let file = null, t0 = Date.now(), tick = null;
+  const waiting = () => { pb.disabled = true; pb.textContent = `⏳ PDF 產生中…（${Math.round((Date.now() - t0) / 1000)} 秒，約需 5–15 秒）`; };
+  const load = () => {
+    file = null; t0 = Date.now(); waiting(); clearInterval(tick); tick = setInterval(() => { if (!document.body.contains(pb)) return clearInterval(tick); waiting(); }, 1000);
+    getPdf(action, params).then(f => {
+      clearInterval(tick); file = f; pb.disabled = false; pb.dataset.retry = '';
+      pb.textContent = canSharePdf(f) ? readyLabel : '📄 開啟 PDF';
+    }).catch(e => {
+      clearInterval(tick); if (e.auth) return start();
+      pb.disabled = false; pb.dataset.retry = '1'; pb.textContent = `⚠️ PDF 產生失敗，按這裡重試（${e.message}）`;
+    });
+  };
+  pb.onclick = async () => {
+    if (pb.dataset.retry) return load();
+    if (!file) return;
+    if (canSharePdf(file)) {
+      try { await navigator.share({ files: [file], title: file.name }); }
+      catch (e) { if (e.name !== 'AbortError') downloadFile(file); } // 分享選單打不開：改成直接開 PDF
+    } else downloadFile(file);
+  };
+  load();
 }
 async function showReceipt(o, kind) {
   const customer = kind === 'customer';
@@ -965,21 +1015,8 @@ async function showReceipt(o, kind) {
     window.print();
     setTimeout(() => document.body.classList.remove('printing'), 1500);
   };
-  // PDF：先在背景產生好，按下去馬上分享／下載
-  const pb = $('[data-pdf]', w);
-  let pdfFile = null;
-  api('intakePdf', { id: o.id, kind: customer ? 'customer' : 'shop' }).then(r => {
-    const bin = atob(r.data), bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    pdfFile = new File([bytes], r.name, { type: 'application/pdf' });
-    pb.disabled = false; pb.textContent = canSharePdf(pdfFile) ? '📄 PDF（列印／存檔／分享）' : '📄 下載 PDF';
-  }).catch(e => { if (e.auth) return start(); pb.textContent = 'PDF 產生失敗：' + e.message; });
-  pb.onclick = async () => {
-    if (!pdfFile) return;
-    if (canSharePdf(pdfFile)) {
-      try { await navigator.share({ files: [pdfFile], title: pdfFile.name }); } catch (e) { if (e.name !== 'AbortError') downloadFile(pdfFile); }
-    } else downloadFile(pdfFile);
-  };
+  // PDF：先在背景產生好（同一張單會記住，再開一次不用重做），按下去馬上分享
+  bindPdfButton($('[data-pdf]', w), 'intakePdf', { id: o.id, kind: customer ? 'customer' : 'shop' }, '📄 PDF（列印／存檔／分享）');
   loadPhotos(w);
 }
 
