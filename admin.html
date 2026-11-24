@@ -111,6 +111,8 @@
   .price-row.sub { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
   .price-row.sub b { font-size: 18px; }
   .lightbox.prev { cursor: default; justify-content: flex-start; overflow-y: auto; padding: 24px 12px; }
+  /* 單據預覽的按鈕固定在畫面底部：平板橫放時不用捲到最下面才找得到 PDF／列印／關閉 */
+  .prev-bar { position: sticky; bottom: -24px; z-index: 2; display: flex; gap: 8px; flex-wrap: wrap; margin: 12px -12px 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); background: rgba(20,20,22,.94); border-radius: 14px 14px 0 0; }
   .prev-box { max-width: 640px; width: 100%; }
   [hidden] { display: none !important; }
   .pages { display: flex; gap: 6px; margin: 4px 0 16px; }
@@ -146,7 +148,7 @@
   .in-steps i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #eef0f4; font-size: 13px; flex: none; }
   .in-steps .on { color: var(--ink); font-weight: 700; } .in-steps .on i { background: var(--ink); color: #fff; }
   .in-steps .done i { background: #30D158; color: #fff; }
-  #inErr { font-weight: 700; font-size: 15px; }
+  #inErr, #rpErr { font-weight: 700; font-size: 15px; }
   .need-fix { animation: needfix 1.6s ease; border-radius: 14px; }
   @keyframes needfix { 0%, 60% { box-shadow: 0 0 0 3px #FF453A; } 100% { box-shadow: 0 0 0 3px transparent; } }
   .in-foot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 12px 0 16px; background: linear-gradient(transparent, var(--bg) 30%); }
@@ -389,12 +391,12 @@
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
 <script src="shared.js?v=20261124b"></script>
-<script src="store.js?v=20261124d"></script>
+<script src="store.js?v=20261124e"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261123b"></script>
 <script src="hr.js?v=20261123e"></script>
-<script src="repair.js?v=20261124d"></script>
+<script src="repair.js?v=20261124e"></script>
 <script>
 const app = $('#app');
 let orders = [];

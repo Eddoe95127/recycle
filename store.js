@@ -1029,7 +1029,7 @@ async function showReceipt(o, kind) {
     ${o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : ''}
     <div class="rc-sign"><div>${o.sellerSign ? `<img data-photo="${esc(o.sellerSign)}" alt="出售人簽名">` : '<div class="rc-staff">同行收購</div>'}<span>出售人 ${esc(o.seller)}</span></div>
       <div>${o.staffSign ? `<img data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<div class="rc-staff">${esc(o.staff)}</div>`}<span>經手人${o.staffSign ? ' ' + esc(o.staff) : ''}</span></div></div>
-  </div><div class="no-print" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+  </div><div class="no-print prev-bar">
     <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
     ${canPrint() ? '<button class="btn" style="background:#fff;color:#111" data-print>🖨 列印</button>' : ''}
     <button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div>

@@ -221,7 +221,12 @@ function bindItemsEditor(root, items, redraw) {
 }
 const cleanItems = items => items.filter(x => (x.name || '').trim()).map(x => ({ name: x.name.trim(), amount: numv(x.amount), warranty: Number(x.warranty) || 0 }));
 function bindRepairForm() {
-  const err = m => { $('#rpErr').textContent = m || ''; };
+  const err = (m, el) => {
+    $('#rpErr').textContent = m || '';
+    if (!m || el === false) return;
+    toast('⚠️ ' + m); // 底部小字在平板上不明顯：跳提示，並捲到要補的欄位
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.remove('need-fix'); void el.offsetWidth; el.classList.add('need-fix'); }
+  };
   $$('[data-r]').forEach(el => el.oninput = () => {
     rp[el.dataset.r] = el.value;
     if (el.dataset.r === 'serial' || el.dataset.r === 'phone') { $('#rpHist').innerHTML = rpHistoryHTML(); bindHist(); }
@@ -245,7 +250,7 @@ function bindRepairForm() {
   $$('[data-rdelph]').forEach(b => b.onclick = () => { rp.photos.splice(+b.dataset.rdelph, 1); drawRepairForm(); });
   $$('[data-rph]').forEach(inp => inp.onchange = async () => {
     const files = [...inp.files].slice(0, 8 - rp.photos.length);
-    err('處理照片中…');
+    err('處理照片中…', false);
     for (const f of files) { try { rp.photos.push(await resizeImage(f, 1280, 0.8)); } catch (e) { toast(e.message); } }
     err(); drawRepairForm();
   });
@@ -259,14 +264,15 @@ function bindRepairForm() {
 }
 async function submitRepair(err) {
   if (rpBusy) return;
-  if (!rp.customer.trim()) return err('請填寫客戶姓名');
-  if (!/^0\d{8,9}$/.test(normPhone(rp.phone))) return err('請填寫正確的聯絡電話');
-  if (rp.email.trim() && !IN_EMAIL_RE.test(rp.email.trim())) return err('電子信箱格式不正確，不寄送請留空');
-  if (!rp.model.trim()) return err('請填寫型號');
-  if (!rp.issue.trim()) return err('請填寫故障描述');
-  if (rp.items.some(x => x.name && String(x.amount).trim() === '')) return err('請填寫維修項目的金額（免費請填 0）');
-  if (!rp.agreed) return err('請客人確認維修條款');
-  if (!rp.dropSign) return err('請客人完成送修簽名');
+  const at = sel => $(sel)?.closest('.field, label, .card') || $(sel);
+  if (!rp.customer.trim()) return err('請填寫客戶姓名', at('[data-r=customer]'));
+  if (!/^0\d{8,9}$/.test(normPhone(rp.phone))) return err('請填寫正確的聯絡電話', at('[data-r=phone]'));
+  if (rp.email.trim() && !IN_EMAIL_RE.test(rp.email.trim())) return err('電子信箱格式不正確，不寄送請留空', at('[data-r=email]'));
+  if (!rp.model.trim()) return err('請填寫型號', at('[data-rf=model]'));
+  if (!rp.issue.trim()) return err('請填寫故障描述', at('[data-r=issue]'));
+  if (rp.items.some(x => x.name && String(x.amount).trim() === '')) return err('請填寫維修項目的金額（免費請填 0）', at('[data-items="f"]'));
+  if (!rp.agreed) return err('請客人確認維修條款', at('#rpAgree'));
+  if (!rp.dropSign) return err('請客人完成送修簽名', $('#rpSign'));
   rpBusy = true;
   const btn = $('#rpSubmit'); btn.disabled = true; btn.textContent = '上傳中，請勿關閉…';
   try {
@@ -327,7 +333,7 @@ function repairDocHTML(o, kind) {
 function rpPreview(o, kind) {
   const w = document.createElement('div'); w.className = 'lightbox prev';
   w.innerHTML = `<div class="prev-box">${repairDocHTML(o, kind)}
-    <div class="no-print" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <div class="no-print prev-bar">
       <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
       ${canPrint() ? '<button class="btn" style="background:#fff;color:#111" data-print>🖨 列印</button>' : ''}
       <button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div>
