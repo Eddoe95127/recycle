@@ -178,7 +178,7 @@ function drawRepairForm() {
       <div class="field"><span>內部備註</span>${chipToggle('note', REPAIR_NOTES)}<input class="input" data-r="note" value="${esc(rp.note)}" style="margin-top:8px" placeholder="例：螢幕密碼已告知、零件待訂"></div>
     </div>
     <div class="card"><h3>維修條款</h3><ol class="terms-ol">${REPAIR_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
-      <label class="check"><input type="checkbox" id="rpAgree" ${rp.agreed ? 'checked' : ''}> 客人已確認故障描述、報價與上述條款，並以電子方式簽署 *</label></div>
+      <label class="check must ${rp.agreed ? 'done' : ''}"><input type="checkbox" id="rpAgree" ${rp.agreed ? 'checked' : ''}> 客人已確認故障描述、報價與上述條款，並以電子方式簽署 *</label></div>
     <div class="card"><h3>送修簽名</h3>
       <div style="display:flex;justify-content:space-between;align-items:center"><b>客人簽名（請客人在框內簽名）</b><button type="button" class="link" id="rpClear" style="font-size:14px">清除重簽</button></div>
       <canvas class="sig-pad sig-big" id="rpSign" width="1200" height="480"></canvas>

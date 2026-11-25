@@ -480,14 +480,14 @@ function stepId() {
   return `<div class="card"><h3>證件照片個資蒐集告知</h3>
       <p class="small muted" style="margin:0 0 8px">請出售人閱讀後勾選確認，再拍攝證件。</p>
       <dl class="kv notice-kv">${IN_NOTICE.map(([h, b]) => `<dt>${esc(h)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>
-      <label class="check"><input type="checkbox" id="noticeOk" ${dr.noticeAt ? 'checked' : ''}> 出售人已閱讀並了解上述告知</label>
+      <label class="check must ${dr.noticeAt ? 'done' : ''}"><input type="checkbox" id="noticeOk" ${dr.noticeAt ? 'checked' : ''}> 出售人已閱讀並了解上述告知</label>
     </div>
     <div class="card"><h3>證件照片（正面、反面）</h3>
       <p class="small muted" style="margin:0 0 8px">會自動加上「僅限收購使用」與日期浮水印</p>
       <div class="id-slots">${['正面', '反面'].map((l, j) => `<div class="id-slot"><b>${l}</b>
         ${dr.idPhotos[j] ? `<div class="ph"><img src="${dr.idPhotos[j]}" alt="證件${l}"><button class="ph-del" data-delid="${j}" aria-label="刪除">✕</button></div>`
           : `<label class="ph-add ${dr.noticeAt ? '' : 'disabled'}">📷 拍${l}<input type="file" accept="image/*" capture="environment" hidden data-id-slot="${j}" ${dr.noticeAt ? '' : 'disabled'}></label>`}</div>`).join('')}</div>
-      <label class="check" style="margin-top:12px"><input type="checkbox" id="verifiedOk" ${dr.verified ? 'checked' : ''}> 我已當面核對出售人證件與本人相符 *</label>
+      <label class="check must ${dr.verified ? 'done' : ''}" style="margin-top:12px"><input type="checkbox" id="verifiedOk" ${dr.verified ? 'checked' : ''}> 我已當面核對出售人證件與本人相符 *</label>
     </div>`;
 }
 function stepSign() {
@@ -499,9 +499,9 @@ function stepSign() {
         <div class="small muted" style="margin-top:2px">${[...(isNewItem(it) ? ['全新未拆封'] : [it.grade && '外觀 ' + it.grade + ' ' + GRADE_TEXT[it.grade], it.battery && '電池 ' + it.battery + '%', bad.length ? '異常：' + bad.map(c => c.label).join('、') : '功能檢測皆正常']), it.deductions.filter(d => numv(d.amount)).map(d => `${d.reason} −${money(d.amount)}`).join('、')].filter(Boolean).map(esc).join('｜')}</div></dd>`; }).join('')}
       <dt>合計</dt><dd class="num"><b style="font-size:18px">NT$ ${money(sumDraft())}</b></dd></dl></div>
     ${dr.trade ? `<div class="card"><h3>同行收購確認</h3><p class="small muted" style="margin:0 0 10px">同行收購免核對證件、免出售人簽名，收購單會標示「同行」。</p>
-      <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 已與同行核對商品、金額與付款方式 *</label>
+      <label class="check must ${dr.agreed ? 'done' : ''}"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 已與同行核對商品、金額與付款方式 *</label>
       <p class="small muted" style="margin:10px 0 0">經手人：<b style="color:var(--ink)">${esc(me.name)}</b></p></div>` : `<div class="card"><h3>二手商品收購條款</h3><ol class="terms-ol">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
-      <label class="check"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 雙方已核對商品、金額與付款方式，同意上述條款，並以電子方式簽署 *</label></div>
+      <label class="check must ${dr.agreed ? 'done' : ''}"><input type="checkbox" id="agreeOk" ${dr.agreed ? 'checked' : ''}> 雙方已核對商品、金額與付款方式，同意上述條款，並以電子方式簽署 *</label></div>
     <div class="card"><h3>簽名</h3><div>
       <div><div style="display:flex;justify-content:space-between;align-items:center"><b>出售人簽名（請出售人在框內簽名）</b><button type="button" class="link" data-clear="sellerSign" style="font-size:14px">清除重簽</button></div>
         <canvas class="sig-pad sig-big" data-sig="sellerSign" width="1200" height="480"></canvas></div>
@@ -971,7 +971,7 @@ async function runOcr(file, it, onDone) {
 /* ============================== 收購聯（列印） ============================== */
 /** 加到主畫面的 App 模式（iPad 常不能用瀏覽器列印），改用 PDF 分享 */
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const canPrint = () => typeof window.print === 'function' && !isStandalone();
+const canPrint = () => typeof window.print === 'function' && !isStandalone() && !isIOS(); // iPad／iPhone 的瀏覽器列印常沒反應：改用 PDF 分享選單裡的「列印」
 const canSharePdf = f => !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] }));
 function downloadFile(f) {
   const url = URL.createObjectURL(f), a = document.createElement('a');
@@ -980,6 +980,19 @@ function downloadFile(f) {
   else { a.href = url; a.download = f.name; }
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
+/** 分享選單打不開時：給一個大按鈕，按下去直接開 PDF（要在按的當下開，iPad 才不會擋） */
+function pdfOpenBox(f) {
+  const url = URL.createObjectURL(f), w = document.createElement('div');
+  w.className = 'ask-wrap'; w.style.zIndex = 600;
+  w.innerHTML = `<div class="ask-box" style="text-align:center"><p style="margin:0 0 6px"><b>PDF 已準備好</b></p>
+    <p class="small muted" style="margin:0 0 14px">按下面按鈕打開 PDF，再按畫面上的「分享」→「列印」</p>
+    <a class="btn btn-dark btn-block" href="${url}" target="_blank" rel="noopener" data-open>📄 開啟 PDF</a>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" data-x>關閉</button></div>`;
+  document.body.appendChild(w);
+  const close = () => { w.remove(); setTimeout(() => URL.revokeObjectURL(url), 120000); };
+  $('[data-open]', w).onclick = () => setTimeout(close, 300);
+  $('[data-x]', w).onclick = close;
 }
 
 /* ---------- PDF：背景產生、記住結果、失敗自動重試、可手動重試 ---------- */
@@ -1010,7 +1023,7 @@ function bindPdfButton(pb, action, params, readyLabel) {
     file = null; t0 = Date.now(); waiting(); clearInterval(tick); tick = setInterval(() => { if (!document.body.contains(pb)) return clearInterval(tick); waiting(); }, 1000);
     getPdf(action, params).then(f => {
       clearInterval(tick); file = f; pb.disabled = false; pb.dataset.retry = '';
-      pb.textContent = canSharePdf(f) ? readyLabel : '📄 開啟 PDF';
+      pb.textContent = canSharePdf(f) ? (isIOS() ? '🖨 列印／存檔／分享（PDF）' : readyLabel) : '📄 開啟 PDF';
     }).catch(e => {
       clearInterval(tick); if (e.auth) return start();
       pb.disabled = false; pb.dataset.retry = '1'; pb.textContent = `⚠️ PDF 產生失敗，按這裡重試（${e.message}）`;
@@ -1021,7 +1034,7 @@ function bindPdfButton(pb, action, params, readyLabel) {
     if (!file) return;
     if (canSharePdf(file)) {
       try { await navigator.share({ files: [file], title: file.name }); }
-      catch (e) { if (e.name !== 'AbortError') downloadFile(file); } // 分享選單打不開：改成直接開 PDF
+      catch (e) { if (e.name !== 'AbortError') pdfOpenBox(file); } // 分享選單打不開：給按鈕直接開 PDF（等待後再開新頁會被 iPad 擋掉）
     } else downloadFile(file);
   };
   load();

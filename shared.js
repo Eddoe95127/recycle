@@ -350,6 +350,7 @@ async function checkNewVersion() {
   } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkNewVersion(); });
+document.addEventListener('change', e => { const l = e.target.closest && e.target.closest('label.check.must'); if (l) l.classList.toggle('done', e.target.checked); }); // 必勾項目：勾了就變綠色
 setTimeout(checkNewVersion, 15000);
 
 function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); } t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
