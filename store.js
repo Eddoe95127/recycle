@@ -1023,7 +1023,7 @@ function bindPdfButton(pb, action, params, readyLabel) {
     file = null; t0 = Date.now(); waiting(); clearInterval(tick); tick = setInterval(() => { if (!document.body.contains(pb)) return clearInterval(tick); waiting(); }, 1000);
     getPdf(action, params).then(f => {
       clearInterval(tick); file = f; pb.disabled = false; pb.dataset.retry = '';
-      pb.textContent = canSharePdf(f) ? (isIOS() ? '🖨 列印／存檔／分享（PDF）' : readyLabel) : '📄 開啟 PDF';
+      pb.textContent = canSharePdf(f) ? (isIOS() ? '🖨 列印／存檔／分享（PDF）' : readyLabel) : (isIOS() ? '🖨 開啟 PDF（再按分享→列印）' : '📄 開啟 PDF');
     }).catch(e => {
       clearInterval(tick); if (e.auth) return start();
       pb.disabled = false; pb.dataset.retry = '1'; pb.textContent = `⚠️ PDF 產生失敗，按這裡重試（${e.message}）`;
@@ -1035,7 +1035,7 @@ function bindPdfButton(pb, action, params, readyLabel) {
     if (canSharePdf(file)) {
       try { await navigator.share({ files: [file], title: file.name }); }
       catch (e) { if (e.name !== 'AbortError') pdfOpenBox(file); } // 分享選單打不開：給按鈕直接開 PDF（等待後再開新頁會被 iPad 擋掉）
-    } else downloadFile(file);
+    } else if (isIOS()) pdfOpenBox(file); else downloadFile(file); // 舊版 iPad（iPadOS 15 以前）不能分享 PDF 檔：給按鈕直接開
   };
   load();
 }

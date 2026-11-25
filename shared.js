@@ -353,6 +353,36 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 document.addEventListener('change', e => { const l = e.target.closest && e.target.closest('label.check.must'); if (l) l.classList.toggle('done', e.target.checked); }); // 必勾項目：勾了就變綠色
 setTimeout(checkNewVersion, 15000);
 
+/* ---------- 舊版 iPad（iPadOS 14.0 以前）不支援 flex 的 gap：自動用外距補上按鈕間距 ---------- */
+(function flexGapFallback() {
+  const t = document.createElement('div');
+  t.style.cssText = 'display:flex;flex-direction:column;row-gap:1px;position:absolute;visibility:hidden';
+  t.appendChild(document.createElement('div')); t.appendChild(document.createElement('div'));
+  document.documentElement.appendChild(t);
+  const ok = t.scrollHeight === 1; t.remove();
+  if (ok) return; // 新版：不用處理
+  document.documentElement.classList.add('no-flexgap');
+  const fix = root => (root.querySelectorAll ? [root, ...root.querySelectorAll('*')] : []).forEach(el => {
+    if (el.nodeType !== 1 || el._fg) return;
+    const cs = getComputedStyle(el);
+    if (cs.display !== 'flex' && cs.display !== 'inline-flex') return;
+    const cg = parseFloat(cs.columnGap) || 0, rg = parseFloat(cs.rowGap) || 0;
+    if (!cg && !rg) return;
+    el._fg = 1;
+    const col = cs.flexDirection.indexOf('column') === 0, wrap = cs.flexWrap !== 'nowrap';
+    [...el.children].forEach((c, i) => {
+      if (getComputedStyle(c).position === 'absolute') return;
+      if (col) { if (i) c.style.marginTop = rg + 'px'; }
+      else if (wrap) { c.style.marginRight = cg + 'px'; c.style.marginBottom = rg + 'px'; }
+      else if (i) c.style.marginLeft = cg + 'px';
+    });
+  });
+  const run = () => fix(document.body);
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) { fix(n); if (n.parentElement) { n.parentElement._fg = 0; fix(n.parentElement); } } })))
+    .observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+})();
+
 function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); } t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
