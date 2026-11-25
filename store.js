@@ -345,7 +345,7 @@ function evalBlock(it, i) {
     <div class="eval-h">${fresh ? '全新機（未拆封）・估價' : '檢測評估'}</div>
     ${fresh ? '<p class="small muted" style="margin:0 0 8px">全新未拆封不需外觀、電池與功能檢測；請確認外盒、封膜完整，未開通。拆封或外封膜破損請改選「二手機」或加扣款。</p>' : `<div class="grid2">
       <div class="field"><span>外觀等級</span><div class="chips">${['A', 'B', 'C', 'D'].map(g => `<label class="chip"><input type="radio" name="g${i}" data-grade value="${g}" ${it.grade === g ? 'checked' : ''}><span>${g} ${GRADE_TEXT[g]}</span></label>`).join('')}</div></div>
-      <label class="field"><span>電池健康度（%）</span><input class="input num" data-f="battery" inputmode="numeric" maxlength="3" value="${esc(it.battery)}" placeholder="例：86"></label>
+      <div class="field"><label><span>電池健康度（%）</span><input class="input num" data-f="battery" inputmode="numeric" maxlength="3" value="${esc(it.battery)}" placeholder="例：86" aria-label="電池健康度"></label><div data-bathint></div></div>
     </div>
     <details class="ck-wrap" data-ckwrap ${it._open !== false ? 'open' : ''}><summary><b>功能檢測 ${it.checks.length} 項</b><span data-cksum class="tag ${bad ? 'bad' : 'ok'}">${bad ? bad + ' 項異常' : '全部正常'}${na ? `・${na} 項未檢測` : ''}</span></summary>
       <div style="text-align:right"><button type="button" class="link" data-allok style="font-size:13px">全部設為正常</button></div>
@@ -366,6 +366,32 @@ function evalBlock(it, i) {
       <button type="button" class="link" data-addd>＋ 新增扣減項目</button>
       <div class="price-row sub"><span>收購金額</span><b class="num" data-sub>NT$ ${money(itemPrice(it))}</b></div>
     </div></div>`;
+}
+
+/* ---------- 電池低於標準：輸入的電池健康度低於估價表的型號標準時，提醒並可一鍵加入扣款 ---------- */
+const BAT_LOW = '電池低於標準';
+let batTableP = null;
+function batStdOf(it) {
+  if (!inEst) { if (!batTableP) { batTableP = api('priceTable').then(r => { inEst = inEst || r; }).catch(() => {}); batTableP.then(() => { batTableP.done = true; }); } return null; }
+  const rows = inEst.rows.filter(r => r.model === it.model && r.price > 0);
+  const row = rows.find(r => r.capacity === it.capacity) || rows[0];
+  return row ? batteryReq(row, inEst.rules) : null;
+}
+function batHint(it, card) {
+  const box = $('[data-bathint]', card);
+  if (!box) return;
+  const bat = Number(it.battery), std = isNewItem(it) || !it.model || !it.battery ? null : batStdOf(it);
+  if (std == null && !inEst && batTableP && !batTableP.done && it.battery) batTableP.then(() => { if (inEst && document.body.contains(card)) batHint(it, card); }); // 估價表載入後再檢查一次（只等一次）
+  const has = it.deductions.some(d => d.reason === BAT_LOW || /^電池/.test(d.reason || ''));
+  if (!std || !(bat > 0) || bat >= std) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="bat-low">🔋 電池 ${bat}% 低於此型號標準 ${std}%${has ? '<span>✓ 已加入扣款</span>' : '<button type="button" class="btn btn-sm" data-batadd>＋ 加入「電池低於標準」扣款</button>'}</div>`;
+  const b = $('[data-batadd]', box);
+  if (b) b.onclick = () => {
+    it.deductions.push({ reason: BAT_LOW, amount: '' });
+    drawForm();
+    $(`[data-i="${card.dataset.i}"] [data-da="${it.deductions.length - 1}"]`)?.focus({ preventScroll: true });
+    toast('已加入「電池低於標準」，請填扣款金額');
+  };
 }
 
 /** 收購單上的檢測評估報告（抽屜、列印、模擬共用）。compact：列印用 */
@@ -535,7 +561,8 @@ function bindForm() {
       $('[data-sub]', card).textContent = 'NT$ ' + money(it.price);
       if ($('#inTotal')) $('#inTotal').textContent = 'NT$ ' + money(sumDraft());
     };
-    $$('[data-f]:not(select)', card).forEach(el => el.oninput = () => { it[el.dataset.f] = el.value; if (el.dataset.f === 'base') updPrice(); });
+    $$('[data-f]:not(select)', card).forEach(el => el.oninput = () => { it[el.dataset.f] = el.value; if (el.dataset.f === 'base') updPrice(); if (el.dataset.f === 'battery') batHint(it, card); });
+    batHint(it, card);
     $$('[data-grade]', card).forEach(r => r.onchange = () => { it.grade = r.value; });
     const ckSum = () => {
       const bad = it.checks.filter(c => c.r === 'bad').length, na = it.checks.filter(c => c.r === 'na').length, s = $('[data-cksum]', card);

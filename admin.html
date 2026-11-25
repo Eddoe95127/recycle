@@ -149,6 +149,8 @@
   .in-steps .on { color: var(--ink); font-weight: 700; } .in-steps .on i { background: var(--ink); color: #fff; }
   .in-steps .done i { background: #30D158; color: #fff; }
   #inErr, #rpErr { font-weight: 700; font-size: 15px; }
+  .bat-low { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: #FFF4E0; color: #8a5300; font-size: 14px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bat-low .btn { background: #FF9F0A; color: #fff; } .bat-low span { color: #1d7a36; }
   .need-fix { animation: needfix 1.6s ease; border-radius: 14px; }
   @keyframes needfix { 0%, 60% { box-shadow: 0 0 0 3px #FF453A; } 100% { box-shadow: 0 0 0 3px transparent; } }
   .in-foot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 12px 0 16px; background: linear-gradient(transparent, var(--bg) 30%); }
@@ -394,7 +396,7 @@
 <header class="nav">
   <div class="wrap">
     <a class="logo" href="admin.html"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 5h3"/></svg></span><span id="shopName">iPhone收購中心</span><span class="tag">後台</span></a>
-    <div class="nav-right"><span id="who"></span><button class="btn btn-ghost btn-sm" id="refresh" hidden>重新整理</button><button class="link" id="logout" hidden onclick="logout()">登出</button></div>
+    <div class="nav-right"><span id="who"></span><button class="btn btn-ghost btn-sm" id="refresh" hidden>↻ 更新資料</button><button class="btn btn-ghost btn-sm" id="reloadApp" title="重新載入整個系統，並更新到最新版本">🔄 重新整理</button><button class="link" id="logout" hidden onclick="logout()">登出</button></div>
   </div>
 </header>
 <main class="wrap" id="app"><div class="spinner"></div></main>
@@ -404,8 +406,8 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261126a"></script>
-<script src="store.js?v=20261126a"></script>
+<script src="shared.js?v=20261126b"></script>
+<script src="store.js?v=20261126b"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261123b"></script>
@@ -452,6 +454,14 @@ function showWho() {
   $('#who').innerHTML = `${esc(me.name)}<span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role || '員工')}</span>`;
   $('#logout').hidden = false;
 }
+/* 右上角「🔄 重新整理」：整個系統重新載入（加到主畫面的 App 沒有瀏覽器的重新整理鍵，用這個更新到最新版） */
+$('#reloadApp').onclick = async () => {
+  const intakeDraft = location.hash === '#intake/new' && typeof dr !== 'undefined' && dr && !drDone && (dr.seller || (dr.items[0] && dr.items[0].model));
+  const repairDraft = location.hash === '#repair/new' && typeof rp !== 'undefined' && rp && !rpDone && (rp.customer || rp.model);
+  if ((intakeDraft || repairDraft) && !(await ask('正在填寫的單據還沒送出，重新整理後會清空。\n確定要重新整理嗎？', '重新整理'))) return;
+  if (intakeDraft) dr = null; // 已經確認過，不要再跳瀏覽器的離開提醒
+  location.reload();
+};
 (async function init() {
   $('#shopName').textContent = CFG.SHOP_NAME;
   // 員工帳號已登入：不用等 LINE 載入，直接開始（LINE 在背景載入）
