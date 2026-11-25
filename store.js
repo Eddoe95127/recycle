@@ -1057,7 +1057,7 @@ async function showReceipt(o, kind) {
     ${intakeEvalHTML(o, true)}
     <ol class="terms-ol small">${IN_TERMS.map(([h, b]) => `<li><b>${esc(h)}</b>　${esc(b)}</li>`).join('')}</ol>
     <p class="small">${o.trade ? '✓ 同行收購（免核對證件、免出售人簽名）' : `✓ 門市已當面核對出售人證件　✓ 雙方同意上述條款並以電子方式簽署（${esc(o.terms)}）`}</p>
-    ${o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : ''}
+    ${customer ? '' : o.idPhotos.length ? `<div class="rc-ids">${o.idPhotos.map(p => `<img data-photo="${esc(p)}" alt="證件（浮水印）">`).join('')}</div>` : o.masked && o.masked.id ? `<p class="small">🪪 已附 ${o.masked.id} 張證件照（會印在 PDF 門市存聯上）</p>` : ''}
     <div class="rc-sign"><div>${o.sellerSign ? `<img data-photo="${esc(o.sellerSign)}" alt="出售人簽名">` : '<div class="rc-staff">同行收購</div>'}<span>出售人 ${esc(o.seller)}</span></div>
       <div>${o.staffSign ? `<img data-photo="${esc(o.staffSign)}" alt="經手人簽名">` : `<div class="rc-staff">${esc(o.staff)}</div>`}<span>經手人${o.staffSign ? ' ' + esc(o.staff) : ''}</span></div></div>
   </div><div class="no-print prev-bar">
