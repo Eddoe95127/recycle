@@ -1294,13 +1294,14 @@ async function reportPage(refresh) {
       <div class="tabs">${presets.map(([k, l]) => `<button data-pre="${k}" class="${on(k) ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="rp-dates"><input class="input" type="date" id="rpFrom" value="${rpFrom}"><span>至</span><input class="input" type="date" id="rpTo" value="${rpTo}"></div>
     </div>
-    <div class="tabs st-view">${[['daily', '📅 日報表'], ['tx', '🧾 日收購表'], ['detail', '📋 明細']].map(([k, l]) => `<button data-rv="${k}" class="${rpView === k ? 'on' : ''}">${l}</button>`).join('')}
-      <button id="rpCsv" style="margin-left:auto">⬇ 匯出 CSV</button></div>
+    <div class="tabs st-view">${[['daily', '📅 日報表'], ['tx', '🧾 收購日報'], ['fixday', '🔧 維修日報'], ['detail', '📋 明細']].map(([k, l]) => `<button data-rv="${k}" class="${rpView === k ? 'on' : ''}">${l}</button>`).join('')}
+      <button id="rpPrint" style="margin-left:auto">🖨 列印／下載 PDF</button><button id="rpCsv">⬇ 匯出 CSV</button></div>
     <div id="rpBody"></div>`;
   $$('[data-pre]').forEach(b => b.onclick = () => { [rpFrom, rpTo] = rpPreset(b.dataset.pre); reportPage(); });
   const setRange = () => { const f = $('#rpFrom').value, t = $('#rpTo').value; if (!f || !t) return; [rpFrom, rpTo] = f <= t ? [f, t] : [t, f]; reportPage(); };
   $('#rpFrom').onchange = setRange; $('#rpTo').onchange = setRange;
   $$('[data-rv]').forEach(b => b.onclick = () => { rpView = b.dataset.rv; reportPage(); });
+  $('#rpPrint').onclick = () => rpPrintDialog();
   drawRpt();
 }
 /** 依期間整理：收購（依入庫日）、交易（依單號）、銷售（依銷售日） */
@@ -1323,10 +1324,11 @@ function rpCompute() {
     return { ...t, seller: o.name || '', payment: '轉帳', staff: t.items[0].updatedBy || '', remit: '已付款' };
   }).sort((a, b) => a.time.localeCompare(b.time));
   const fixes = (rpData.repairs || []).filter(o => o.status === '已取件' && inR(dayOf(o.pickupAt))).sort((a, b) => a.pickupAt.localeCompare(b.pickupAt));
-  return { buys, sales, tx, fixes };
+  const takes = (rpData.repairs || []).filter(o => inR(dayOf(o.createdAt))).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))); // 維修收件
+  return { buys, sales, tx, fixes, takes };
 }
 function drawRpt() {
-  const { buys, sales, tx, fixes } = rpCompute();
+  const { buys, sales, tx, fixes, takes } = rpCompute();
   const fixProfit = o => (o.fee || 0) - (o.partsCost || 0);
   const box = $('#rpBody');
   const range = rpFrom === rpTo ? rpFrom : `${rpFrom} ～ ${rpTo}`;
@@ -1370,6 +1372,18 @@ function drawRpt() {
       </tbody></table></div></div>`; }).join('') : '<div class="card empty">這段期間沒有收購</div>';
     csv = [`日收購表_${rpFrom}_${rpTo}.csv`, ['日期時間', '單號', '來源', '出售人', '商品', '件數', '金額', '付款方式', '匯款狀態', '經手人'],
       tx.map(x => [x.time, x.ref, x.source, x.seller, x.items.map(r => [r.model, r.capacity, r.color].filter(Boolean).join(' ')).join('；'), x.items.length, x.amount, x.payment, x.remit, x.staff])];
+  } else if (rpView === 'fixday') {
+    const ev = rpFixEvents(takes, fixes);
+    const days = [...new Set(ev.map(x => dayOf(x.time)))].sort().reverse();
+    html = days.length ? days.map(d => { const list = ev.filter(x => dayOf(x.time) === d).reverse(), pk = list.filter(x => x.type === '取件');
+      return `<div class="rp-day"><div class="rp-dh"><b>${d}</b><span>收件 ${list.length - pk.length} 件・取件 ${pk.length} 件・實收 NT$ ${money(sum(pk, x => x.o.fee))}・毛利 NT$ ${money(sum(pk, x => fixProfit(x.o)))}</span></div>
+      <div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>時間</th><th>類型</th><th>維修單</th><th>客戶</th><th>機型</th><th>維修項目／故障</th><th class="r">金額</th><th>付款</th><th>人員</th></tr></thead><tbody>
+      ${list.map(x => `<tr data-fix="${esc(x.o.id)}"><td class="num">${esc(x.time.slice(11, 16))}</td><td><span class="pill ${x.type === '取件' ? '' : 'off'}">${x.type}</span></td><td class="num">${esc(x.o.id)}</td><td>${esc(x.o.customer || '—')}</td><td><b>${esc(x.o.model || '')}</b></td>
+        <td class="sub">${esc(x.type === '取件' ? (x.o.items || []).map(i => i.name).join('、') : x.o.issue || '')}</td><td class="r num">${x.type === '取件' ? '<b>' + money(x.o.fee) + '</b>' : x.o.quote ? '報價 ' + money(x.o.quote) : '—'}</td><td>${esc(x.type === '取件' ? x.o.payment || '—' : '—')}</td><td>${esc(x.type === '取件' ? x.o.pickupBy || '—' : x.o.staff || '—')}</td></tr>`).join('')}
+      </tbody></table></div></div>`; }).join('') : '<div class="card empty">這段期間沒有維修收件或取件</div>';
+    csv = [`維修日報_${rpFrom}_${rpTo}.csv`, ['日期時間', '類型', '維修單號', '客戶', '電話', '機型', 'IMEI序號', '故障描述', '維修項目', '報價', '實收', '付款方式', '零件成本', '毛利', '人員'],
+      ev.map(x => [x.time, x.type, x.o.id, x.o.customer, x.o.phone, [x.o.model, x.o.capacity, x.o.color].filter(Boolean).join(' '), x.o.serial, x.o.issue, (x.o.items || []).map(i => `${i.name} ${i.amount}`).join('；'),
+        x.o.quote, x.type === '取件' ? x.o.fee : '', x.type === '取件' ? x.o.payment : '', x.type === '取件' ? x.o.partsCost : '', x.type === '取件' ? fixProfit(x.o) : '', x.type === '取件' ? x.o.pickupBy : x.o.staff])];
   } else {
     html = `<div class="tabs" style="margin-bottom:10px">${[['buy', `收購明細（${buys.length}）`], ['sale', `銷售明細（${sales.length}）`], ['fix', `維修明細（${fixes.length}）`]].map(([k, l]) => `<button data-rd="${k}" class="${rpDetail === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     if (rpDetail === 'fix') {
@@ -1402,6 +1416,101 @@ function drawRpt() {
     if (tr.dataset.src === '門市') { const o = rpData.intakes.find(x => x.id === tr.dataset.ref); if (o) intakeDrawer(o); }
     else { window.openAfterLoad = tr.dataset.ref; location.hash = ''; }
   });
+}
+
+/** 維修的收件／取件事件（依時間排序） */
+function rpFixEvents(takes, fixes) {
+  return [...takes.map(o => ({ type: '收件', time: String(o.createdAt || ''), o })), ...fixes.map(o => ({ type: '取件', time: String(o.pickupAt || ''), o }))]
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+/* ---------- 列印／下載 PDF：選日期與內容，產生交易明細 ---------- */
+const RP_SECTIONS = [['sum', '每日總表（收購、銷售、維修金額）'], ['buy', '收購交易明細'], ['fix', '維修交易明細（收件、取件）'], ['sale', '銷售明細']];
+let rpPrintSel = ['sum', 'buy', 'fix'];
+function rpPrintDialog() {
+  const w = document.createElement('div');
+  w.className = 'ask-wrap';
+  const presets = [['today', '今天'], ['yday', '昨天'], ['week', '本週'], ['month', '本月'], ['lmonth', '上月']];
+  w.innerHTML = `<div class="ask-box" style="max-width:440px;text-align:left"><h3 style="margin:0 0 12px">🖨 列印／下載交易明細</h3>
+    <div class="field"><span>日期</span><div class="chips">${presets.map(([k, l]) => `<button type="button" class="chip-btn" data-pp="${k}">${l}</button>`).join('')}</div>
+      <div class="rp-dates" style="margin-top:8px"><input class="input" type="date" id="ppFrom" value="${rpFrom}"><span>至</span><input class="input" type="date" id="ppTo" value="${rpTo}"></div></div>
+    <div class="field"><span>內容</span>${RP_SECTIONS.map(([k, l]) => `<label class="check" style="margin:6px 0"><input type="checkbox" data-ps="${k}" ${rpPrintSel.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <p class="err" id="ppErr" style="margin:0"></p>
+    <div class="ask-btns"><button class="btn btn-ghost" data-x>取消</button><button class="btn btn-dark" data-ok>產生報表</button></div></div>`;
+  document.body.appendChild(w);
+  $$('[data-pp]', w).forEach(b => b.onclick = () => { const [f, t] = rpPreset(b.dataset.pp); $('#ppFrom', w).value = f; $('#ppTo', w).value = t; });
+  $('[data-x]', w).onclick = () => w.remove();
+  $('[data-ok]', w).onclick = () => {
+    let f = $('#ppFrom', w).value, t = $('#ppTo', w).value;
+    if (!f || !t) return $('#ppErr', w).textContent = '請選擇日期';
+    if (f > t) [f, t] = [t, f];
+    const sel = $$('[data-ps]', w).filter(c => c.checked).map(c => c.dataset.ps);
+    if (!sel.length) return $('#ppErr', w).textContent = '請至少勾選一項內容';
+    rpPrintSel = sel; w.remove();
+    const keep = [rpFrom, rpTo]; [rpFrom, rpTo] = [f, t];
+    const doc = rpDocHTML(sel);
+    [rpFrom, rpTo] = keep;
+    reportPreview(doc, `交易明細_${f}${f === t ? '' : '_' + t}`);
+  };
+}
+/** 報表文件（表格排版、內嵌樣式：畫面預覽、瀏覽器列印、後台轉 PDF 共用） */
+function rpDocHTML(sel) {
+  const { buys, sales, tx, fixes, takes } = rpCompute();
+  const sum = (a, f) => a.reduce((t, x) => t + (f(x) || 0), 0), m = v => 'NT$ ' + money(v || 0);
+  const fixProfit = o => (o.fee || 0) - (o.partsCost || 0);
+  const range = rpFrom === rpTo ? rpFrom : `${rpFrom} ～ ${rpTo}`;
+  const th = 'border:1px solid #bbb;padding:5px 6px;background:#f2f2f4;font-size:11px;text-align:left', td = 'border:1px solid #ccc;padding:5px 6px;font-size:11px;vertical-align:top', R = ';text-align:right;white-space:nowrap';
+  const table = (heads, rows, foot) => `<table style="width:100%;border-collapse:collapse;margin:0 0 14px"><tr>${heads.map(h => `<th style="${th}${h[1] ? R : ''}">${esc(h[0])}</th>`).join('')}</tr>
+    ${rows.map(r => `<tr>${r.map((c, i) => `<td style="${td}${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>`).join('')}${foot ? `<tr>${foot.map((c, i) => `<td style="${td};font-weight:700;background:#fafafa${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>` : ''}</table>`;
+  const h2 = t => `<h3 style="font-size:14px;margin:18px 0 6px;border-left:4px solid #111;padding-left:8px">${t}</h3>`;
+  let out = `<div style="font-family:-apple-system,'PingFang TC','Noto Sans TC',sans-serif;color:#111">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px">
+      <div><div style="font-size:12px;color:#555">${esc(CFG.SHOP_NAME || '')}</div><div style="font-size:20px;font-weight:800">交易明細報表</div></div>
+      <div style="font-size:12px;text-align:right">期間：<b>${esc(range)}</b><br>列印：${esc(localDay())}・${esc(me.name || '')}</div></div>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 6px"><tr>${[['收購', `${tx.length} 筆／${buys.length} 件`, m(sum(buys, r => r.cost))], ['銷售', `${sales.length} 件`, m(sum(sales, r => r.salePrice))], ['維修取件', `${fixes.length} 件`, m(sum(fixes, o => o.fee))], ['維修收件', `${takes.length} 件`, '']]
+      .map(([a, b, c]) => `<td style="border:1px solid #ccc;padding:8px;width:25%"><div style="font-size:11px;color:#555">${a}</div><div style="font-size:15px;font-weight:800">${c || b}</div>${c ? `<div style="font-size:11px;color:#555">${b}</div>` : ''}</td>`).join('')}</tr></table>`;
+  if (sel.includes('sum')) {
+    const days = []; const n = Math.round((new Date(rpTo) - new Date(rpFrom)) / 864e5);
+    for (let i = 0; i <= n; i++) days.push(addDays(rpFrom, i));
+    const rows = days.map(d => { const b = buys.filter(r => dayOf(r.inAt) === d), t = tx.filter(x => dayOf(x.time) === d), s = sales.filter(r => dayOf(r.saleDate) === d), f = fixes.filter(o => dayOf(o.pickupAt) === d), k = takes.filter(o => dayOf(o.createdAt) === d);
+      return { d, t: t.length, cost: sum(b, r => r.cost), cash: sum(t.filter(x => x.payment === '現金'), x => x.amount), tr: sum(t.filter(x => x.payment !== '現金'), x => x.amount), s: s.length, rev: sum(s, r => r.salePrice), k: k.length, f: f.length, fee: sum(f, o => o.fee), fp: sum(f, fixProfit) }; })
+      .filter(r => n <= 31 || r.t || r.s || r.f || r.k);
+    const T = k => sum(rows, r => r[k]);
+    out += h2('每日總表') + table([['日期'], ['收購筆數', 1], ['收購金額', 1], ['現金', 1], ['轉帳', 1], ['售出', 1], ['銷售金額', 1], ['維修收件', 1], ['維修取件', 1], ['維修實收', 1], ['維修毛利', 1]],
+      rows.map(r => [r.d + ' (' + '日一二三四五六'[new Date(r.d + 'T00:00:00').getDay()] + ')', r.t || '—', money(r.cost), money(r.cash), money(r.tr), r.s || '—', money(r.rev), r.k || '—', r.f || '—', money(r.fee), money(r.fp)]),
+      ['合計', T('t'), money(T('cost')), money(T('cash')), money(T('tr')), T('s'), money(T('rev')), T('k'), T('f'), money(T('fee')), money(T('fp'))]);
+  }
+  if (sel.includes('buy')) {
+    out += h2(`收購交易明細（${tx.length} 筆）`) + (tx.length ? table([['日期時間'], ['單號'], ['來源'], ['出售人'], ['商品'], ['金額', 1], ['付款'], ['經手人']],
+      tx.map(x => [esc(x.time), esc(x.ref), esc(x.source), esc(x.seller || '—'), x.items.map(r => esc([r.model, r.capacity, r.color].filter(Boolean).join(' ') + (r.serial ? `（${r.serial}）` : ''))).join('<br>'), money(x.amount), esc(x.payment + (x.remit && x.remit !== '已付款' ? '・' + x.remit : '')), esc(x.staff || '—')]),
+      ['合計', '', '', '', `${buys.length} 件`, money(sum(tx, x => x.amount)), '', '']) : '<p style="font-size:12px;color:#777">這段期間沒有收購</p>');
+  }
+  if (sel.includes('fix')) {
+    const ev = rpFixEvents(takes, fixes);
+    out += h2(`維修交易明細（收件 ${takes.length}・取件 ${fixes.length}）`) + (ev.length ? table([['日期時間'], ['類型'], ['維修單'], ['客戶'], ['機型'], ['項目／故障'], ['金額', 1], ['付款'], ['零件成本', 1], ['毛利', 1], ['人員']],
+      ev.map(x => { const p = x.type === '取件'; return [esc(x.time), x.type, esc(x.o.id), esc(x.o.customer || '—'), esc([x.o.model, x.o.capacity].filter(Boolean).join(' ')), esc(p ? (x.o.items || []).map(i => i.name).join('、') : x.o.issue || ''),
+        p ? money(x.o.fee) : x.o.quote ? '報價 ' + money(x.o.quote) : '—', esc(p ? x.o.payment || '—' : '—'), p ? money(x.o.partsCost) : '', p ? money(fixProfit(x.o)) : '', esc(p ? x.o.pickupBy || '—' : x.o.staff || '—')]; }),
+      ['合計', '', '', '', '', `取件 ${fixes.length} 件`, money(sum(fixes, o => o.fee)), '', money(sum(fixes, o => o.partsCost)), money(sum(fixes, fixProfit)), '']) : '<p style="font-size:12px;color:#777">這段期間沒有維修收件或取件</p>');
+  }
+  if (sel.includes('sale')) {
+    out += h2(`銷售明細（${sales.length} 件）`) + (sales.length ? table([['銷售日期'], ['型號'], ['IMEI／序號'], ['管道'], ['成本', 1], ['售價', 1], ['毛利', 1]],
+      sales.map(r => [esc(r.saleDate), esc([r.model, r.capacity, r.color].filter(Boolean).join(' ')), esc(r.serial || '—'), esc(r.channel || '—'), money(r.cost), money(r.salePrice), money((r.salePrice || 0) - (r.cost || 0))]),
+      ['合計', `${sales.length} 件`, '', '', money(sum(sales, r => r.cost)), money(sum(sales, r => r.salePrice)), money(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))]) : '<p style="font-size:12px;color:#777">這段期間沒有銷售</p>');
+  }
+  return out + '</div>';
+}
+/** 報表預覽：PDF（列印／存檔／分享）＋ 電腦可直接列印 */
+function reportPreview(doc, title) {
+  const w = document.createElement('div'); w.className = 'lightbox prev';
+  w.innerHTML = `<div class="prev-box" style="max-width:1000px"><div class="receipt" id="report" style="background:#fff;border-radius:14px;padding:22px;overflow-x:auto">${doc}</div>
+    <div class="no-print prev-bar">
+      <button class="btn" style="flex:1;background:#fff;color:#111;min-width:180px" data-pdf disabled>📄 PDF 準備中…</button>
+      ${canPrint() ? '<button class="btn" style="background:#fff;color:#111" data-print>🖨 列印</button>' : ''}
+      <button class="btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6)" data-close>關閉</button></div></div>`;
+  document.body.appendChild(w);
+  w.onclick = e => { if (e.target === w || e.target.dataset.close !== undefined) w.remove(); };
+  const pr = $('[data-print]', w);
+  if (pr) pr.onclick = () => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 1500); };
+  bindPdfButton($('[data-pdf]', w), 'reportPdf', { title, html: doc }, '📄 下載 PDF（列印／存檔／分享）');
 }
 
 /* ============================== 匯款工作區 ============================== */

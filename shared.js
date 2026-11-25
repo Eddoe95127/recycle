@@ -940,6 +940,11 @@ async function mockApiInner(action, d) {
       if (o.email) o.mailLog = `${now()} 已寄送（取件保固）→ ${o.email}（模擬）\n` + o.mailLog;
       return { ok: true, repair: rpOut(o, need()) };
     }
+    case 'reportPdf': {
+      need('view_cost');
+      const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
+      return { ok: true, name: (d.title || '報表') + '.pdf', data: btoa(pdf) };
+    }
     case 'repairPdf': {
       need();
       const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
