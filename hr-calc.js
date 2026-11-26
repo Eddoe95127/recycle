@@ -27,12 +27,27 @@ const HRC = (() => {
   };
   const daysInMonth = month => { const p = month.split('-').map(Number); return new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(); };
   const r1 = v => Math.round(v * 10) / 10;
+  const hm = m => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
   const money = v => Math.round(v);
 
   /** 班別：上班日（0＝週日）、上下班時間、休息分鐘 */
   function shiftOf(p) {
     const st = mins(p.shiftStart || '10:00'), en = mins(p.shiftEnd || '19:00'), brk = Number(p.breakMin) || 0;
     return { st, en, brk, workMin: Math.max(0, en - st - brk), days: (p.workdays && p.workdays.length ? p.workdays : [1, 2, 3, 4, 5, 6]).map(Number) };
+  }
+
+  /** 當天的班：班表有排就照班表（班別名稱／休／特休），沒排就照每週固定班。S.shifts＝班別選項 [{name, start, end, brk}] */
+  function dayShift(p, date, S) {
+    const base = shiftOf(p), code = (p.roster && p.roster[date]) || '';
+    if (!code) return Object.assign({}, base, { wd: base.days.indexOf(weekday(date)) >= 0, code: '' });
+    if (code === '休') return Object.assign({}, base, { wd: false, code });
+    const def = ((S && S.shifts) || []).filter(x => x.name === code)[0];
+    const st = def ? mins(def.start) : base.st, en = def ? mins(def.end) : base.en, brk = def ? Number(def.brk) || 0 : base.brk;
+    return { st, en, brk, workMin: Math.max(0, en - st - brk), days: base.days, wd: true, code, annual: code === '特休' };
+  }
+  /** 班表上排的特休天數：只算 from～to 期間內、而且沒有特休申請單（covered）的日子，避免重複扣 */
+  function rosterAnnualDays(roster, from, to, covered) {
+    return Object.keys(roster || {}).filter(d => roster[d] === '特休' && d >= from && d <= to && !(covered && covered[d])).length;
   }
 
   /** 特休（勞基法第 38 條，週年制）：滿 6 個月 3 天、1 年 7 天、2 年 10 天、3 年 14 天、5 年 15 天、10 年起每年加 1 天，最多 30 天 */
@@ -59,12 +74,12 @@ const HRC = (() => {
 
   /** 請假每天幾小時：{ 'yyyy-MM-dd': 小時 }。全天＝每個上班日 dayHours；半天＝dayHours/2；時數＝指定 */
   function leaveSplit(req, p, S) {
-    const sh = shiftOf(p), dh = Number(S.dayHours) || 8, out = {};
+    const dh = Number(S.dayHours) || 8, out = {};
     if (req.unit === '時數') { out[req.start] = Math.min(dh, Math.max(0.5, Number(req.hours) || 0)); return out; }
     if (req.unit === '上半天' || req.unit === '下半天') { out[req.start] = dh / 2; return out; }
     for (let n = dayNum(req.start), e = dayNum(req.end || req.start); n <= e && n - dayNum(req.start) < 62; n++) {
       const d = fromNum(n);
-      if (sh.days.indexOf(weekday(d)) >= 0) out[d] = dh;
+      if (dayShift(p, d, S).wd) out[d] = dh; // 照班表：排休的日子不扣假
     }
     return out;
   }
@@ -72,10 +87,11 @@ const HRC = (() => {
 
   /** 單日出勤。clocks：當天打卡 [{type:'上班'|'下班', at:'yyyy-MM-dd HH:mm:ss'}]；leaves：已核准的請假 */
   function dayAttendance(p, date, clocks, leaves, S, today) {
-    const sh = shiftOf(p), wd = sh.days.indexOf(weekday(date)) >= 0, grace = Number(S.grace) || 0;
+    const sh = dayShift(p, date, S), wd = sh.wd, grace = Number(S.grace) || 0;
     const ins = clocks.filter(c => c.type === '上班').map(c => c.at).sort(), outs = clocks.filter(c => c.type === '下班').map(c => c.at).sort();
     const tin = ins[0] || '', tout = outs.length ? outs[outs.length - 1] : '';
     const lv = leaves.map(l => ({ type: l.leaveType, h: splitOf(l)[date] || 0 })).filter(x => x.h);
+    if (sh.annual && !lv.some(x => x.type === '特休')) lv.push({ type: '特休', h: Number(S.dayHours) || 8, roster: true }); // 班表排特休＝全天特休
     const leaveHours = lv.reduce((t, x) => t + x.h, 0);
     let workedMin = 0, lateMin = 0, earlyMin = 0;
     if (tin && tout && tout > tin) {
@@ -91,7 +107,7 @@ const HRC = (() => {
     const missing = wd && past && !absent && !leaveHours && (!tin || !tout);
     let status = !wd ? (tin || tout ? '休假日出勤' : '休') : leaveHours ? lv.map(x => x.type).join('、') : absent ? '曠職' : missing ? '缺卡' : lateMin ? '遲到' : earlyMin ? '早退' : tin ? '正常' : '';
     if (wd && leaveHours && (tin || tout)) status += '＋出勤';
-    return { date, w: WEEK[weekday(date)], wd, in: tin.slice(11, 16), out: tout.slice(11, 16), workedMin, lateMin, earlyMin, leaveHours, leaves: lv, absent, missing, status };
+    return { date, w: WEEK[weekday(date)], wd, shift: sh.code, start: hm(sh.st), end: hm(sh.en), in: tin.slice(11, 16), out: tout.slice(11, 16), workedMin, lateMin, earlyMin, leaveHours, leaves: lv, absent, missing, status };
   }
 
   /** 整月出勤。reqs：這個人「已核准」的申請（請假、加班） */
@@ -156,5 +172,5 @@ const HRC = (() => {
     return { lines, gross, deduct, net: gross - deduct, rate: r1(rate), workedHours: workedH, otHours: r1(otH), absentDays: att.sum.absentDays, lateMin: att.sum.lateMin };
   }
 
-  return { LEAVE_TYPES, OT_TYPES, WEEK, annualLeave, annualDaysFor, seniority, leaveSplit, splitOf, dayAttendance, monthAttendance, computePay, otFactor, shiftOf, weekday, daysInMonth, addYM, dayNum, fromNum, mins };
+  return { LEAVE_TYPES, OT_TYPES, WEEK, dayShift, rosterAnnualDays, annualLeave, annualDaysFor, seniority, leaveSplit, splitOf, dayAttendance, monthAttendance, computePay, otFactor, shiftOf, weekday, daysInMonth, addYM, dayNum, fromNum, mins };
 })();

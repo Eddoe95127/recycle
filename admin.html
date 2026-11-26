@@ -242,6 +242,20 @@
   .rs-t .rs-n { text-align: left; padding: 4px 8px; position: sticky; left: 0; background: #fff; z-index: 1; min-width: 92px; }
   .rs.wd { background: #eaf3ff; color: #0a5fb4; font-weight: 600; } .rs.off { color: #b0b0b5; } .rs.lv { background: #eaf8ef; color: #1a7f37; font-weight: 700; }
   .rs.bad { background: #ffe1df; color: #c9372c; } .rs.warn { background: #fff1d6; color: #8a5300; }
+  .ro-top { align-items: center; flex-wrap: wrap; }
+  .ro-brush .chips { gap: 6px; }
+  .ro-b { border: 1px solid var(--line, #e5e5ea); background: #fff; border-radius: 10px; padding: 7px 12px; font-size: 14px; font-weight: 600; color: var(--bc, #1d1d1f); cursor: pointer; line-height: 1.2; text-align: left; }
+  .ro-b small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+  .ro-b.on { background: var(--bc, #1d1d1f); color: #fff; border-color: var(--bc, #1d1d1f); } .ro-b.on small { color: rgba(255,255,255,.8); }
+  .ro-b.lvb { --bc: #1a7f37; }
+  .ro-t .ro-c { cursor: pointer; min-width: 30px; height: 34px; font-weight: 700; -webkit-user-select: none; user-select: none; }
+  .ro-c.wd { background: #eef5ff; } .ro-c.off.set { background: #f2f2f5; color: #6e6e73; } .ro-c.lv { background: #e3f6e9; color: #1a7f37; }
+  .ro-c.dflt { color: #a1a1a6; font-weight: 400; }
+  .ro-c.chg { box-shadow: inset 0 0 0 2px #ffb800; }
+  .ro-left { white-space: nowrap; font-size: 13px; } .ro-neg { color: #c9372c; font-weight: 700; }
+  .ro-foot { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; align-items: center; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); margin: 12px -4px 0; background: rgba(255,255,255,.96); border-top: 1px solid var(--line, #e5e5ea); }
+  .ro-srow { display: grid; grid-template-columns: 1fr 92px 10px 92px 64px 30px; gap: 6px; align-items: center; margin-bottom: 8px; }
+  @media (max-width: 520px) { .ro-srow { grid-template-columns: 1fr 1fr 30px; } .ro-srow span { display: none; } }
   .rs-t .today { outline: 2px solid #0a84ff; outline-offset: -2px; } .rs-sum td { font-weight: 700; background: #fafafa; } .rs-sum td.zero { color: #c9372c; }
   @media (max-width: 560px) { .cal-d { min-height: 62px; font-size: 10px; padding: 4px; } .cal-d b { font-size: 12px; } }
   .hr-reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; } .hr-req { margin: 0; }
@@ -406,12 +420,12 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261126e"></script>
+<script src="shared.js?v=20261126f"></script>
 <script src="store.js?v=20261126d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
-<script src="hr-calc.js?v=20261123b"></script>
-<script src="hr.js?v=20261126a"></script>
+<script src="hr-calc.js?v=20261126a"></script>
+<script src="hr.js?v=20261126b"></script>
 <script src="repair.js?v=20261125b"></script>
 <script>
 const app = $('#app');
@@ -535,7 +549,7 @@ function pagesNav(cur) {
     ['buy', '🛒 收購作業', [['', '宅配收購'], (P('create_intake') || canStoreView()) && ['intake', '門市收購'], P('edit_payment') && ['remit', '匯款'], P('edit_prices') && ['prices', '價格管理']]],
     ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
     ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], !P('edit_prices') && P('edit_stock') && ['prices', '建議售價表'], P('view_cost') && ['report', '報表']]],
-    ['hr', '👥 人資', [['hr/clock', '打卡'], ['hr/me', '我的出勤'], P('hr_manage') && ['hr/approve', '審核'], P('hr_manage') && ['hr/attendance', '出勤總表'],
+    ['hr', '👥 人資', [['hr/clock', '打卡'], ['hr/me', '我的出勤'], P('hr_manage') && ['hr/approve', '審核'], P('hr_manage') && ['hr/attendance', '出勤總表'], P('hr_manage') && ['hr/roster', '班表'],
       P('hr_manage') && ['hr/staff', '員工資料'], P('manage_users') && ['users', '帳號與權限'], P('payroll') && ['hr/payroll', '薪資'], P('hr_manage') && ['hr/settings', '打卡設定']]],
     ['sys', '⚙️ 系統設定', [canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
   ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
