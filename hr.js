@@ -481,6 +481,13 @@ async function hrStaffPage() {
   loadPhotos(app);
   if ($('#hrAddU')) $('#hrAddU').onclick = () => userDrawer(null, hrStaffPage);
 }
+/** 重畫抽屜但保留捲動位置（新增／刪除項目時畫面不會跳回最上面）；focusSel：重畫後把游標放到最後一個符合的欄位 */
+function hrRedraw(d, draw, focusSel) {
+  const b = $('.d-body', d), y = b ? b.scrollTop : 0;
+  draw();
+  const nb = $('.d-body', d); if (nb) nb.scrollTop = y;
+  if (focusSel) { const els = $$(focusSel, d); if (els.length) els[els.length - 1].focus({ preventScroll: true }); }
+}
 /** 員工大頭照（沒有照片就顯示名字第一個字） */
 const hrAvatar = (x, size) => x.photo ? `<img class="emp-av" data-photo="${esc(x.photo)}" alt="${esc(x.name)}" style="width:${size}px;height:${size}px">`
   : `<span class="emp-av emp-ini" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px">${esc(String(x.name || '?').slice(0, 1))}</span>`;
@@ -522,7 +529,8 @@ function hrStaffDrawer(x) {
         <div class="field"><span>計薪方式</span>${chips('sPt', ['月薪', '時薪'], x.payType || '月薪')}</div>
         <label class="field"><span id="sSalL">${(x.payType || '月薪') === '時薪' ? '時薪（NT$）' : '月薪（NT$）'}</span><input class="input num" id="sSal" inputmode="numeric" value="${esc(x.salary || '')}"></label>
         <div class="field"><span>固定加給（每月）</span>${allow.map((a, i) => `<div class="rp-item" style="grid-template-columns:1fr 120px 30px"><input class="input" data-an="${i}" value="${esc(a.name)}" placeholder="例：全勤獎金"><input class="input num" data-aa="${i}" inputmode="numeric" value="${esc(a.amount || '')}" placeholder="金額"><button type="button" class="ph-del static" data-ad="${i}">✕</button></div>`).join('')}
-          <button type="button" class="link" id="sAddA">＋ 新增加給</button></div>
+          <button type="button" class="link" id="sAddA">＋ 新增加給</button>
+          <div class="py-bonus-tip" style="margin-top:8px">這裡只放<b>每個月固定</b>的加給（例：全勤、職務加給）。<br>依營業額、每月不同的獎金，請到 <a href="#hr/payroll" onclick="closeDrawer()">人資 → 薪資</a> 計算表的「💰 本月獎金」欄填寫。</div></div>
         <div class="grid2"><label class="field"><span>勞保自付（每月）</span><input class="input num" id="sLi" inputmode="numeric" value="${esc(x.laborIns || '')}"></label>
           <label class="field"><span>健保自付（每月）</span><input class="input num" id="sHi" inputmode="numeric" value="${esc(x.healthIns || '')}"></label></div>
         <label class="field"><span>勞退自提（%，0–6）</span><input class="input num" id="sPp" inputmode="decimal" value="${esc(x.pensionPct || '')}" style="max-width:120px"></label>
@@ -532,8 +540,8 @@ function hrStaffDrawer(x) {
     </div><div class="d-foot">${P('manage_users') ? '<button type="button" class="btn btn-ghost" id="sAcct">🔑 帳號與權限</button>' : ''}<span class="err" id="sErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="sSave">儲存</button></div>`;
     $('.d-close', d).onclick = closeDrawer;
     loadPhotos(d);
-    $('#sPh', d).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { keep(); newPhoto = await resizeImage(f, 480, 0.85); delPhoto = false; draw(); } catch (y) { toast(y.message); } };
-    if ($('#sPhDel', d)) $('#sPhDel', d).onclick = () => { keep(); newPhoto = ''; delPhoto = true; draw(); };
+    $('#sPh', d).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { keep(); newPhoto = await resizeImage(f, 480, 0.85); delPhoto = false; hrRedraw(d, draw); } catch (y) { toast(y.message); } };
+    if ($('#sPhDel', d)) $('#sPhDel', d).onclick = () => { keep(); newPhoto = ''; delPhoto = true; hrRedraw(d, draw); };
     $('#sSame', d).onchange = e => { if (e.target.checked) $('#sAd', d).value = $('#sRa', d).value; };
     if ($('#sAcct', d)) $('#sAcct', d).onclick = async e => { // 直接改這位員工的帳號、密碼、權限
       const btn = e.currentTarget; btn.disabled = true;
@@ -544,8 +552,8 @@ function hrStaffDrawer(x) {
       $$('input[name=sPt]', d).forEach(r => r.onchange = () => { $('#sSalL', d).textContent = r.value === '時薪' ? '時薪（NT$）' : '月薪（NT$）'; });
       $$('[data-an]', d).forEach(el => el.oninput = () => { allow[+el.dataset.an].name = el.value; });
       $$('[data-aa]', d).forEach(el => el.oninput = () => { allow[+el.dataset.aa].amount = el.value; });
-      $$('[data-ad]', d).forEach(b => b.onclick = () => { keep(); allow.splice(+b.dataset.ad, 1); draw(); });
-      $('#sAddA', d).onclick = () => { keep(); allow.push({ name: '', amount: '' }); draw(); };
+      $$('[data-ad]', d).forEach(b => b.onclick = () => { keep(); allow.splice(+b.dataset.ad, 1); hrRedraw(d, draw); });
+      $('#sAddA', d).onclick = () => { keep(); allow.push({ name: '', amount: '' }); hrRedraw(d, draw, '[data-an]'); };
     }
     $('#sSave', d).onclick = save;
   };
@@ -580,6 +588,7 @@ async function hrPayrollPage(refresh) {
   const S = r.slips, drafts = S.filter(x => x.status === '草稿'), C = HRC.PAY_COLS, E = C.filter(c => c[2] === 'earn'), D = C.filter(c => c[2] === 'deduct');
   const cell = (x, [k]) => {
     const det = x.detail || {}, v = (det.cols || {})[k] || 0, auto = (det.auto || {})[k] || 0, ov = x.overrides && x.overrides[k] !== undefined;
+    if (k === 'bonus') return `<td class="py-bcell"><input class="py-in py-bonus num" data-k="bonus" value="${v || ''}" placeholder="填寫" inputmode="numeric" title="本月獎金：依當月營業額填寫" ${x.status === '已確認' ? 'disabled' : ''}></td>`;
     return `<td><input class="py-in num${ov ? ' ov' : ''}" data-k="${k}" value="${v || ''}" placeholder="${auto || 0}" inputmode="numeric" title="自動計算：${money(auto)}" ${x.status === '已確認' ? 'disabled' : ''}></td>`;
   };
   const row = x => {
@@ -593,10 +602,11 @@ async function hrPayrollPage(refresh) {
     <div class="ro-head"><h2>${Number(month.slice(0, 4))} 年 ${Number(month.slice(5))} 月薪資計算表</h2>
       <div class="ro-nav">${hrMonthNav('pyM', month)}<button class="btn btn-dark btn-sm" id="pyCalc">🧮 ${S.length ? '重新計算' : '計算本月薪資'}</button>
         ${drafts.length ? `<button class="btn btn-ghost btn-sm" id="pyAll">✓ 全部確認（${drafts.length}）</button>` : ''}${S.length ? '<button class="btn btn-ghost btn-sm" id="pyCsv">⬇ 匯出</button>' : ''}</div></div>
-    ${S.length ? `<div class="card py-tip">系統依出勤、請假、加班<b>自動帶入</b>每一格，<b>每一格都可以直接改</b>；改過的格子會變<span class="py-ovs">黃底</span>（手指或滑鼠停在格子上可看自動算的金額），<b>清空格子＝改回自動計算</b>。獎金、其他加項、其他扣項請自己填。「已確認」的薪資單員工才看得到，重新計算也不會被覆蓋。</div>
+    ${S.length ? `<div class="card py-bonus-tip">💰 <b>本月獎金</b>：依這個月的營業額，直接在表格的「本月獎金」欄填金額，填完按「💾 儲存計算表」。每個月都要重新填，不會沿用上個月。</div>
+      <div class="card py-tip">系統依出勤、請假、加班<b>自動帶入</b>每一格，<b>每一格都可以直接改</b>；改過的格子會變<span class="py-ovs">黃底</span>（手指或滑鼠停在格子上可看自動算的金額），<b>清空格子＝改回自動計算</b>。獎金、其他加項、其他扣項請自己填。「已確認」的薪資單員工才看得到，重新計算也不會被覆蓋。</div>
       <div class="py-wrap"><table class="py-t"><thead>
         <tr class="py-grp"><th class="py-n" rowspan="2">員工</th><th colspan="${E.length}" class="g-earn">加項</th><th rowspan="2" class="py-sum">應發</th><th colspan="${D.length}" class="g-ded">扣項</th><th rowspan="2" class="py-sum ded">應扣</th><th rowspan="2" class="py-net">實發</th><th rowspan="2">備註</th></tr>
-        <tr>${E.map(c => `<th class="c-earn">${c[1]}</th>`).join('')}${D.map(c => `<th class="c-ded">${c[1]}</th>`).join('')}</tr></thead>
+        <tr>${E.map(c => c[0] === 'bonus' ? '<th class="c-earn c-bonus">💰 本月獎金<span>每月填寫</span></th>' : `<th class="c-earn">${c[1]}</th>`).join('')}${D.map(c => `<th class="c-ded">${c[1]}</th>`).join('')}</tr></thead>
         <tbody>${S.map(row).join('')}</tbody><tfoot><tr id="pyTot"></tr></tfoot></table></div>
       <div class="ro-foot"><span id="pyState" style="flex:1"></span><button class="btn btn-dark" id="pySave">💾 儲存計算表</button></div>`
       : '<div class="card empty">這個月還沒計算薪資，按上方「🧮 計算本月薪資」</div>'}
@@ -612,7 +622,7 @@ async function hrPayrollPage(refresh) {
     if (!(await ask(`確認 ${drafts.length} 張薪資單？\n\n確認後員工就能在「我的出勤」看到。`, '全部確認'))) return;
     try { await api('payrollConfirm', { ids: drafts.map(x => x.id) }); toast('已確認'); hrPayrollPage(); } catch (y) { if (y.auth) return start(); toast(y.message); }
   };
-  if ($('#pyCsv')) $('#pyCsv').onclick = () => csvDownload(`薪資計算表_${month}.csv`, ['員工', '狀態', ...E.map(c => c[1]), '應發', ...D.map(c => c[1]), '應扣', '實發', '備註'],
+  if ($('#pyCsv')) $('#pyCsv').onclick = () => csvDownload(`薪資計算表_${month}.csv`, ['員工', '狀態', ...E.map(c => c[0] === 'bonus' ? '本月獎金' : c[1]), '應發', ...D.map(c => c[1]), '應扣', '實發', '備註'],
     S.map(x => { const cl = (x.detail || {}).cols || {}; return [x.name, x.status, ...E.map(c => cl[c[0]] || 0), x.gross, ...D.map(c => cl[c[0]] || 0), x.deduct, x.net, x.note || '']; }));
   $$('[data-slip]').forEach(b => b.onclick = () => { if (Object.keys(PY.dirty).length) return toast('請先儲存計算表再看明細'); hrSlipDrawer(S.find(x => x.id === b.dataset.slip), true); });
   const tb = $('.py-t tbody');
@@ -630,7 +640,7 @@ function pyRow(tr) {
     const el = $(`[data-k="${k}"]`, tr); if (!el) return;
     const raw = el.value.replace(/[^\d.]/g, ''), a = auto[k] || 0, v = raw === '' ? a : Math.round(Number(raw) || 0);
     if (raw !== '' && v !== a) out.ov[k] = v;
-    el.classList.toggle('ov', raw !== '' && v !== a);
+    if (k !== 'bonus') el.classList.toggle('ov', raw !== '' && v !== a);
     if (kind === 'earn') out.g += v; else out.d += v;
   });
   return out;
@@ -684,8 +694,8 @@ function hrSlipDrawer(x, manage) {
     $('.d-close', d).onclick = closeDrawer;
     $$('[data-jn]', d).forEach(el => el.oninput = () => { adj[+el.dataset.jn].name = el.value; });
     $$('[data-ja]', d).forEach(el => el.oninput = () => { adj[+el.dataset.ja].amount = el.value; });
-    $$('[data-jd]', d).forEach(b => b.onclick = () => { adj.splice(+b.dataset.jd, 1); draw(); });
-    if ($('#jAdd', d)) $('#jAdd', d).onclick = () => { adj.push({ name: '', amount: '' }); draw(); };
+    $$('[data-jd]', d).forEach(b => b.onclick = () => { adj.splice(+b.dataset.jd, 1); hrRedraw(d, draw); });
+    if ($('#jAdd', d)) $('#jAdd', d).onclick = () => { adj.push({ name: '', amount: '' }); hrRedraw(d, draw, '[data-jn]'); };
     const saveAdj = async () => { const r = await api('payrollSave', { id: x.id, adjustments: adj.map(a => ({ name: a.name, amount: Number(String(a.amount).replace(/[^\d-]/g, '')) || 0 })), note: ($('#jNote', d) || {}).value || '' }); return r.slip; };
     if ($('#jSave', d)) $('#jSave', d).onclick = async e => { const b = e.currentTarget; b.disabled = true; try { const s = await saveAdj(); toast('已重新計算'); hrSlipDrawer(s, true); hrPayrollPage(); } catch (y) { $('#jErr', d).textContent = y.message; b.disabled = false; } };
     if ($('#jOk', d)) $('#jOk', d).onclick = async e => {

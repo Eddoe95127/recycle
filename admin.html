@@ -288,6 +288,9 @@
   .emp-sub { font-size: 14px; font-weight: 700; color: var(--muted); margin: 4px 0 6px; }
   .grid3 { display: grid; grid-template-columns: 1fr 100px 1fr; gap: 0 10px; } @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr 1fr; } }
   /* 薪資計算表 */
+  .py-bonus-tip { font-size: 15px; line-height: 1.6; padding: 12px 16px; background: #fff8e1; border: 1px solid #ffe08a; color: #6b4e00; border-radius: 12px; }
+  .py-t th.c-bonus { background: #fff3c4; color: #8a5300; } .py-t th.c-bonus span { display: block; font-size: 11px; font-weight: 500; }
+  .py-t td.py-bcell { background: #fffbea; } .py-in.py-bonus { border: 2px solid #f0c000; font-weight: 800; background: #fff; } .py-in.py-bonus::placeholder { color: #c9a000; font-weight: 500; }
   .py-tip { font-size: 15px; line-height: 1.7; padding: 12px 16px; } .py-ovs { background: #fff3c4; padding: 0 6px; border-radius: 4px; margin: 0 2px; }
   .py-wrap { overflow: auto; -webkit-overflow-scrolling: touch; background: #fff; border: 1px solid var(--line, #e5e5ea); border-radius: 16px; max-height: calc(100vh - 230px); }
   .py-t { border-collapse: separate; border-spacing: 0; font-size: 16px; min-width: 100%; }
@@ -492,7 +495,7 @@
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261127b"></script>
-<script src="hr.js?v=20261127c"></script>
+<script src="hr.js?v=20261127e"></script>
 <script src="repair.js?v=20261125b"></script>
 <script>
 const app = $('#app');
