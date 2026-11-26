@@ -51,6 +51,8 @@ function storeRoute(page) {
 }
 /** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
 const showCost = () => P('view_cost') && !SHOP;
+/** 毛利：另外需要「查看毛利」權限 */
+const showProfit = () => showCost() && P('view_profit');
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
 const canAudit = () => ['manage_users', 'edit_intake', 'delete_intake', 'edit_repair', 'delete_repair', 'edit_order', 'delete_order', 'hr_manage', 'payroll'].some(P);
 const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // 台灣本地日期（不用 UTC）
@@ -1124,7 +1126,7 @@ async function stockPage(refresh) {
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${stockCache.filter(r => r.status === '整理中').length}</div><div class="l">整理中</div></div>
       ${showCost() ? `<div class="stat" style="--c:#30D158"><div class="n num">${nt(active.reduce((t, r) => t + (r.cost || 0), 0))}</div><div class="l">在庫成本</div></div>` : ''}
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${soldM.length}</div><div class="l">本月售出</div></div>
-      ${showCost() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
+      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
     </div>
     <div class="tabs st-view">${[['list', '📋 明細'], ['model', '📊 依型號總清單']].map(([k, l]) => `<button data-view="${k}" class="${stView === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="toolbar">
@@ -1339,9 +1341,9 @@ function drawRpt() {
       <div class="stat" style="--c:#30D158"><div class="n num">${nt(sum(buys, r => r.cost))}</div><div class="l">收購金額</div></div>
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${sales.length}</div><div class="l">售出件數</div></div>
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${nt(sum(sales, r => r.salePrice))}</div><div class="l">銷售金額</div></div>
-      <div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">銷售毛利</div></div>
+      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">銷售毛利</div></div>` : ''}
       <div class="stat" style="--c:#64D2FF"><div class="n num">${nt(sum(fixes, o => o.fee))}</div><div class="l">維修收入（${fixes.length} 件）</div></div>
-      <div class="stat" style="--c:#FF375F"><div class="n num">${nt(sum(fixes, fixProfit))}</div><div class="l">維修毛利</div></div>
+      ${showProfit() ? `<div class="stat" style="--c:#FF375F"><div class="n num">${nt(sum(fixes, fixProfit))}</div><div class="l">維修毛利</div></div>` : ''}
     </div><p class="small muted" style="margin:-6px 4px 10px">期間：${esc(range)}・收購以入庫時間計（宅配為付款入庫日），銷售以銷售日期計</p>`;
   let html = '', csv = null;
   if (rpView === 'daily') {
@@ -1407,7 +1409,8 @@ function drawRpt() {
     }
   }
   box.innerHTML = head + html;
-  $('#rpCsv').onclick = () => csv && csvDownload(...csv);
+  if (!showProfit()) $$('table', box).forEach(dropProfitCols); // 沒有「查看毛利」權限：拿掉毛利欄
+  $('#rpCsv').onclick = () => csv && csvDownload(...noProfitCsv(csv));
   $$('[data-rd]', box).forEach(b => b.onclick = () => { rpDetail = b.dataset.rd; drawRpt(); });
   $$('tr[data-day]', box).forEach(tr => tr.onclick = () => { rpFrom = rpTo = tr.dataset.day; rpView = 'tx'; reportPage(); });
   $$('tr[data-sku]', box).forEach(tr => tr.onclick = () => stockDrawer(rpData.stock.find(r => r.sku === tr.dataset.sku)));
@@ -1416,6 +1419,18 @@ function drawRpt() {
     if (tr.dataset.src === '門市') { const o = rpData.intakes.find(x => x.id === tr.dataset.ref); if (o) intakeDrawer(o); }
     else { window.openAfterLoad = tr.dataset.ref; location.hash = ''; }
   });
+}
+
+/** 沒有「查看毛利」權限時，把表格、CSV 的毛利欄拿掉 */
+const isProfitHead = h => String(h).includes('毛利');
+function dropProfitCols(tbl) {
+  const idx = [...tbl.querySelectorAll('tr:first-child th, thead th')].map((th, i) => isProfitHead(th.textContent) ? i : -1).filter(i => i >= 0).reverse();
+  if (idx.length) [...tbl.rows].forEach(tr => idx.forEach(i => tr.cells[i] && tr.deleteCell(i)));
+}
+function noProfitCsv([name, heads, rows]) {
+  if (showProfit()) return [name, heads, rows];
+  const keep = heads.map((h, i) => isProfitHead(h) ? -1 : i).filter(i => i >= 0);
+  return [name, keep.map(i => heads[i]), rows.map(r => keep.map(i => r[i]))];
 }
 
 /** 維修的收件／取件事件（依時間排序） */
@@ -1459,8 +1474,11 @@ function rpDocHTML(sel) {
   const fixProfit = o => (o.fee || 0) - (o.partsCost || 0);
   const range = rpFrom === rpTo ? rpFrom : `${rpFrom} ～ ${rpTo}`;
   const th = 'border:1px solid #bbb;padding:5px 6px;background:#f2f2f4;font-size:11px;text-align:left', td = 'border:1px solid #ccc;padding:5px 6px;font-size:11px;vertical-align:top', R = ';text-align:right;white-space:nowrap';
-  const table = (heads, rows, foot) => `<table style="width:100%;border-collapse:collapse;margin:0 0 14px"><tr>${heads.map(h => `<th style="${th}${h[1] ? R : ''}">${esc(h[0])}</th>`).join('')}</tr>
-    ${rows.map(r => `<tr>${r.map((c, i) => `<td style="${td}${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>`).join('')}${foot ? `<tr>${foot.map((c, i) => `<td style="${td};font-weight:700;background:#fafafa${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>` : ''}</table>`;
+  const table = (heads0, rows0, foot0) => { // 沒有「查看毛利」權限：拿掉毛利欄
+    const keep = heads0.map((h, i) => showProfit() || !isProfitHead(h[0]) ? i : -1).filter(i => i >= 0), pick = r => r && keep.map(i => r[i]);
+    const heads = pick(heads0), rows = rows0.map(pick), foot = pick(foot0);
+    return `<table style="width:100%;border-collapse:collapse;margin:0 0 14px"><tr>${heads.map(h => `<th style="${th}${h[1] ? R : ''}">${esc(h[0])}</th>`).join('')}</tr>
+    ${rows.map(r => `<tr>${r.map((c, i) => `<td style="${td}${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>`).join('')}${foot ? `<tr>${foot.map((c, i) => `<td style="${td};font-weight:700;background:#fafafa${heads[i][1] ? R : ''}">${c}</td>`).join('')}</tr>` : ''}</table>`; };
   const h2 = t => `<h3 style="font-size:14px;margin:18px 0 6px;border-left:4px solid #111;padding-left:8px">${t}</h3>`;
   let out = `<div style="font-family:-apple-system,'PingFang TC','Noto Sans TC',sans-serif;color:#111">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px">
