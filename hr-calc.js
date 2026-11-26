@@ -151,37 +151,52 @@ const HRC = (() => {
     return Math.min(h, 2) * 1.34 + Math.max(h - 2, 0) * 1.67;
   }
 
-  /** 薪資。回傳明細行 [{name, amount, kind:'earn'|'deduct', note}] 與應發、應扣、實發 */
-  function computePay(p, month, att, reqs, S, adjustments) {
+  /** 薪資計算表的欄位：[代號, 名稱, earn 加項｜deduct 扣項] */
+  const PAY_COLS = [['base', '本薪', 'earn'], ['allow', '加給', 'earn'], ['ot', '加班費', 'earn'], ['bonus', '獎金', 'earn'], ['otherEarn', '其他加項', 'earn'],
+    ['leave', '請假扣薪', 'deduct'], ['late', '遲到扣薪', 'deduct'], ['labor', '勞保', 'deduct'], ['health', '健保', 'deduct'], ['pension', '勞退自提', 'deduct'], ['otherDeduct', '其他扣項', 'deduct']];
+  /** 薪資。回傳明細行 [{name, amount, kind:'earn'|'deduct', note, cat}] 與應發、應扣、實發。
+   *  overrides：計算表上手動填的金額 { 欄位代號: 金額 }，會取代自動算的那一欄；cols＝各欄金額、auto＝自動算的各欄金額 */
+  function computePay(p, month, att, reqs, S, adjustments, overrides) {
     const hourly = p.payType === '時薪', salary = Number(p.salary) || 0;
     const rate = hourly ? salary : salary / 240; // 月薪換算時薪＝月薪 ÷ 30 ÷ 8
-    const lines = [], add = (name, amount, kind, note) => { amount = money(amount); if (amount) lines.push({ name, amount, kind, note: note || '' }); };
+    const lines = [], add = (name, amount, kind, note, cat) => { amount = money(amount); if (amount) lines.push({ name, amount, kind, note: note || '', cat }); };
     const workedH = r1(att.sum.workedMin / 60);
-    if (hourly) add('時薪', workedH * rate, 'earn', `${workedH} 小時 × ${salary}`);
-    else add('本薪', salary, 'earn');
-    (p.allowances || []).forEach(a => add(a.name || '加給', Number(a.amount) || 0, 'earn'));
+    if (hourly) add('時薪', workedH * rate, 'earn', `${workedH} 小時 × ${salary}`, 'base');
+    else add('本薪', salary, 'earn', '', 'base');
+    (p.allowances || []).forEach(a => add(a.name || '加給', Number(a.amount) || 0, 'earn', '', 'allow'));
     // 請假：月薪扣除不給薪部分；時薪補發給薪部分
     Object.keys(att.sum.leaveHours).forEach(t => {
       const h = att.sum.leaveHours[t], pay = (LEAVE_TYPES[t] || { pay: 0 }).pay;
-      if (hourly) { if (pay > 0) add(`${t}（${pay === 1 ? '全薪' : '半薪'}）`, h * rate * pay, 'earn', `${h} 小時`); }
-      else if (pay < 1) add(`${t}${pay ? '（半薪）' : ''}扣薪`, h * rate * (1 - pay), 'deduct', `${h} 小時`);
+      if (hourly) { if (pay > 0) add(`${t}（${pay === 1 ? '全薪' : '半薪'}）`, h * rate * pay, 'earn', `${h} 小時`, 'base'); }
+      else if (pay < 1) add(`${t}${pay ? '（半薪）' : ''}扣薪`, h * rate * (1 - pay), 'deduct', `${h} 小時`, 'leave');
     });
     // 加班（已核准）
     let otH = 0;
     reqs.filter(r => r.kind === '加班' && String(r.start).slice(0, 7) === month).forEach(r => {
       const h = Number(r.hours) || 0; otH += h;
-      add(`加班費（${r.otType} ${String(r.start).slice(5, 10)}）`, rate * otFactor(r.otType, h, hourly), 'earn', `${h} 小時`);
+      add(`加班費（${r.otType} ${String(r.start).slice(5, 10)}）`, rate * otFactor(r.otType, h, hourly), 'earn', `${h} 小時`, 'ot');
     });
-    if (S.lateDeduct && !hourly && att.sum.lateMin) add('遲到扣薪', att.sum.lateMin * rate / 60, 'deduct', `${att.sum.lateMin} 分鐘`);
-    add('勞保自付', Number(p.laborIns) || 0, 'deduct');
-    add('健保自付', Number(p.healthIns) || 0, 'deduct');
+    if (S.lateDeduct && !hourly && att.sum.lateMin) add('遲到扣薪', att.sum.lateMin * rate / 60, 'deduct', `${att.sum.lateMin} 分鐘`, 'late');
+    add('勞保自付', Number(p.laborIns) || 0, 'deduct', '', 'labor');
+    add('健保自付', Number(p.healthIns) || 0, 'deduct', '', 'health');
     const pensionBase = hourly ? lines.filter(l => l.kind === 'earn').reduce((t, l) => t + l.amount, 0) : salary;
-    if (Number(p.pensionPct)) add(`勞退自提 ${p.pensionPct}%`, pensionBase * Number(p.pensionPct) / 100, 'deduct');
-    (adjustments || []).forEach(a => { const v = Number(a.amount) || 0; if (v) add(a.name || (v > 0 ? '其他加項' : '其他扣項'), Math.abs(v), v > 0 ? 'earn' : 'deduct', a.note); });
+    if (Number(p.pensionPct)) add(`勞退自提 ${p.pensionPct}%`, pensionBase * Number(p.pensionPct) / 100, 'deduct', '', 'pension');
+    (adjustments || []).forEach(a => { const v = Number(a.amount) || 0; if (v) add(a.name || (v > 0 ? '其他加項' : '其他扣項'), Math.abs(v), v > 0 ? 'earn' : 'deduct', a.note, v > 0 ? 'otherEarn' : 'otherDeduct'); });
+    const sumBy = () => { const o = {}; lines.forEach(l => { o[l.cat] = (o[l.cat] || 0) + l.amount; }); return o; };
+    const auto = sumBy(), ov = {};
+    PAY_COLS.forEach(([c, label, kind]) => { // 計算表上手動填的欄位：取代自動算的金額
+      const raw = overrides && overrides[c];
+      if (raw == null || raw === '') return;
+      const v = money(Math.abs(Number(raw) || 0));
+      ov[c] = v;
+      for (let i = lines.length - 1; i >= 0; i--) if (lines[i].cat === c) lines.splice(i, 1);
+      if (v) lines.push({ name: label, amount: v, kind, note: '手動填寫', cat: c });
+    });
+    const cols = sumBy();
     const gross = lines.filter(l => l.kind === 'earn').reduce((t, l) => t + l.amount, 0);
     const deduct = lines.filter(l => l.kind === 'deduct').reduce((t, l) => t + l.amount, 0);
-    return { lines, gross, deduct, net: gross - deduct, rate: r1(rate), workedHours: workedH, otHours: r1(otH), absentDays: att.sum.absentDays, lateMin: att.sum.lateMin };
+    return { lines, cols, auto, overrides: ov, gross, deduct, net: gross - deduct, rate: r1(rate), workedHours: workedH, otHours: r1(otH), absentDays: att.sum.absentDays, lateMin: att.sum.lateMin };
   }
 
-  return { LEAVE_TYPES, OT_TYPES, WEEK, dayShift, rosterAnnualDays, upcoming, annualLeave, annualDaysFor, seniority, leaveSplit, splitOf, dayAttendance, monthAttendance, computePay, otFactor, shiftOf, weekday, daysInMonth, addYM, dayNum, fromNum, mins };
+  return { LEAVE_TYPES, OT_TYPES, WEEK, PAY_COLS, dayShift, rosterAnnualDays, upcoming, annualLeave, annualDaysFor, seniority, leaveSplit, splitOf, dayAttendance, monthAttendance, computePay, otFactor, shiftOf, weekday, daysInMonth, addYM, dayNum, fromNum, mins };
 })();

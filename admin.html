@@ -280,6 +280,34 @@
   .ro-neg { color: #c9372c; font-weight: 700; }
   @media (max-width: 560px) { .ro-head h2 { font-size: 20px; } .ro-b { font-size: 16px; padding: 8px 14px; min-width: 80px; } .ro-c { height: 46px; min-width: 42px; } .ro-t .ro-n { min-width: 0; width: 88px; max-width: 88px; white-space: normal; padding: 6px 8px; font-size: 15px; line-height: 1.25; } .ro-ann { font-size: 11px; } .ro-ann b { font-size: 13px; }
     .ro-foot { flex-wrap: wrap; gap: 8px; } .ro-foot #roState { order: -1; flex-basis: 100% !important; font-size: 13px; } .ro-foot .btn { flex: 1; white-space: nowrap; } }
+  /* 員工基本資料 */
+  .emp-cell { display: flex; align-items: center; gap: 12px; }
+  .emp-av { border-radius: 50%; object-fit: cover; background: #e9e9ee; flex-shrink: 0; display: inline-block; }
+  .emp-ini { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #5e9cff, #0a5fb4); color: #fff; font-weight: 800; }
+  .emp-top { display: flex; align-items: center; gap: 18px; margin: 4px 0 14px; } .emp-top .emp-av { width: 96px; height: 96px; }
+  .emp-sub { font-size: 14px; font-weight: 700; color: var(--muted); margin: 4px 0 6px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 100px 1fr; gap: 0 10px; } @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+  /* 薪資計算表 */
+  .py-tip { font-size: 15px; line-height: 1.7; padding: 12px 16px; } .py-ovs { background: #fff3c4; padding: 0 6px; border-radius: 4px; margin: 0 2px; }
+  .py-wrap { overflow: auto; -webkit-overflow-scrolling: touch; background: #fff; border: 1px solid var(--line, #e5e5ea); border-radius: 16px; max-height: calc(100vh - 230px); }
+  .py-t { border-collapse: separate; border-spacing: 0; font-size: 16px; min-width: 100%; }
+  .py-t th, .py-t td { border-right: 1px solid #ececf0; border-bottom: 1px solid #ececf0; padding: 6px; text-align: right; white-space: nowrap; }
+  .py-t thead th { position: sticky; background: #f7f7f9; font-size: 15px; font-weight: 800; text-align: center; z-index: 2; }
+  .py-t thead tr:first-child th { top: 0; } .py-t thead tr:nth-child(2) th { top: 37px; }
+  .py-t .g-earn { background: #e3f6e9; color: #1a7f37; } .py-t .g-ded { background: #ffe8e6; color: #c9372c; }
+  .py-t .c-earn { color: #1a7f37; } .py-t .c-ded { color: #c9372c; }
+  .py-t .py-n { position: sticky; left: 0; z-index: 1; background: #fff; text-align: left; min-width: 120px; font-size: 17px; box-shadow: 2px 0 0 #ececf0; }
+  .py-t .py-n .link { font-size: 17px; font-weight: 800; padding: 0; } .py-t .py-n .sub { font-size: 12px; font-weight: 400; margin-top: 2px; }
+  .py-t thead .py-n { z-index: 3; background: #f7f7f9; }
+  .py-in { width: 92px; border: 1px solid #d8d8de; border-radius: 8px; padding: 8px; font-size: 16px; text-align: right; background: #fff; }
+  .py-in:focus { outline: 2px solid #0a84ff; border-color: transparent; } .py-in.ov { background: #fff3c4; border-color: #e0b400; font-weight: 700; }
+  .py-in:disabled { background: transparent; border-color: transparent; color: #1d1d1f; }
+  .py-note { width: 150px; border: 1px solid #d8d8de; border-radius: 8px; padding: 8px; font-size: 15px; } .py-note:disabled { border-color: transparent; background: transparent; }
+  .py-sum { font-weight: 800; background: #fafafa; min-width: 90px; } .py-sum.ded { color: #c9372c; }
+  .py-net { font-weight: 900; font-size: 18px; color: #0a5fb4; background: #eef5ff; min-width: 100px; }
+  .py-t tbody tr.py-chg .py-n { box-shadow: inset 4px 0 0 #ffb800, 2px 0 0 #ececf0; } .py-t tbody tr.py-done { background: #fbfbfc; }
+  .py-t tfoot th, .py-t tfoot td { position: sticky; bottom: 0; background: #f2f2f5; font-weight: 800; padding: 10px 6px; }
+  .py-t tfoot .py-n { z-index: 3; font-size: 15px; }
   /* 打卡頁：我的班表 */
   .hr-today b { color: #1d1d1f; }
   .up-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
@@ -459,12 +487,12 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127a"></script>
+<script src="shared.js?v=20261127c"></script>
 <script src="store.js?v=20261126d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
-<script src="hr-calc.js?v=20261127a"></script>
-<script src="hr.js?v=20261127a"></script>
+<script src="hr-calc.js?v=20261127b"></script>
+<script src="hr.js?v=20261127c"></script>
 <script src="repair.js?v=20261125b"></script>
 <script>
 const app = $('#app');
