@@ -1011,6 +1011,7 @@ function mockHrApi(action, d, need, me) {
       H.reqs.filter(q => q.username === s.username && q.kind === '請假' && q.status === '已核准').forEach(q => Object.entries(q.split).forEach(([k, h]) => { if (k.slice(0, 4) === today.slice(0, 4)) used[q.leaveType] = (used[q.leaveType] || 0) + h / S.dayHours; }));
       return { ok: true, month, today, hasLocation: !!S.lat, radius: S.radius, dayHours: S.dayHours, profile: { ...p, seniority: HRC.seniority(p.hireDate, today) },
         todayClocks: H.clocks.filter(c => c.username === s.username && c.date === today && !c.deletedAt), att: att(p, month), annual: annual(p), leaveUsed: used,
+        upcoming: HRC.upcoming(p, H.reqs.filter(q => q.username === s.username && q.kind === '請假' && q.status === '已核准'), S, today, 14),
         requests: H.reqs.filter(q => q.username === s.username).slice().reverse(), payslips: H.slips.filter(x => x.username === s.username && x.status === '已確認').map(x => ({ id: x.id, month: x.month, net: x.net })) };
     }
     case 'hrClock': {

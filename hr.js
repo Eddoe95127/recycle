@@ -40,13 +40,15 @@ async function hrClockPage() {
       <div class="card" id="hrRoster"></div>`;
     return hrRosterCard(hrMonthNow());
   }
-  const p = me.profile, wd = (p.workdays || []).includes(new Date().getDay());
+  const p = me.profile, t0 = (me.upcoming || [])[0];
+  const todayShift = t0 ? (t0.leave ? `今天${t0.leave}` : !t0.wd ? '今天是休假日' : `今天${t0.shift ? ' ' + t0.shift : '班別'} ${t0.start}–${t0.end}`)
+    : ((p.workdays || []).includes(new Date().getDay()) ? `今天班別 ${p.shiftStart}–${p.shiftEnd}` : '今天是休假日');
   const tc = me.todayClocks, lastIn = tc.filter(c => c.type === '上班').pop(), lastOut = tc.filter(c => c.type === '下班').pop();
   const next = !lastIn ? '上班' : !lastOut || lastOut.at < lastIn.at ? '下班' : '上班';
   app.innerHTML = `${pagesNav('hr/clock')}
     <div class="card hr-clock">
       <div class="hr-now num" id="hrNow">--:--:--</div>
-      <div class="muted">${esc(localDay())}（${HRC.WEEK[new Date().getDay()]}）・${wd ? `今天班別 ${esc(p.shiftStart)}–${esc(p.shiftEnd)}` : '今天是休假日'}</div>
+      <div class="muted hr-today">${esc(localDay())}（${HRC.WEEK[new Date().getDay()]}）・<b>${esc(todayShift)}</b></div>
       ${me.hasLocation ? '' : '<div class="alert" style="margin-top:12px">還沒有設定門市位置，請主管到「人資 → 打卡設定」設定</div>'}
       <div class="hr-btns">
         <button class="hr-btn in ${next === '上班' ? 'on' : ''}" data-ck="上班"><b>上班打卡</b><small>${lastIn ? '已打 ' + esc(lastIn.at.slice(11, 16)) : '尚未打卡'}</small></button>
@@ -55,6 +57,7 @@ async function hrClockPage() {
       <p class="small muted" style="margin:0">打卡會檢查您是否在門市 ${esc(me.radius)} 公尺內，請允許網站使用位置。</p>
       <p class="err" id="ckErr" style="margin:8px 0 0"></p>
     </div>
+    ${me.upcoming && me.upcoming.length ? `<div class="card">${hrUpcomingHTML(me.upcoming)}</div>` : ''}
     <div class="card"><h3>今天的打卡</h3>${tc.length ? `<ul class="hr-list">${tc.map(c => `<li><b>${esc(c.type)}</b> <span class="num">${esc(c.at.slice(11, 16))}</span> <span class="sub">${c.dist != null ? '距門市 ' + c.dist + ' 公尺' : esc(c.source)}</span></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0">今天還沒有打卡</p>'}</div>
     ${me.annual ? `<div class="card hr-mini"><div><div class="small muted">特休剩餘</div><b class="num">${me.annual.left} 天</b></div><div><div class="small muted">年資</div><b>${esc(p.seniority || '—')}</b></div>
       <a class="btn btn-ghost btn-sm" href="#hr/me">我的出勤與申請 →</a></div>` : '<div class="card"><a class="btn btn-ghost btn-block" href="#hr/me">我的出勤與申請 →</a></div>'}
@@ -84,6 +87,17 @@ function hrDoClock(type, btn) {
 }
 
 /* ---------- 本月班表（月曆）＋全員班表 ---------- */
+/** 打卡頁「我的班表」：未來兩週，一天一列、大字 */
+function hrUpcomingHTML(list) {
+  const today = localDay(), tmr = HRC.fromNum(HRC.dayNum(today) + 1);
+  const row = d => {
+    const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}`, tag = d.date === today ? '今天' : d.date === tmr ? '明天' : '週' + d.w;
+    const main = d.leave ? `<span class="up-tag lv">${esc(d.leave)}</span>` : !d.wd ? '<span class="up-tag off">休假</span>'
+      : `${d.shift ? `<span class="up-tag sh">${esc(d.shift)}</span>` : ''}<b class="num">${esc(d.start)} – ${esc(d.end)}</b>`;
+    return `<li class="${d.date === today ? 'today' : ''}${d.leave || !d.wd ? ' rest' : ''}"><div class="up-d"><b class="num">${md}</b><span>${tag}${tag.startsWith('週') ? '' : '・週' + d.w}</span></div><div class="up-m">${main}</div></li>`;
+  };
+  return `<div class="hr-cal-h"><h3 style="margin:0">📅 我的班表</h3><span class="small muted">未來兩週</span></div><ul class="up-list">${list.map(row).join('')}</ul>`;
+}
 function hrCalendarHTML(me) {
   const p = me.profile, days = me.att.days, today = localDay();
   const lead = HRC.weekday(days[0].date);
@@ -139,7 +153,10 @@ async function hrRosterCard(month) {
 
 /* ---------- 班表（主管）：每月逐日排班。排「特休」直接扣特休餘額；沒排的日子照每週固定班 ---------- */
 const RO = { month: '', data: null, edit: null, brush: '', dirty: false };
-const roColors = ['#0a5fb4', '#7a3fd0', '#0f7b6c', '#b4400a', '#8a6d00', '#a3245e'];
+/** 班別顏色（背景、文字）：依班別選項的順序 */
+const RO_PAL = [['#dcebff', '#0a5fb4'], ['#ece2ff', '#6a32c9'], ['#d9f3ee', '#0f7b6c'], ['#ffe8d6', '#b4400a'], ['#fff3c4', '#7a5c00'], ['#ffe1ec', '#a3245e']];
+const RO_OFF = ['#ececf0', '#5f5f66'], RO_LV = ['#d6f5df', '#1a7f37'];
+const roStyle = code => { if (code === '休') return RO_OFF; if (code === '特休') return RO_LV; const i = RO.data.shifts.findIndex(s => s.name === code); return RO_PAL[(i < 0 ? 0 : i) % RO_PAL.length]; };
 const roMonthAdd = (m, n) => { const [y, mo] = m.split('-').map(Number), t = new Date(y, mo - 1 + n, 1); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); };
 async function hrRosterPage(refresh) {
   if (!RO.month) RO.month = hrMonthNow();
@@ -158,35 +175,38 @@ function roLeft(x) {
   const e = RO.edit[x.username], cov = {}; x.covered.forEach(k => { cov[k] = 1; });
   return a.baseLeft - HRC.rosterAnnualDays(e, a.from, a.to, cov);
 }
+const roIsWork = (x, d) => { const c = RO.edit[x.username][d]; return c ? c !== '休' && c !== '特休' : (x.workdays || []).map(Number).includes(HRC.weekday(d)); };
 function roCell(x, date) {
-  const code = RO.edit[x.username][date] || '', saved = (x.days[date] || '') !== code ? ' chg' : '';
-  if (code === '特休') return `<td class="ro-c lv${saved}" data-c="${date}">特</td>`;
-  if (code === '休') return `<td class="ro-c off set${saved}" data-c="${date}">休</td>`;
-  if (code) { const i = RO.data.shifts.findIndex(s => s.name === code); return `<td class="ro-c wd${saved}" data-c="${date}" style="color:${roColors[(i < 0 ? 0 : i) % roColors.length]}">${esc(code.slice(0, 2))}</td>`; }
-  const wd = (x.workdays || []).map(Number).includes(HRC.weekday(date)); // 沒排：照每週固定班（淡色）
-  return `<td class="ro-c dflt${saved}" data-c="${date}" title="沒排班，照固定班">${wd ? '班' : '休'}</td>`;
+  const code = RO.edit[x.username][date] || '', chg = (x.days[date] || '') !== code ? ' chg' : '';
+  if (!code) return `<td class="ro-c dflt${chg}" data-c="${date}" title="沒排班，照固定班">${roIsWork(x, date) ? '班' : '休'}</td>`;
+  const [bg, fg] = roStyle(code);
+  return `<td class="ro-c${chg}" data-c="${date}" style="--bg:${bg};--fg:${fg}">${esc(code === '特休' ? '特休' : code.slice(0, 2))}</td>`;
 }
 function roRow(x) {
   const left = roLeft(x), a = x.annual;
-  const leftHTML = !a ? '<span class="sub">未設到職日</span>' : `<b class="${left < 0 ? 'ro-neg' : ''}">${Math.round(left * 10) / 10}</b><span class="sub"> / ${a.total} 天</span>`;
-  const n = roDates().filter(d => { const c = RO.edit[x.username][d]; return c ? c !== '休' && c !== '特休' : (x.workdays || []).map(Number).includes(HRC.weekday(d)); }).length;
-  return `<tr data-u="${esc(x.username)}"><td class="rs-n"><b>${esc(x.name)}</b><div class="sub">固定班 ${esc(x.shiftStart)}–${esc(x.shiftEnd)}</div></td><td class="ro-left">${leftHTML}</td>${roDates().map(d => roCell(x, d)).join('')}<td class="num"><b>${n}</b></td></tr>`;
+  const ann = !a ? '<div class="ro-ann" title="到「員工資料」設定到職日後才能算特休">未設到職日</div>' : `<div class="ro-ann${left < 0 ? ' neg' : ''}">特休剩 <b>${Math.round(left * 10) / 10}</b> / ${a.total} 天</div>`;
+  return `<tr data-u="${esc(x.username)}"><th class="ro-n" scope="row">${esc(x.name)}${ann}</th>${roDates().map(d => roCell(x, d)).join('')}<td class="ro-sum num">${roDates().filter(d => roIsWork(x, d)).length}</td></tr>`;
 }
+const roFootHTML = () => `<tr><th class="ro-n" scope="row">當天上班人數</th>${roDates().map(d => { const n = RO.data.staff.filter(x => roIsWork(x, d)).length; return `<td class="${n ? '' : 'zero'}">${n}</td>`; }).join('')}<td></td></tr>`;
 function roDraw() {
-  const r = RO.data, today = localDay(), dates = roDates();
-  const brushes = [...r.shifts.map((s, i) => [s.name, `${s.name}<small>${esc(s.start)}–${esc(s.end)}</small>`, roColors[i % roColors.length]]), ['休', '休', ''], ['特休', '特休<small>扣特休 1 天</small>', ''], ['', '清除<small>照固定班</small>', '']];
+  const r = RO.data, today = localDay(), dates = roDates(), [y, mo] = RO.month.split('-').map(Number);
+  const brushes = [...r.shifts.map(s => [s.name, s.name, `${s.start}–${s.end}`]), ['休', '休假', '不上班'], ['特休', '特休', '扣特休 1 天'], ['', '清除', '照固定班']];
   app.innerHTML = `${pagesNav('hr/roster')}
-    <div class="toolbar ro-top">${hrMonthNav('roM', RO.month)}
-      <div class="tabs"><button data-jump="0" class="${RO.month === hrMonthNow() ? 'on' : ''}">本月</button><button data-jump="1" class="${RO.month === roMonthAdd(hrMonthNow(), 1) ? 'on' : ''}">下個月</button></div>
-      <button class="btn btn-ghost btn-sm" id="roShifts">⚙ 班別選項</button></div>
-    <div class="card ro-brush"><div class="small muted" style="margin-bottom:6px">① 先選要排的班　② 再點下面的格子（可以連續點；點同一種會取消）</div>
-      <div class="chips">${brushes.map(([k, l, c]) => `<button type="button" class="ro-b${RO.brush === k ? ' on' : ''}${k === '特休' ? ' lvb' : ''}" data-b="${esc(k)}" ${c ? `style="--bc:${c}"` : ''}>${l}</button>`).join('')}</div>
-      ${r.shifts.length ? '' : '<p class="small muted" style="margin:8px 0 0">還沒有班別選項（例：早班、晚班），按右上「⚙ 班別選項」新增；沒設定也可以只排「休」「特休」。</p>'}</div>
-    ${r.staff.length ? `<div class="rs-wrap"><table class="rs-t ro-t"><thead><tr><th class="rs-n">員工</th><th>特休剩</th>${dates.map(d => `<th class="${d === today ? 'today' : ''}${HRC.weekday(d) % 6 === 0 ? ' we' : ''}">${Number(d.slice(8))}<br><span>${HRC.WEEK[HRC.weekday(d)]}</span></th>`).join('')}<th>上班</th></tr></thead>
-      <tbody>${r.staff.map(roRow).join('')}</tbody></table></div>
-      <p class="small muted" style="margin:8px 4px">淡色＝還沒排，照員工的固定班；有黃框＝這次改過還沒存。排「特休」會直接扣特休，臨時改回上班或休假，存檔後特休自動加回。員工自己申請且已核准的特休不會重複扣。</p>`
+    <div class="ro-head"><h2>${y} 年 ${mo} 月班表</h2>
+      <div class="ro-nav">${hrMonthNav('roM', RO.month)}
+        <div class="tabs"><button data-jump="0" class="${RO.month === hrMonthNow() ? 'on' : ''}">本月</button><button data-jump="1" class="${RO.month === roMonthAdd(hrMonthNow(), 1) ? 'on' : ''}">下個月</button></div>
+        <button class="btn btn-ghost btn-sm" id="roShifts">⚙ 班別選項</button></div></div>
+    <div class="card ro-tools">
+      <div class="ro-step"><i>1</i>選擇班別</div>
+      <div class="ro-brushes">${brushes.map(([k, l, sub]) => { const [bg, fg] = k ? roStyle(k) : ['#fff', '#1d1d1f']; return `<button type="button" class="ro-b${RO.brush === k ? ' on' : ''}" data-b="${esc(k)}" style="--bg:${bg};--fg:${fg}">${esc(l)}<small>${esc(sub)}</small></button>`; }).join('')}</div>
+      ${r.shifts.length ? '' : '<p class="ro-tip">還沒有班別選項（例：早班、晚班）。按右上「⚙ 班別選項」新增；沒設定也可以先排「休假」「特休」。</p>'}
+      <div class="ro-step"><i>2</i>點下面表格的格子排班<span>可以連續點；再點一次同樣的班會取消</span></div>
+      <div class="ro-legend"><span><em class="lg dflt">班</em>淡灰字＝還沒排，照固定班</span><span><em class="lg chg"></em>黃框＝改過還沒儲存</span><span><em class="lg" style="--bg:${RO_LV[0]};--fg:${RO_LV[1]}">特休</em>直接扣特休，改掉就加回</span></div>
+    </div>
+    ${r.staff.length ? `<div class="ro-wrap"><table class="ro-t"><thead><tr><th class="ro-n">員工</th>${dates.map(d => { const w = HRC.weekday(d); return `<th class="${d === today ? 'today' : ''}${w % 6 === 0 ? ' we' : ''}">${Number(d.slice(8))}<span>${HRC.WEEK[w]}</span></th>`; }).join('')}<th class="ro-sum">上班<span>天數</span></th></tr></thead>
+      <tbody>${r.staff.map(roRow).join('')}</tbody><tfoot>${roFootHTML()}</tfoot></table></div>`
       : '<div class="card empty">還沒有員工</div>'}
-    <div class="ro-foot"><button class="btn btn-ghost" id="roCopy">📋 複製上個月</button><span class="small" id="roState" style="flex:1"></span><button class="btn btn-dark" id="roSave">儲存班表</button></div>`;
+    <div class="ro-foot"><button class="btn btn-ghost" id="roCopy">📋 複製上個月</button><span id="roState" style="flex:1"></span><button class="btn btn-dark" id="roSave">💾 儲存班表</button></div>`;
   hrBindMonth('roM', m => roGo(m));
   $$('[data-jump]').forEach(b => b.onclick = () => roGo(roMonthAdd(hrMonthNow(), Number(b.dataset.jump))));
   $$('[data-b]').forEach(b => b.onclick = () => { RO.brush = b.dataset.b; $$('[data-b]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -197,6 +217,7 @@ function roDraw() {
     if (next) m[d] = next; else delete m[d];
     RO.dirty = true;
     tr.outerHTML = roRow(x); // 只重畫這一列（特休剩餘即時更新）
+    $('.ro-t tfoot').innerHTML = roFootHTML();
     roState();
   };
   $('#roShifts').onclick = roShiftDialog;
@@ -207,7 +228,7 @@ function roDraw() {
 function roState() {
   const el = $('#roState'); if (!el) return;
   const neg = RO.data.staff.filter(x => { const l = roLeft(x); return l != null && l < 0; });
-  el.innerHTML = (RO.dirty ? '<b style="color:#b4400a">● 有修改還沒儲存</b>' : '<span class="muted">已儲存</span>') + (neg.length ? `　<span class="ro-neg">特休不夠：${neg.map(x => esc(x.name)).join('、')}</span>` : '');
+  el.innerHTML = (RO.dirty ? '<b style="color:#b4400a">● 有修改還沒儲存</b>' : '<span class="muted">✓ 已儲存</span>') + (neg.length ? `　<span class="ro-neg">特休不夠：${neg.map(x => esc(x.name)).join('、')}</span>` : '');
   $('#roSave').disabled = !RO.dirty;
 }
 async function roGo(m) {
