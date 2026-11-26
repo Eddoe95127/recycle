@@ -321,14 +321,16 @@ async function hrStaffPage() {
   hrStaffData = r;
   const list = r.staff.filter(x => x.enabled);
   app.innerHTML = `${pagesNav('hr/staff')}
-    <p class="small muted" style="margin:0 4px 10px">員工名單來自「員工帳號」；這裡設定到職日（自動算年資與特休）、班別${r.canPay ? '與薪資' : ''}。</p>
+    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0 4px;flex:1">這裡設定到職日（自動算年資與特休）、班別${r.canPay ? '與薪資' : ''}${P('manage_users') ? '；點員工可再修改帳號、密碼與權限' : ''}。</p>
+      ${P('manage_users') ? '<button class="btn btn-dark btn-sm" id="hrAddU">＋ 新增員工</button>' : ''}</div>
     ${list.length ? `<table class="table"><thead><tr><th>員工</th><th>到職日／年資</th><th class="hide-m">班別</th><th>特休</th>${r.canPay ? '<th class="hide-m">薪資</th>' : ''}</tr></thead><tbody>
       ${list.map(x => `<tr data-st="${esc(x.username)}"><td><b>${esc(x.name)}</b><div class="sub">${esc(x.role || '')}</div></td>
         <td>${x.hireDate ? `<span class="num">${esc(x.hireDate)}</span><div class="sub">${esc(x.seniority)}</div>` : '<span class="pill warn">未設定</span>'}</td>
         <td class="hide-m num">${esc(x.shiftStart)}–${esc(x.shiftEnd)}<div class="sub">週${(x.workdays || []).map(w => HRC.WEEK[w]).join('')}</div></td>
         <td>${x.annual ? `<b class="num">${x.annual.left}</b> / ${x.annual.total} 天<div class="sub">${esc(x.annual.label)}</div>` : '—'}</td>
-        ${r.canPay ? `<td class="hide-m num">${Number(x.salary) ? `${esc(x.payType)} ${money(x.salary)}` : '<span class="sub">未設定</span>'}</td>` : ''}</tr>`).join('')}</tbody></table>` : '<div class="card empty">還沒有員工帳號，請先到「員工帳號」新增</div>'}`;
+        ${r.canPay ? `<td class="hide-m num">${Number(x.salary) ? `${esc(x.payType)} ${money(x.salary)}` : '<span class="sub">未設定</span>'}</td>` : ''}</tr>`).join('')}</tbody></table>` : `<div class="card empty">還沒有員工${P('manage_users') ? '，按右上「＋ 新增員工」建立（帳號、密碼、權限、到職與班別一次設定）' : '，請管理者新增員工帳號'}</div>`}`;
   $$('[data-st]').forEach(tr => tr.onclick = () => hrStaffDrawer(list.find(x => x.username === tr.dataset.st)));
+  if ($('#hrAddU')) $('#hrAddU').onclick = () => userDrawer(null, hrStaffPage);
 }
 function hrStaffDrawer(x) {
   const pay = hrStaffData.canPay, d = $('#drawer');
@@ -354,8 +356,13 @@ function hrStaffDrawer(x) {
         <label class="field"><span>勞退自提（%，0–6）</span><input class="input num" id="sPp" inputmode="decimal" value="${esc(x.pensionPct || '')}" style="max-width:120px"></label>
         <p class="small muted" style="margin:0">勞健保自付額請依投保級距表填寫；月薪換算時薪＝月薪 ÷ 240，用於加班費與請假扣薪。</p></div>` : ''}
       <div class="card"><label class="field" style="margin:0"><span>備註</span><textarea class="input" id="sNote" rows="2">${esc(x.note || '')}</textarea></label></div>
-    </div><div class="d-foot"><span class="err" id="sErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="sSave">儲存</button></div>`;
+    </div><div class="d-foot">${P('manage_users') ? '<button type="button" class="btn btn-ghost" id="sAcct">🔑 帳號與權限</button>' : ''}<span class="err" id="sErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="sSave">儲存</button></div>`;
     $('.d-close', d).onclick = closeDrawer;
+    if ($('#sAcct', d)) $('#sAcct', d).onclick = async e => { // 直接改這位員工的帳號、密碼、權限
+      const btn = e.currentTarget; btn.disabled = true;
+      try { const u = (await api('adminUsers')).users.find(y => y.username === x.username); if (!u) throw new Error('找不到這個帳號'); userDrawer(u, hrStaffPage); }
+      catch (y) { if (y.auth) return start(); $('#sErr', d).textContent = y.message; btn.disabled = false; }
+    };
     if (pay) {
       $$('input[name=sPt]', d).forEach(r => r.onchange = () => { $('#sSalL', d).textContent = r.value === '時薪' ? '時薪（NT$）' : '月薪（NT$）'; });
       $$('[data-an]', d).forEach(el => el.oninput = () => { allow[+el.dataset.an].name = el.value; });

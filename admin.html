@@ -411,7 +411,7 @@
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261123b"></script>
-<script src="hr.js?v=20261123e"></script>
+<script src="hr.js?v=20261126a"></script>
 <script src="repair.js?v=20261125b"></script>
 <script>
 const app = $('#app');
@@ -536,8 +536,8 @@ function pagesNav(cur) {
     ['fix', '🔧 維修作業', [(P('repair') || P('view_cost')) && ['repair', '維修單／保固查詢'], P('repair') && ['repair/new', '＋ 新增維修單']]],
     ['data', '📊 庫存與報表', [canStoreView() && ['stock', '庫存'], !P('edit_prices') && P('edit_stock') && ['prices', '建議售價表'], P('view_cost') && ['report', '報表']]],
     ['hr', '👥 人資', [['hr/clock', '打卡'], ['hr/me', '我的出勤'], P('hr_manage') && ['hr/approve', '審核'], P('hr_manage') && ['hr/attendance', '出勤總表'],
-      P('hr_manage') && ['hr/staff', '員工資料'], P('payroll') && ['hr/payroll', '薪資'], P('hr_manage') && ['hr/settings', '打卡設定']]],
-    ['sys', '⚙️ 系統設定', [P('manage_users') && ['users', '員工帳號'], canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
+      P('hr_manage') && ['hr/staff', '員工資料'], P('manage_users') && ['users', '帳號與權限'], P('payroll') && ['hr/payroll', '薪資'], P('hr_manage') && ['hr/settings', '打卡設定']]],
+    ['sys', '⚙️ 系統設定', [canAudit() && ['audit', '操作紀錄'], ['account', '我的帳號']]],
   ].map(([k, l, subs]) => [k, l, subs.filter(Boolean)]).filter(g => g[2].length);
   const curGroup = groups.find(g => g[2].some(([k]) => k === cur)) || groups[0];
   return `<nav class="nav-groups">${groups.map(([k, l, subs]) => `<a href="#${subs[0][0]}" class="${k === curGroup[0] ? 'on' : ''}">${l}</a>`).join('')}
@@ -654,7 +654,7 @@ async function usersPage() {
   try { users = (await api('adminUsers')).users; } catch (e) { if (e.auth) return start(); app.innerHTML = pagesNav('users') + `<div class="card empty">${esc(e.message)}</div>`; return; }
   const st = u => !u.enabled ? '<span class="pill off">停用</span>' : u.mustChange ? '<span class="pill warn">待改密碼</span>' : '<span class="pill">啟用</span>';
   app.innerHTML = `${pagesNav('users')}
-    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0;flex:1">老闆（用 LINE 登入）不在列表中，永遠擁有全部權限。</p>
+    <div class="toolbar" style="justify-content:space-between;align-items:center"><p class="small muted" style="margin:0;flex:1">老闆（用 LINE 登入）不在列表中，永遠擁有全部權限。新增員工時可一併設定到職日、班別${P('payroll') ? '與薪資' : ''}。</p>
       <button class="btn btn-dark btn-sm" id="addU">＋ 新增員工</button></div>
     ${users.length ? `<table class="table"><thead><tr><th>帳號</th><th>名稱／角色</th><th class="hide-m">權限</th><th>狀態</th><th class="hide-m">最後登入</th></tr></thead><tbody>
       ${users.map(u => `<tr data-u="${esc(u.username)}" class="${u.enabled ? '' : 'u-off'}">
@@ -668,8 +668,9 @@ async function usersPage() {
   $$('[data-u]').forEach(tr => tr.onclick = () => userDrawer(users.find(u => u.username === tr.dataset.u)));
 }
 const genPw = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; return Array.from(crypto.getRandomValues(new Uint32Array(10)), n => c[n % c.length]).join(''); };
-function userDrawer(u) {
-  const isNew = !u;
+function userDrawer(u, after) {
+  const isNew = !u, withHr = isNew && P('hr_manage'), withPay = withHr && P('payroll');
+  after = after || usersPage;
   const presets = me.rolePresets;
   u = u || { username: '', name: '', role: '檢測人員', perms: [...presets['檢測人員']], enabled: true };
   const d = $('#drawer');
@@ -692,11 +693,25 @@ function userDrawer(u) {
         <div class="perm-list">${Object.entries(me.permDefs).map(([k, l]) => `<label class="${k === 'manage_users' || k === 'edit_any' ? 'danger' : ''}"><input type="checkbox" name="perm" value="${k}" ${u.perms.includes(k) ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div>
         <p class="small muted" style="margin:10px 0 0">沒勾選的資料會顯示「無權限查看」。所有人都能看訂單列表、商品、狀態，並寫內部備註。</p>
       </div>
+      ${withHr ? `<div class="card"><h3>到職與班別</h3>
+        <label class="field"><span>到職日</span><input class="input" type="date" name="hireDate" value="${localDay()}" style="max-width:200px"></label>
+        <div class="field"><span>上班日</span><div class="chips">${HRC.WEEK.map((w, i) => `<label class="chip"><input type="checkbox" name="wd" value="${i}" ${i ? 'checked' : ''}><span>週${w}</span></label>`).join('')}</div></div>
+        <div class="grid2"><label class="field"><span>上班時間</span><input class="input" type="time" name="shiftStart" value="10:00"></label>
+          <label class="field"><span>下班時間</span><input class="input" type="time" name="shiftEnd" value="19:00"></label></div>
+        <label class="field"><span>休息（分鐘）</span><input class="input num" name="breakMin" inputmode="numeric" value="60" style="max-width:120px"></label>
+        <p class="small muted" style="margin:0">預設帶入「打卡設定」的班別；之後可在「人資 → 員工資料」修改，也能設定特休調整、勞健保等。</p></div>` : ''}
+      ${withPay ? `<div class="card"><h3>薪資</h3>
+        <div class="field"><span>計薪方式</span>${chips('payType', ['月薪', '時薪'], '月薪')}</div>
+        <label class="field"><span id="uSalL">月薪（NT$）</span><input class="input num" name="salary" inputmode="numeric" placeholder="可先留空，之後再設定" style="max-width:200px"></label></div>` : ''}
     </form></div>
     <div class="d-foot">${!isNew && !(me.via === 'Staff' && me.userId === u.username) ? '<button type="button" class="btn btn-ghost" id="uDel" style="color:var(--red, #e5484d)">刪除帳號</button>' : ''}<span class="err" id="uErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="uSave">${isNew ? '建立帳號' : '儲存'}</button></div>`;
   d.classList.add('show'); $('#scrim').classList.add('show');
   const f = $('#uForm');
   $('.d-close', d).onclick = closeDrawer;
+  if (withHr) api('hrSettings').then(r => { const s = r.settings || {}; // 用打卡設定的預設班別
+    if (s.shiftStart) f.elements.shiftStart.value = s.shiftStart; if (s.shiftEnd) f.elements.shiftEnd.value = s.shiftEnd; if (s.breakMin != null) f.elements.breakMin.value = s.breakMin;
+    if (Array.isArray(s.workdays)) $$('input[name=wd]', f).forEach(c => { c.checked = s.workdays.map(Number).includes(+c.value); }); }).catch(() => {});
+  if (withPay) $$('input[name=payType]', f).forEach(r => r.onchange = () => { $('#uSalL', f).textContent = r.value === '時薪' ? '時薪（NT$）' : '月薪（NT$）'; });
   $('#gen').onclick = () => { f.elements.password.value = genPw(); };
   const checks = () => $$('input[name=perm]', f);
   $$('input[name=role]', f).forEach(r => r.onchange = () => { if (presets[r.value]) checks().forEach(c => { c.checked = presets[r.value].includes(c.value); }); });
@@ -709,20 +724,29 @@ function userDrawer(u) {
     const reason = await askReason(`確定要刪除 ${u.name}（${u.username}）的帳號嗎？\n刪除後這個帳號立刻不能登入，也不會再出現在員工列表；過去的打卡、請假、薪資單與經手紀錄會保留。\n\n只是暫時不用的話，建議改成取消勾選「啟用帳號」就好。`, '刪除帳號');
     if (!reason) return;
     const b = $('#uDel'); b.disabled = true; $('#uErr').textContent = '';
-    try { await api('adminDeleteUser', { username: u.username, reason }); closeDrawer(); toast('已刪除帳號'); usersPage(); }
+    try { await api('adminDeleteUser', { username: u.username, reason }); closeDrawer(); toast('已刪除帳號'); after(); }
     catch (e) { if (e.auth) return start(); $('#uErr').textContent = e.message; b.disabled = false; }
   };
   $('#uSave').onclick = async () => {
     const v = { isNew, username: f.elements.username.value.trim().toLowerCase(), name: f.elements.name.value.trim(), role: f.querySelector('input[name=role]:checked').value,
       perms: checks().filter(x => x.checked).map(x => x.value), enabled: f.elements.enabled.checked, password: f.elements.password.value.trim() };
     if (v.perms.includes('manage_users') && !(u.perms || []).includes('manage_users') && !(await ask(`「管理員工帳號與權限」可以新增帳號、修改所有人的權限。\n確定要給 ${v.name || v.username} 嗎？`, '確定給'))) return;
+    let hr = null;
+    if (withHr) {
+      const e = f.elements;
+      hr = { username: v.username, hireDate: e.hireDate.value, workdays: $$('input[name=wd]:checked', f).map(c => Number(c.value)), shiftStart: e.shiftStart.value, shiftEnd: e.shiftEnd.value, breakMin: e.breakMin.value };
+      if (!hr.workdays.length) { $('#uErr').textContent = '請至少勾選一天上班日'; return; }
+      if (!hr.shiftStart || !hr.shiftEnd || hr.shiftEnd <= hr.shiftStart) { $('#uErr').textContent = '請填寫正確的上下班時間'; return; }
+      if (withPay && e.salary.value.trim()) Object.assign(hr, { payType: $('input[name=payType]:checked', f).value, salary: e.salary.value.trim() });
+    }
     const b = $('#uSave'); b.disabled = true; $('#uErr').textContent = '';
     try {
       await api('adminSaveUser', { user: v });
+      if (hr) { try { await api('hrStaffSave', { profile: hr }); } catch (x) { toast('帳號已建立，但到職與班別沒存到：' + x.message + '，請到「員工資料」補設定'); } }
       closeDrawer();
       if (v.password) await ask(`請把登入資料交給 ${v.name || v.username}：\n\n網址：${location.origin}${location.pathname}\n帳號：${v.username}\n密碼：${v.password}\n\n對方登入後要先改成自己的密碼。`, '好', '關閉');
       else toast('已儲存');
-      usersPage();
+      after();
     } catch (e) { if (e.auth) return start(); $('#uErr').textContent = e.message; b.disabled = false; }
   };
 }
