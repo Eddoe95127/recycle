@@ -742,6 +742,13 @@ async function mockApiInner(action, d) {
       Object.assign(u, { name: v.name || username, role: v.role || '自訂', perms: (v.perms || []).filter(p => MOCK_PERMS[p]), enabled: v.enabled !== false });
       const { pw, ...pub } = u; return { ok: true, user: pub };
     }
+    case 'adminDeleteUser': {
+      const s = need('manage_users'), i = mockUsers.findIndex(x => x.username === d.username);
+      if (!d.reason) throw new Error('請填寫刪除原因');
+      if (s.username === d.username) throw new Error('不能刪除自己的帳號');
+      if (i < 0) throw new Error('找不到這個帳號（可能已被刪除）');
+      const [{ pw, ...pub }] = mockUsers.splice(i, 1); return { ok: true, user: pub };
+    }
     case 'adminList': need(); return { ok: true, orders: mockDB.filter(o => !o.deletedAt).reverse().map(adm), statuses: STATUS_LIST };
     case 'orderEdit': {
       const s = need('edit_order'), o = mockDB.find(x => x.id === d.id && !x.deletedAt), f = d.fields || {};

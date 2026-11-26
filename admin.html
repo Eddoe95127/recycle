@@ -406,7 +406,7 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261126c"></script>
+<script src="shared.js?v=20261126d"></script>
 <script src="store.js?v=20261126c"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
@@ -693,7 +693,7 @@ function userDrawer(u) {
         <p class="small muted" style="margin:10px 0 0">沒勾選的資料會顯示「無權限查看」。所有人都能看訂單列表、商品、狀態，並寫內部備註。</p>
       </div>
     </form></div>
-    <div class="d-foot"><span class="err" id="uErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="uSave">${isNew ? '建立帳號' : '儲存'}</button></div>`;
+    <div class="d-foot">${!isNew && !(me.via === 'Staff' && me.userId === u.username) ? '<button type="button" class="btn btn-ghost" id="uDel" style="color:var(--red, #e5484d)">刪除帳號</button>' : ''}<span class="err" id="uErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="uSave">${isNew ? '建立帳號' : '儲存'}</button></div>`;
   d.classList.add('show'); $('#scrim').classList.add('show');
   const f = $('#uForm');
   $('.d-close', d).onclick = closeDrawer;
@@ -705,6 +705,13 @@ function userDrawer(u) {
     const hit = Object.keys(presets).find(r => [...presets[r]].sort().join() === sel) || '自訂';
     f.querySelector(`input[name=role][value="${hit}"]`).checked = true;
   });
+  if ($('#uDel')) $('#uDel').onclick = async () => {
+    const reason = await askReason(`確定要刪除 ${u.name}（${u.username}）的帳號嗎？\n刪除後這個帳號立刻不能登入，也不會再出現在員工列表；過去的打卡、請假、薪資單與經手紀錄會保留。\n\n只是暫時不用的話，建議改成取消勾選「啟用帳號」就好。`, '刪除帳號');
+    if (!reason) return;
+    const b = $('#uDel'); b.disabled = true; $('#uErr').textContent = '';
+    try { await api('adminDeleteUser', { username: u.username, reason }); closeDrawer(); toast('已刪除帳號'); usersPage(); }
+    catch (e) { if (e.auth) return start(); $('#uErr').textContent = e.message; b.disabled = false; }
+  };
   $('#uSave').onclick = async () => {
     const v = { isNew, username: f.elements.username.value.trim().toLowerCase(), name: f.elements.name.value.trim(), role: f.querySelector('input[name=role]:checked').value,
       perms: checks().filter(x => x.checked).map(x => x.value), enabled: f.elements.enabled.checked, password: f.elements.password.value.trim() };
