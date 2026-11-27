@@ -697,7 +697,7 @@ async function mockApiInner(action, d) {
   const diffOf = (o, n, labels, secret = {}, cost = {}) => Object.keys(labels).filter(k => n[k] !== undefined && String(o[k] ?? '') !== String(n[k] ?? ''))
     .map(k => secret[k] ? { f: labels[k], a: '', b: '', s: 1 } : { f: labels[k], a: String(o[k] ?? ''), b: String(n[k] ?? ''), c: cost[k] ? 1 : 0 });
   const rpOut = (o, s) => { const a = JSON.parse(JSON.stringify(o)); a.masked = {}; if (!s.perms.includes('view_cost')) { a.masked.cost = true; a.partsCost = null; a.parts.forEach(p => { p.cost = null; }); } a.edits = auditOf('維修單', o.id, s); return a; };
-  const stOut = (r, s) => ({ ...r, suggestMode: r.suggestMode || (r.suggestCash ? 'auto' : ''), tableCash: (mkSaleFor(r) || {}).cash || 0, tableCard: (mkSaleFor(r) || {}).card || 0, cost: s.perms.includes('view_cost') ? r.cost : null, salePrice: s.perms.includes('view_cost') || s.perms.includes('edit_stock') ? r.salePrice : null });
+  const stOut = (r, s) => ({ ...r, prepCost: r.prepCost || 0, prepItems: r.prepItems || [], suggestMode: r.suggestMode || (r.suggestCash ? 'auto' : ''), tableCash: (mkSaleFor(r) || {}).cash || 0, tableCard: (mkSaleFor(r) || {}).card || 0, cost: s.perms.includes('view_cost') ? r.cost : null, salePrice: s.perms.includes('view_cost') || s.perms.includes('edit_stock') ? r.salePrice : null });
   const pub = o => ({ ...o, idNo: o.idNo ? o.idNo.slice(0, 3) + '****' + o.idNo.slice(-3) : '', idPhoto: undefined, hasBank: !!o.bankAccount, bank: o.bankAccount ? { ...o, bankAccount: '****' + o.bankAccount.slice(-4) } : null, history: [...o.history], report: o.report ? (o.report.sent || null) : null });
   switch (action) {
     case 'loginGoogle': return { ok: true, session: 'mock', user: { name: 'Google 用戶', email: 'ming@gmail.com', via: 'Google' } };
@@ -995,6 +995,11 @@ async function mockApiInner(action, d) {
     case 'hrClockAdd': case 'hrClockDelete': case 'hrStaff': case 'hrStaffSave': case 'hrSettings': case 'hrSettingsSave': case 'hrRoster': case 'hrRosterSave': case 'hrShiftsSave':
     case 'payrollList': case 'payrollCompute': case 'payrollSave': case 'payrollSaveAll': case 'payrollConfirm': return mockHrApi(action, d, need, me);
     case 'stockList': { const s = need(); if (!storeOk(s)) throw new Error('您沒有這項權限'); return { ok: true, items: mockStock.filter(r => r.status !== '已刪除').reverse().map(r => stOut(r, s)), cardFee: mockFee }; }
+    case 'stockPrep': {
+      const s = need('edit_stock'), r = mockStock.find(x => x.sku === d.sku), list = (d.items || []).map(x => ({ ...x, at: x.at || now(), by: x.by || s.name }));
+      r.prepItems = list; r.prepCost = list.reduce((t, x) => t + Number(x.amount || 0), 0); Object.assign(r, { updatedAt: now(), updatedBy: s.name });
+      return { ok: true, item: stOut(r, s) };
+    }
     case 'stockUpdate': {
       const s = need('edit_stock'), r = mockStock.find(x => x.sku === d.sku);
       if (d.expected && d.expected !== r.status) throw new Error('這件商品剛被其他人改過，請重新整理');

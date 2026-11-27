@@ -51,6 +51,8 @@ function storeRoute(page) {
 }
 /** 成本、毛利：只在完整後台顯示（門市工作台不顯示） */
 const showCost = () => P('view_cost') && !SHOP;
+/** 總成本＝收購成本＋整理費用（毛利、在庫成本都用這個） */
+const costOf = r => (Number(r.cost) || 0) + (Number(r.prepCost) || 0);
 /** 毛利：另外需要「查看毛利」權限 */
 const showProfit = () => showCost() && P('view_profit');
 const canStoreView = () => ['create_intake', 'edit_stock', 'edit_payment', 'view_cost'].some(P);
@@ -1124,9 +1126,9 @@ async function stockPage(refresh) {
     <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
       <div class="stat" style="--c:#0A84FF"><div class="n num">${active.length}</div><div class="l">在庫（含整理中）</div></div>
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${stockCache.filter(r => r.status === '整理中').length}</div><div class="l">整理中</div></div>
-      ${showCost() ? `<div class="stat" style="--c:#30D158"><div class="n num">${nt(active.reduce((t, r) => t + (r.cost || 0), 0))}</div><div class="l">在庫成本</div></div>` : ''}
+      ${showCost() ? `<div class="stat" style="--c:#30D158"><div class="n num">${nt(active.reduce((t, r) => t + costOf(r), 0))}</div><div class="l">在庫成本（含整理）</div></div>` : ''}
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${soldM.length}</div><div class="l">本月售出</div></div>
-      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - (r.cost || 0)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
+      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(soldM.reduce((t, r) => t + ((r.salePrice || 0) - costOf(r)), 0))}</div><div class="l">本月毛利</div></div>` : ''}
     </div>
     <div class="tabs st-view">${[['list', '📋 明細'], ['model', '📊 依型號總清單']].map(([k, l]) => `<button data-view="${k}" class="${stView === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="toolbar">
@@ -1166,7 +1168,7 @@ function drawModelSummary() {
     const x = g[k] = g[k] || { model: k, cat: r.category || '', a: 0, p: 0, s: 0, cost: 0, caps: {}, sg: [], noSg: 0 };
     if (r.status === '在庫') x.a++; else if (r.status === '整理中') x.p++; else x.s++;
     if (r.status !== '已售出') { if (r.suggestCash) x.sg.push(r.suggestCash); else x.noSg++; }
-    if (r.status !== '已售出') { x.cost += r.cost || 0; const c = r.capacity || '—'; x.caps[c] = (x.caps[c] || 0) + 1; }
+    if (r.status !== '已售出') { x.cost += costOf(r); const c = r.capacity || '—'; x.caps[c] = (x.caps[c] || 0) + 1; }
   });
   const rows = Object.values(g).sort((a, b) => byName(a.cat, b.cat) || byName(a.model, b.model));
   const cost = showCost();
@@ -1190,7 +1192,7 @@ function drawStock() {
     ${list.map(r => `<tr data-sku="${esc(r.sku)}"><td><b>${esc(r.model)}</b> <span class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</span><div class="sub">${esc(r.sku)}・入庫 ${esc(r.inAt.slice(0, 10))}</div></td>
       <td class="num sub hide-m">${esc(r.serial || '—')}</td>
       <td class="hide-m"><span class="pill ${r.source === '宅配' ? '' : 'off'}">${esc(r.source)}</span></td>
-      ${showCost() ? `<td class="num hide-m">${nt(r.cost)}</td>` : ''}
+      ${showCost() ? `<td class="num hide-m">${nt(costOf(r))}${r.prepCost ? `<div class="sub">含整理 ${nt(r.prepCost)}</div>` : ''}</td>` : ''}
       <td>${r.status === '已售出' ? '<span class="sub">—</span>' : suggestHTML(r)}</td>
       <td>${stockBadge(r)}${r.status === '已售出' ? `<div class="sub">${esc(r.saleDate)} ${esc(r.channel)}${r.salePrice != null && r.salePrice !== '' ? ' NT$' + money(r.salePrice) : ''}</div>` : ''}</td></tr>`).join('')}
     </tbody></table>` : '<div class="card empty">沒有符合的庫存</div>';
@@ -1204,9 +1206,10 @@ function stockDrawer(r) {
     <div class="d-body">
       <div class="card"><dl class="kv"><dt>庫存編號</dt><dd class="num">${esc(r.sku)}</dd><dt>來源</dt><dd>${esc(r.source)}・<a href="${r.source === '宅配' ? '#' : '#intake'}" data-ref="${esc(r.ref)}">${esc(r.ref)}</a></dd>
         <dt>規格</dt><dd>${esc([r.category, r.capacity, r.color].filter(Boolean).join('・'))}</dd><dt>IMEI／序號</dt><dd class="num">${esc(r.serial || '—')}</dd>
-        <dt>狀況</dt><dd>${esc(r.notes || '—')}</dd>${showCost() ? `<dt>收購成本</dt><dd class="num">${nt(r.cost)}</dd>` : ''}<dt>入庫</dt><dd>${esc(r.inAt)}</dd>
+        <dt>狀況</dt><dd>${esc(r.notes || '—')}</dd>${showCost() ? `<dt>收購成本</dt><dd class="num">${nt(r.cost)}</dd>${r.prepCost ? `<dt>整理費用</dt><dd class="num">${nt(r.prepCost)}</dd><dt>總成本</dt><dd class="num"><b>${nt(costOf(r))}</b></dd>` : ''}` : ''}<dt>入庫</dt><dd>${esc(r.inAt)}</dd>
         <dt>最後更新</dt><dd>${esc(r.updatedAt)}・${esc(r.updatedBy)}</dd></dl>
         ${r.photos.length ? `<div class="ph-grid" style="margin-top:10px">${r.photos.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="商品照片"></div>`).join('')}</div>` : ''}</div>
+      ${prepCard(r)}
       ${suggestCard(r)}
       ${can ? `<div class="card"><h3>庫存狀態</h3>
         <div class="chips">${['在庫', '整理中', '已售出'].map(s => `<label class="chip"><input type="radio" name="sst" value="${s}" ${r.status === s ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div>
@@ -1224,6 +1227,7 @@ function stockDrawer(r) {
   $('.d-close', d).onclick = closeDrawer;
   loadPhotos(d);
   bindSuggest(d, r, it => { stockDrawer(it); if ($('#stTbl')) drawStock(); });
+  bindPrep(d, r);
   const ref = $('[data-ref]', d);
   ref.onclick = async e => {
     e.preventDefault();
@@ -1247,11 +1251,60 @@ function stockDrawer(r) {
     } catch (e) { if (e.auth) return start(); $('#sErr').textContent = e.message; $('#sSave').disabled = false; }
   };
 }
+/* ---------- 整理費用：收購後整理（換電池、換螢幕、整新…）的花費，算進成本 ---------- */
+const PREP_QUICK = ['換電池', '換螢幕', '換背蓋', '換鏡頭', '清潔整新', '保護貼／配件'];
+function prepCard(r) {
+  if (!(P('edit_stock') || showCost()) || r.prepCost == null) return '';
+  const list = r.prepItems || [];
+  return `<div class="card" id="prepCard"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🔧 整理費用</h3>${P('edit_stock') ? '<button type="button" class="btn btn-ghost btn-sm" id="prepEdit">✏️ 登記／修改</button>' : ''}</div>
+    ${list.length ? `<table class="rep-price" style="margin-top:8px">${list.map(x => `<tr><td>${esc(x.name)}${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}<div class="sub">${esc((x.at || '').slice(0, 10))}・${esc(x.by || '')}</div></td><td>${nt(x.amount)}</td></tr>`).join('')}
+      <tr class="sub"><td>整理費用合計</td><td>${nt(r.prepCost)}</td></tr></table>
+      ${showCost() ? `<p class="small" style="margin:8px 0 0">總成本 ${nt(r.cost)} ＋ ${nt(r.prepCost)} ＝ <b>${nt(costOf(r))}</b>${r.status === '已售出' && r.salePrice ? `・毛利 <b>${nt((r.salePrice || 0) - costOf(r))}</b>` : ''}</p>` : ''}`
+      : '<p class="small muted" style="margin:8px 0 0">還沒有整理費用。換電池、換螢幕、整新等花費登記在這裡，會算進成本，毛利才正確。</p>'}</div>`;
+}
+function bindPrep(d, r) {
+  const b = $('#prepEdit', d); if (!b) return;
+  b.onclick = () => {
+    const items = (r.prepItems || []).map(x => ({ ...x }));
+    const box = $('#prepCard', d);
+    const draw = () => {
+      const total = items.reduce((t, x) => t + (numv(x.amount) || 0), 0);
+      box.innerHTML = `<h3>🔧 整理費用</h3>
+        <div class="chips" style="margin-bottom:10px">${PREP_QUICK.map(q => `<button type="button" class="chip-btn" data-q="${esc(q)}">＋ ${esc(q)}</button>`).join('')}</div>
+        ${items.map((x, i) => `<div class="rp-item" style="grid-template-columns:1fr 110px 30px"><input class="input" data-pn="${i}" value="${esc(x.name)}" placeholder="項目，例：換電池"><input class="input num" data-pa="${i}" inputmode="numeric" value="${esc(x.amount || '')}" placeholder="金額"><button type="button" class="ph-del static" data-pd="${i}" aria-label="刪除">✕</button>
+          <input class="input" data-pnote="${i}" value="${esc(x.note || '')}" placeholder="備註（選填），例：副廠電池、外包店家" style="grid-column:1 / -1;font-size:14px;padding:8px 12px"></div>`).join('') || '<p class="small muted">按上面的項目，或「＋ 自訂項目」新增</p>'}
+        <button type="button" class="link" id="prepAdd">＋ 自訂項目</button>
+        <p style="margin:10px 0 0">整理費用合計：<b class="num">${nt(total)}</b>${showCost() ? `　總成本：<b class="num">${nt((Number(r.cost) || 0) + total)}</b>` : ''}</p>
+        <p class="err" id="prepErr" style="margin:6px 0 0"></p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" id="prepCancel">取消</button><button type="button" class="btn btn-dark btn-sm" id="prepSave">儲存整理費用</button></div>`;
+      const keep = () => $$('[data-pn]', box).forEach(el => { const i = +el.dataset.pn; items[i].name = el.value; items[i].amount = $(`[data-pa="${i}"]`, box).value; items[i].note = $(`[data-pnote="${i}"]`, box).value; });
+      const redraw = (focusLast) => { const y = $('.d-body', d).scrollTop; draw(); $('.d-body', d).scrollTop = y; if (focusLast) { const el = $$('[data-pa]', box).pop(); if (el) el.focus({ preventScroll: true }); } };
+      $$('[data-q]', box).forEach(q => q.onclick = () => { keep(); items.push({ name: q.dataset.q, amount: '' }); redraw(true); });
+      $('#prepAdd', box).onclick = () => { keep(); items.push({ name: '', amount: '' }); redraw(); const el = $$('[data-pn]', box).pop(); if (el) el.focus({ preventScroll: true }); };
+      $$('[data-pd]', box).forEach(x => x.onclick = () => { keep(); items.splice(+x.dataset.pd, 1); redraw(); });
+      $$('[data-pa]', box).forEach(el => el.oninput = () => { keep(); const t = items.reduce((s2, x) => s2 + (numv(x.amount) || 0), 0); const p = $('p b.num', box); if (p) p.textContent = nt(t); });
+      $('#prepCancel', box).onclick = () => { box.outerHTML = prepCard(r); bindPrep(d, r); };
+      $('#prepSave', box).onclick = async e => {
+        keep();
+        const list = items.filter(x => x.name || x.amount).map(x => ({ ...x, amount: numv(x.amount) }));
+        if (list.some(x => !x.name)) return ($('#prepErr', box).textContent = '請填寫項目名稱');
+        if (list.some(x => !(x.amount > 0))) return ($('#prepErr', box).textContent = '請填寫每一項的金額');
+        const btn = e.currentTarget; btn.disabled = true;
+        try {
+          const res = await api('stockPrep', { sku: r.sku, items: list });
+          stockCache[stockCache.findIndex(x => x.sku === r.sku)] = res.item;
+          toast('已儲存整理費用'); stockDrawer(res.item); if ($('#stTbl')) drawStock();
+        } catch (x) { if (x.auth) return start(); $('#prepErr', box).textContent = x.message; btn.disabled = false; }
+      };
+    };
+    draw();
+  };
+}
 function exportCsv() {
   const cell = v => { const s = String(v ?? ''); return '"' + (/^[=+\-@]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"'; };
   const cost = showCost();
-  const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本'] : []), '建議售價現金', '建議售價刷卡', '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
-  const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost] : []), r.suggestCash || '', r.suggestCard || '', r.status, r.saleDate, r.channel, r.salePrice ?? '']);
+  const head = ['庫存編號', '來源', '來源單號', '入庫時間', '類別', '品名型號', '容量', '顏色', 'IMEI序號', '狀況', ...(cost ? ['收購成本', '整理費用', '總成本'] : []), '建議售價現金', '建議售價刷卡', '庫存狀態', '銷售日期', '銷售管道', '銷售價格'];
+  const rows = stockVisible().map(r => [r.sku, r.source, r.ref, r.inAt, r.category, r.model, r.capacity, r.color, r.serial, r.notes, ...(cost ? [r.cost, r.prepCost || 0, costOf(r)] : []), r.suggestCash || '', r.suggestCard || '', r.status, r.saleDate, r.channel, r.salePrice ?? '']);
   const blob = new Blob(['﻿' + [head, ...rows].map(x => x.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `庫存盤點-${localDay()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -1341,7 +1394,7 @@ function drawRpt() {
       <div class="stat" style="--c:#30D158"><div class="n num">${nt(sum(buys, r => r.cost))}</div><div class="l">收購金額</div></div>
       <div class="stat" style="--c:#1d1d1f"><div class="n num">${sales.length}</div><div class="l">售出件數</div></div>
       <div class="stat" style="--c:#BF5AF2"><div class="n num">${nt(sum(sales, r => r.salePrice))}</div><div class="l">銷售金額</div></div>
-      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</div><div class="l">銷售毛利</div></div>` : ''}
+      ${showProfit() ? `<div class="stat" style="--c:#FF9F0A"><div class="n num">${nt(sum(sales, r => (r.salePrice || 0) - costOf(r)))}</div><div class="l">銷售毛利</div></div>` : ''}
       <div class="stat" style="--c:#64D2FF"><div class="n num">${nt(sum(fixes, o => o.fee))}</div><div class="l">維修收入（${fixes.length} 件）</div></div>
       ${showProfit() ? `<div class="stat" style="--c:#FF375F"><div class="n num">${nt(sum(fixes, fixProfit))}</div><div class="l">維修毛利</div></div>` : ''}
     </div><p class="small muted" style="margin:-6px 4px 10px">期間：${esc(range)}・收購以入庫時間計（宅配為付款入庫日），銷售以銷售日期計</p>`;
@@ -1354,7 +1407,7 @@ function drawRpt() {
       const b = buys.filter(r => dayOf(r.inAt) === d), t = tx.filter(x => dayOf(x.time) === d), s = sales.filter(r => dayOf(r.saleDate) === d), f = fixes.filter(o => dayOf(o.pickupAt) === d);
       return { d, tx: t.length, items: b.length, store: sum(b.filter(r => r.source === '門市'), r => r.cost), home: sum(b.filter(r => r.source !== '門市'), r => r.cost),
         cash: sum(t.filter(x => x.payment === '現金'), x => x.amount), transfer: sum(t.filter(x => x.payment !== '現金'), x => x.amount),
-        sold: s.length, rev: sum(s, r => r.salePrice), profit: sum(s, r => (r.salePrice || 0) - (r.cost || 0)),
+        sold: s.length, rev: sum(s, r => r.salePrice), profit: sum(s, r => (r.salePrice || 0) - costOf(r)),
         fix: f.length, fixRev: sum(f, o => o.fee), fixProfit: sum(f, fixProfit) };
     }).filter(r => n <= 62 || r.tx || r.sold || r.fix);
     const T = rows.reduce((a, r) => { Object.keys(r).forEach(k => { if (k !== 'd') a[k] = (a[k] || 0) + r[k]; }); return a; }, {});
@@ -1402,10 +1455,10 @@ function drawRpt() {
         buys.map(r => [r.inAt, r.sku, r.ref, r.source, r.category, r.model, r.capacity, r.color, r.serial, r.notes, r.cost, r.status])];
     } else {
       html += sales.length ? `<div class="rp-wrap"><table class="st-sum rp-tbl"><thead><tr><th>銷售日期</th><th>型號</th><th>規格</th><th>IMEI／序號</th><th>管道</th><th class="r">成本</th><th class="r">售價</th><th class="r">毛利</th></tr></thead><tbody>
-        ${sales.slice().reverse().map(r => { const p = (r.salePrice || 0) - (r.cost || 0); return `<tr data-sku="${esc(r.sku)}"><td class="num">${esc(r.saleDate)}</td><td><b>${esc(r.model)}</b><div class="sub">${esc(r.sku)}</div></td><td class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</td><td class="num sub">${esc(r.serial || '—')}</td><td>${esc(r.channel || '—')}</td><td class="r num">${money(r.cost)}</td><td class="r num">${money(r.salePrice)}</td><td class="r num" style="color:${p < 0 ? 'var(--red, #e5484d)' : 'inherit'}"><b>${money(p)}</b></td></tr>`; }).join('')}
-        <tr class="st-tot"><td colspan="5"><b>合計 ${sales.length} 件</b></td><td class="r num">${money(sum(sales, r => r.cost))}</td><td class="r num">${money(sum(sales, r => r.salePrice))}</td><td class="r num"><b>${money(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))}</b></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有銷售</div>';
-      csv = [`銷售明細_${rpFrom}_${rpTo}.csv`, ['銷售日期', '庫存編號', '型號', '容量', '顏色', 'IMEI序號', '銷售管道', '成本', '售價', '毛利', '來源', '來源單號'],
-        sales.map(r => [r.saleDate, r.sku, r.model, r.capacity, r.color, r.serial, r.channel, r.cost, r.salePrice, (r.salePrice || 0) - (r.cost || 0), r.source, r.ref])];
+        ${sales.slice().reverse().map(r => { const p = (r.salePrice || 0) - costOf(r); return `<tr data-sku="${esc(r.sku)}"><td class="num">${esc(r.saleDate)}</td><td><b>${esc(r.model)}</b><div class="sub">${esc(r.sku)}</div></td><td class="sub">${esc([r.capacity, r.color].filter(Boolean).join(' '))}</td><td class="num sub">${esc(r.serial || '—')}</td><td>${esc(r.channel || '—')}</td><td class="r num">${money(costOf(r))}</td><td class="r num">${money(r.salePrice)}</td><td class="r num" style="color:${p < 0 ? 'var(--red, #e5484d)' : 'inherit'}"><b>${money(p)}</b></td></tr>`; }).join('')}
+        <tr class="st-tot"><td colspan="5"><b>合計 ${sales.length} 件</b></td><td class="r num">${money(sum(sales, costOf))}</td><td class="r num">${money(sum(sales, r => r.salePrice))}</td><td class="r num"><b>${money(sum(sales, r => (r.salePrice || 0) - costOf(r)))}</b></td></tr></tbody></table></div>` : '<div class="card empty">這段期間沒有銷售</div>';
+      csv = [`銷售明細_${rpFrom}_${rpTo}.csv`, ['銷售日期', '庫存編號', '型號', '容量', '顏色', 'IMEI序號', '銷售管道', '收購成本', '整理費用', '總成本', '售價', '毛利', '來源', '來源單號'],
+        sales.map(r => [r.saleDate, r.sku, r.model, r.capacity, r.color, r.serial, r.channel, r.cost, r.prepCost || 0, costOf(r), r.salePrice, (r.salePrice || 0) - costOf(r), r.source, r.ref])];
     }
   }
   box.innerHTML = head + html;
@@ -1511,8 +1564,8 @@ function rpDocHTML(sel) {
   }
   if (sel.includes('sale')) {
     out += h2(`銷售明細（${sales.length} 件）`) + (sales.length ? table([['銷售日期'], ['型號'], ['IMEI／序號'], ['管道'], ['成本', 1], ['售價', 1], ['毛利', 1]],
-      sales.map(r => [esc(r.saleDate), esc([r.model, r.capacity, r.color].filter(Boolean).join(' ')), esc(r.serial || '—'), esc(r.channel || '—'), money(r.cost), money(r.salePrice), money((r.salePrice || 0) - (r.cost || 0))]),
-      ['合計', `${sales.length} 件`, '', '', money(sum(sales, r => r.cost)), money(sum(sales, r => r.salePrice)), money(sum(sales, r => (r.salePrice || 0) - (r.cost || 0)))]) : '<p style="font-size:12px;color:#777">這段期間沒有銷售</p>');
+      sales.map(r => [esc(r.saleDate), esc([r.model, r.capacity, r.color].filter(Boolean).join(' ')), esc(r.serial || '—'), esc(r.channel || '—'), money(costOf(r)), money(r.salePrice), money((r.salePrice || 0) - costOf(r))]),
+      ['合計', `${sales.length} 件`, '', '', money(sum(sales, costOf)), money(sum(sales, r => r.salePrice)), money(sum(sales, r => (r.salePrice || 0) - costOf(r)))]) : '<p style="font-size:12px;color:#777">這段期間沒有銷售</p>');
   }
   return out + '</div>';
 }
