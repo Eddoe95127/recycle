@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="iPhone收購">
 <link rel="stylesheet" href="style.css?v=20261127c">
-<link rel="stylesheet" href="apple.css?v=20261128a">
+<link rel="stylesheet" href="apple.css?v=20261128c">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   /* ---------- home ---------- */
@@ -301,7 +301,8 @@ function drawEstimate(box = app, book = false) {
           ${res.accOff ? `<p class="small muted" style="margin:6px 0 0">已扣缺少盒子／配件 NT$ ${money(res.accOff)}</p>` : ''}
           ${res.deducted ? `<p class="est-warn">⚠ 已依「${esc(res.issues.map(i => i.label).join('、'))}」預估扣款，故障程度不同價格會有差異，請以實際檢測為準。</p>` : ''}`}
       <p class="small muted" style="margin:10px 0 16px">${esc(rules.note)}</p>
-      <button class="btn btn-dark btn-block" id="esBook">${book ? '＋ 加入這項商品' : '直接預約收購 →'}</button>
+      ${book && !(draft && draft.items.length) ? '<p class="small" style="margin:0;color:var(--accent);font-weight:600">✓ 按下方「下一步」就會帶入這項商品</p>' // 第一項商品：直接帶入，不用再按「加入這項商品」
+        : `<button class="btn btn-dark btn-block" id="esBook">${book ? '＋ 加入這項商品' : '直接預約收購 →'}</button>`}
     </div>` : `<p class="small muted" style="text-align:center">${row ? '選完外觀與電池健康度就會顯示預估價' : book ? (estSel.model ? '請選擇規格' : '先選擇型號，會顯示預估收購價') : '找不到您的型號？可以直接預約，我們會檢測後報價'}</p>`;
   box.innerHTML = book ? `<div class="est-inline">${form}${result}</div>` : `<div class="a-est-head rise"><h1>你的裝置值多少？</h1><p>選擇型號與狀況，馬上知道預估收購價。</p></div>
     <div class="narrow" style="padding-top:8px">
@@ -311,6 +312,7 @@ function drawEstimate(box = app, book = false) {
     ${result}
     <p style="text-align:center;margin:14px 0 30px"><button class="link" onclick="go('book')">不估價，直接預約 →</button></p>
   </div>`;
+  if (book) estPending = res ? { res, isNew, detail } : null; // 預約表單：估好價還沒加入的商品，按「下一步」時自動帶入
   const redraw = () => drawEstimate(box, book);
   $('#esModel').onchange = e => { estSel.model = e.target.value; estSel.capacity = ''; redraw(); };
   ['category', 'cond', 'capacity', 'appearance', 'battery'].forEach(k => $$(`input[name=es_${k}]`).forEach(r => r.onchange = () => {
@@ -375,6 +377,7 @@ function estToBooking(res, isNew, detail) {
   else toast('已帶入商品，請補上 ' + (it.category === 'iPhone' ? 'IMEI 等' : '') + '必填資料');
   go('book');
 }
+let estPending = null;
 /** 預約表單裡選好的商品 */
 function estAddToDraft(res, isNew, detail) {
   syncItems();
@@ -622,9 +625,18 @@ function renderBook() {
   $('#prev') && ($('#prev').onclick = () => { syncAll(); draft.step--; saveDraft(draft); renderBook(); window.scrollTo(0, 0); });
   $('#next').onclick = async () => {
     syncAll();
+    let justAdded = false;
+    if (s === 0 && estPending && $('#estBox') && (!draft.items.length || draft.adding)) { // 估好價的商品直接帶入
+      justAdded = true;
+      draft.items.push(estItem(estPending.res, estPending.isNew, estPending.detail));
+      draft.adding = false; estPending = null;
+      Object.assign(estSel, { model: '', capacity: '', appearance: '', battery: '', issues: [], missing: [] });
+      saveDraft(draft);
+    }
     const msg = validateStep(s);
     if (msg) {
       if (s === 0) { saveDraft(draft); renderBook(); } // 重畫：缺的欄位一定會出現在畫面上
+      if (justAdded) { toast('已帶入商品，請補上 ' + msg.replace(/^商品 \d+：請填寫\s*/, '').replace(/（.*）$/, '')); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); return; }
       $('#err').textContent = msg; return;
     }
     if (s < 3) { draft.step++; saveDraft(draft); renderBook(); window.scrollTo(0, 0); return; }
