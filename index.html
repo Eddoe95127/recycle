@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="iPhone收購">
 <link rel="stylesheet" href="style.css?v=20261126b">
-<link rel="stylesheet" href="apple.css?v=1795772304">
+<link rel="stylesheet" href="apple.css?v=20261127a">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   /* ---------- home ---------- */
@@ -129,7 +129,7 @@
 </footer>
 
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127f"></script>
+<script src="shared.js?v=20261127g"></script>
 <script>
 const app = $('#app');
 
@@ -139,16 +139,21 @@ function route() {
   const [page, id] = h.split('/');
   $$('.nav-links button').forEach(b => b.classList.toggle('on', b.dataset.nav === page || (page === 'order' && b.dataset.nav === 'orders')));
   window.scrollTo(0, 0);
+  GUEST_TOKEN = null;
   if (page === 'estimate') return renderEstimate();
-  if (page === 'book') return needLogin('book') && renderBook();
-  if (page === 'orders') return needLogin('orders') && renderOrders();
-  if (page === 'order' && id) return needLogin('detail', id) && renderDetail(decodeURIComponent(id));
+  if (page === 'book') return renderBook();
+  if (page === 'orders') return renderOrders();
+  if (page === 'order' && id) return renderDetail(decodeURIComponent(id));
   renderHome();
 }
 const go = path => { location.hash = '#/' + path; };
 window.addEventListener('hashchange', route);
 $$('.nav-links button').forEach(b => b.onclick = () => go(b.dataset.nav));
 
+/* ---------- 免登入：這台裝置預約或查詢過的訂單憑證 ---------- */
+const otAll = () => { const o = store.get('orderTokens'); return o && typeof o === 'object' ? o : {}; };
+const otSet = (id, t) => { const o = otAll(); o[id] = t; store.set('orderTokens', o); };
+const otDel = id => { const o = otAll(); delete o[id]; store.set('orderTokens', o); };
 function needLogin(page, id) {
   if (isLoggedIn()) return true;
   mountLogin(app, {
@@ -182,7 +187,7 @@ function renderHome() {
     <h2>簡單、快速、透明。</h2>
     <p class="lead">從估價到收款，每一步都在網站上看得到。</p>
     <div class="a-stats">
-      <div class="a-stat"><div class="n">3<small>分鐘</small></div><p>線上填單<span>用 LINE 登入就能送出</span></p></div>
+      <div class="a-stat"><div class="n">3<small>分鐘</small></div><p>線上填單<span>不用登入，填完就送出</span></p></div>
       <div class="a-stat"><div class="n">0<small>元</small></div><p>寄送運費<span>黑貓到府收件，由我們負擔</span></p></div>
       <div class="a-stat"><div class="n">3<small>天</small></div><p>完成檢測報價<span>收到後 3 個工作天內</span></p></div>
       <div class="a-stat"><div class="n">2<small>天</small></div><p>同意後匯款<span>匯入您指定的帳戶</span></p></div>
@@ -193,7 +198,7 @@ function renderHome() {
     <h2>四個步驟，輕鬆完成。</h2>
     <p class="lead">在家就能完成，不用出門。</p>
     <div class="a-steps">
-      <div class="a-step"><div class="ic">📝</div><div class="k">步驟 1</div><h3>線上填單</h3><p>選擇商品、型號與狀況，用 LINE 登入送出預約。</p></div>
+      <div class="a-step"><div class="ic">📝</div><div class="k">步驟 1</div><h3>線上填單</h3><p>選擇商品、型號與狀況，填好資料直接送出，不用登入。</p></div>
       <div class="a-step"><div class="ic">🚚</div><div class="k">步驟 2</div><h3>黑貓到府收件</h3><p>1–3 個工作天內與您聯繫，包裝好交給司機即可。</p></div>
       <div class="a-step"><div class="ic">🔍</div><div class="k">步驟 3</div><h3>專業檢測報價</h3><p>收到後 3 個工作天內完成檢測，線上看報告與報價。</p></div>
       <div class="a-step"><div class="ic">💰</div><div class="k">步驟 4</div><h3>同意後匯款</h3><p>同意報價後 2 個工作天內匯入您的帳戶。</p></div>
@@ -621,9 +626,12 @@ function renderBook() {
     const btn = $('#next'); btn.disabled = true; btn.textContent = '送出中…';
     try {
       const c = draft.contact;
-      const { order } = await api('createOrder', { order: {
+      const payload = { order: {
         ...c, phone: c.phone.replace(/[\s-]/g, ''), idNo: undefined, slot: c.slot || '不指定',
-        items: draft.items.map(({ est: _e, _colorOther: _c, ...it }) => it), bank: draft.bank.bankAccount ? draft.bank : null, agree: true } });
+        items: draft.items.map(({ est: _e, _colorOther: _c, ...it }) => it), bank: draft.bank.bankAccount ? draft.bank : null, agree: true } };
+      let order;
+      if (isLoggedIn()) order = (await api('createOrder', payload)).order;
+      else { const r = await api('guestCreateOrder', payload); order = r.order; otSet(order.id, r.token); } // 不用登入：這台裝置記住這筆訂單
       store.set('draft', { step: 0, items: [], contact: draft.contact, bank: {} });
       renderSuccess(order);
     } catch (e) {
@@ -642,19 +650,40 @@ function renderSuccess(o) {
     <div class="note" style="text-align:left;margin-bottom:20px"><b>接下來</b><ul>
       <li>黑貓會在 1–3 個工作天內與您聯繫上門收件</li>
       <li>請先包裝好，並確認已登出 Apple ID、取出 SIM 卡</li>
-      <li>每一步進度都會寄信通知，也可隨時回來查詢</li></ul></div>
+      <li>每一步進度都會寄信通知，點信裡的連結就能看進度</li>
+      <li>換手機也能查：用 Email 收驗證碼，或輸入手機＋訂單編號</li></ul></div>
     <button class="btn btn-dark btn-block" onclick="go('order/${encodeURIComponent(o.id)}')">查看收購進度</button>
     <a class="btn btn-ghost btn-block" style="margin-top:10px" href="${esc(CFG.OA_URL)}">加入 LINE 好友，有問題直接問</a>
   </div></div>`;
 }
 
 /* ============================== 我的訂單 ============================== */
+const orderCards = orders => orders.map((o, n) => {
+      const first = o.items[0] || {};
+      return `<button class="order-card rise" style="animation-delay:${n * 40}ms" data-id="${esc(o.id)}">
+        <div class="top"><span class="t">${esc(itemTitle(first))}${o.items.length > 1 ? `<span class="muted small"> 等 ${o.items.length} 項</span>` : ''}</span>${badge(o.status)}</div>
+        <div class="meta"><span>${esc(o.id)}</span><span>更新 ${esc((o.updatedAt || '').slice(5))}</span></div>
+        <div class="mini-bar" style="--c:${statusColor(o.status)}"><i style="width:${progressPct(o.status)}%"></i></div>
+      </button>`;
+    }).join('');
+/** 這台裝置記住的訂單（免登入預約、查詢過的） */
+async function deviceOrders(skip) {
+  const ids = Object.keys(otAll()).filter(id => !(skip || []).includes(id));
+  const out = await Promise.all(ids.map(async id => {
+    GUEST_TOKEN = otAll()[id];
+    try { return (await api('getOrder', { id })).order; } catch (e) { if (e.auth || /找不到/.test(e.message)) otDel(id); return null; }
+    finally { GUEST_TOKEN = null; }
+  }));
+  return out.filter(Boolean);
+}
 async function renderOrders() {
+  if (!isLoggedIn()) return renderLookup();
   const u = auth.user || {};
   const who = u.via === 'LINE' || !u.via ? 'LINE 帳號' : (u.email || '此帳號');
   app.innerHTML = `<div class="narrow"><div class="page-head"><h1>收購進度</h1><p>${esc(who)} 預約的訂單　<button class="link" onclick="logout()">登出</button></p></div><div id="list">${spinner()}</div></div>`;
   try {
-    const { orders } = await api('listOrders');
+    const mine = (await api('listOrders')).orders;
+    const orders = mine.concat(await deviceOrders(mine.map(o => o.id)));
     const list = $('#list');
     if (!orders.length) { list.innerHTML = `<div class="card empty">目前還沒有收購訂單<br><br><button class="btn btn-dark" onclick="go('book')">立即預約收購</button></div>`; return; }
     list.innerHTML = orders.map((o, n) => {
@@ -667,6 +696,64 @@ async function renderOrders() {
     }).join('');
     $$('[data-id]', list).forEach(b => b.onclick = () => go('order/' + encodeURIComponent(b.dataset.id)));
   } catch (e) { if (e.auth) return route(); $('#list').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; }
+}
+/** 沒登入：用 Email 驗證碼、手機＋訂單編號，或 LINE 查詢 */
+async function renderLookup(tab) {
+  tab = tab || 'email';
+  app.innerHTML = `<div class="narrow"><div class="page-head"><h1>查詢收購進度</h1><p>不用登入，用 Email 或手機就能查</p></div>
+    <div id="devList"></div>
+    <div class="card rise">
+      <div class="seg">${[['email', '用 Email 查詢'], ['phone', '用手機查詢']].map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div id="lkBox"></div><div class="err" id="lkErr"></div>
+    </div>
+    <p class="small muted" style="text-align:center;margin:4px 0 30px">用 LINE 預約過的訂單？<button class="link" id="lkLine">用 LINE 登入查詢</button></p></div>`;
+  const err = m => { $('#lkErr').textContent = m || ''; };
+  $$('[data-tab]').forEach(b => b.onclick = () => renderLookup(b.dataset.tab));
+  $('#lkLine').onclick = () => MOCK ? (mockLoggedIn = true, renderOrders()) : login({ page: 'orders' });
+  const box = $('#lkBox');
+  if (tab === 'phone') {
+    box.innerHTML = `<p class="small muted" style="margin:0 0 14px">輸入預約時的手機號碼，和確認信裡的訂單編號（例：AR261127001）</p>
+      <label class="field"><span>訂單編號</span><input class="input" id="lkId" placeholder="AR261127001" autocapitalize="characters" spellcheck="false"></label>
+      <label class="field"><span>手機號碼</span><input class="input" id="lkPhone" type="tel" inputmode="tel" placeholder="0912345678"></label>
+      <button class="btn btn-dark btn-block" id="lkGo">查詢</button>`;
+    $('#lkGo').onclick = async e => {
+      const id = $('#lkId').value.trim().toUpperCase(), phone = $('#lkPhone').value.replace(/[\s-]/g, '');
+      if (!id || !/^09\d{8}$/.test(phone)) return err('請輸入訂單編號和正確的手機號碼');
+      const b = e.currentTarget; b.disabled = true; err();
+      try { const r = await api('orderLookup', { id, phone }); otSet(r.order.id, r.token); go('order/' + encodeURIComponent(r.order.id)); }
+      catch (x) { err(x.message); b.disabled = false; }
+    };
+  } else {
+    box.innerHTML = `<p class="small muted" style="margin:0 0 14px">輸入預約時填的 Email，我們會寄 6 位數驗證碼給您，就能看到這個 Email 的所有訂單</p>
+      <div id="lkMailBox"><input class="input" id="lkMail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+      <button class="btn btn-dark btn-block" id="lkSend" style="margin-top:10px">寄送驗證碼</button></div>`;
+    const done = r => { if (MOCK) mockLoggedIn = true; else auth.save(r); renderOrders(); };
+    const askCode = email => {
+      $('#lkMailBox').innerHTML = `<p class="small muted" style="margin:0 0 10px">驗證碼已寄到 <b style="color:var(--ink)">${esc(email)}</b><br>10 分鐘內有效，沒收到請看垃圾郵件匣</p>
+        <input class="input" id="lkCode" inputmode="numeric" maxlength="6" placeholder="6 位數驗證碼" autocomplete="one-time-code" style="letter-spacing:.35em;text-align:center;font-size:22px;font-weight:700">
+        <button class="btn btn-dark btn-block" id="lkVerify" style="margin-top:10px">查詢我的訂單</button>`;
+      $('#lkCode').focus();
+      const verify = async () => {
+        const code = $('#lkCode').value.replace(/\D/g, '');
+        if (code.length !== 6) return err('請輸入 6 位數驗證碼');
+        const b = $('#lkVerify'); b.disabled = true; err();
+        try { done(await api('emailVerify', { email, code })); } catch (x) { err(x.message); b.disabled = false; }
+      };
+      $('#lkVerify').onclick = verify;
+      $('#lkCode').oninput = e => { if (e.target.value.replace(/\D/g, '').length === 6) verify(); };
+    };
+    const send = async () => {
+      const email = $('#lkMail').value.trim().toLowerCase();
+      if (!EMAIL_RE.test(email)) return err('請輸入正確的 Email');
+      const b = $('#lkSend'); b.disabled = true; b.textContent = '寄送中…'; err();
+      try { await api('emailStart', { email }); askCode(email); } catch (x) { err(x.message); b.disabled = false; b.textContent = '寄送驗證碼'; }
+    };
+    $('#lkSend').onclick = send;
+    $('#lkMail').onkeydown = e => { if (e.key === 'Enter') send(); };
+  }
+  // 這台裝置預約過的訂單：直接列出
+  const dev = await deviceOrders();
+  if (dev.length && $('#devList')) { $('#devList').innerHTML = `<p class="small muted" style="margin:0 4px 8px">這台裝置預約或查詢過的訂單</p>${orderCards(dev)}`; $$('[data-id]', $('#devList')).forEach(b => b.onclick = () => go('order/' + encodeURIComponent(b.dataset.id))); }
 }
 
 /* ============================== 訂單明細 ============================== */
@@ -686,8 +773,15 @@ const STATUS_TEXT = {
 
 async function renderDetail(id) {
   app.innerHTML = `<div class="narrow">${spinner()}</div>`;
-  try { const { order } = await api('getOrder', { id }); drawDetail(order); }
-  catch (e) { if (e.auth) return route(); app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">${esc(e.message)}<br><br><button class="link" onclick="go('orders')">回到我的訂單</button></div></div>`; }
+  const tok = otAll()[id];
+  if (!isLoggedIn() && !tok) { toast('請先用 Email 或手機查詢'); return go('orders'); }
+  try {
+    let order;
+    if (isLoggedIn()) { try { order = (await api('getOrder', { id })).order; } catch (e) { if (!tok) throw e; } }
+    if (!order) { GUEST_TOKEN = tok; order = (await api('getOrder', { id })).order; } // 用這筆訂單的憑證（後續操作也用它）
+    drawDetail(order);
+  }
+  catch (e) { if (GUEST_TOKEN && (e.auth || /找不到/.test(e.message))) otDel(id); GUEST_TOKEN = null; if (e.auth && isLoggedIn()) return route(); app.innerHTML = `<div class="narrow"><div class="card empty" style="margin-top:28px">${esc(e.message)}<br><br><button class="link" onclick="go('orders')">回到查詢</button></div></div>`; }
 }
 
 function drawDetail(o) {
@@ -818,6 +912,7 @@ function drawDetail(o) {
   // LIFF / 通知信連結使用 ?page=…&id=…，轉成站內路由
   const q = new URLSearchParams(location.search);
   const page = q.get('page'), id = q.get('id');
+  if (q.get('ot') && id) otSet(id, q.get('ot')); // 通知信的連結：不用登入就能看這筆訂單
   if (page) {
     const hash = page === 'detail' && id ? 'order/' + encodeURIComponent(id) : page;
     history.replaceState(null, '', location.pathname + (MOCK ? '?mock=1' : '') + '#/' + hash);

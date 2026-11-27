@@ -133,3 +133,8 @@ main { background: var(--bg); }
   .a-sec { padding: 64px 0; } .a-sec .lead { margin-bottom: 32px; }
   .a-cta { gap: 20px; }
 }
+
+/* 查詢進度：Email／手機 分頁 */
+.seg { display: flex; background: #f0f0f3; border-radius: 12px; padding: 4px; margin: 0 0 20px; }
+.seg button { flex: 1; border: 0; background: none; border-radius: 9px; padding: 10px 8px; font-size: 15px; font-weight: 600; color: var(--muted); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); }

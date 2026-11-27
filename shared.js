@@ -462,12 +462,15 @@ function logout() {
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'lineStaffLogin', 'staffBindFinish', 'priceTable', 'clientLog'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'lineStaffLogin', 'staffBindFinish', 'guestCreateOrder', 'orderLookup', 'priceTable', 'clientLog'];
+/** 免登入的客人：正在看的那筆訂單的憑證（只能看這一筆） */
+let GUEST_TOKEN = null;
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };
   if (!NO_AUTH.includes(action)) {
-    if (auth.session) body.session = auth.session;
+    if (GUEST_TOKEN) body.session = GUEST_TOKEN;
+    else if (auth.session) body.session = auth.session;
     else if (liffReady && liff.isLoggedIn()) body.accessToken = liff.getAccessToken();
   }
   const res = await fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify(body) });
@@ -708,6 +711,8 @@ async function mockApiInner(action, d) {
         itemsText: d.order.items.map((it, i) => `${i + 1}. 【${it.category}】${itemSummary(it)}`).join('\n') };
       mockDB.push(o); return { ok: true, order: pub(o) };
     }
+    case 'guestCreateOrder': { const r = await mockApiInner('createOrder', d); const o = mockDB.find(x => x.id === r.order.id); o.lineId = ''; return { ...r, token: 'mock-' + o.id }; }
+    case 'orderLookup': { const o = mockDB.find(x => x.id === String(d.id || '').toUpperCase() && String(x.phone || '').replace(/[\s-]/g, '') === d.phone); if (!o) throw new Error('找不到訂單，請確認訂單編號和手機號碼'); return { ok: true, token: 'mock-' + o.id, order: pub(o) }; }
     case 'respondQuote': { const o = find(d.id); if (d.accept) { if (!d.idNo || !d.idPhoto) throw new Error('請填寫身分證字號並上傳照片'); const pid = 'id' + Date.now(); mockPhotos[pid] = d.idPhoto; o.idNo = d.idNo; o.idPhoto = pid; } if (d.bank) Object.assign(o, d.bank); o.replyAt = now(); setStatus(o, d.accept ? '客戶同意' : '客戶不同意'); return { ok: true, order: pub(o) }; }
     case 'cancelOrder': { const o = find(d.id); setStatus(o, '已取消'); return { ok: true, order: pub(o) }; }
     case 'staffLogin': {
