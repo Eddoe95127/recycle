@@ -490,7 +490,7 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127d"></script>
+<script src="shared.js?v=20261127e"></script>
 <script src="store.js?v=20261126d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
@@ -555,9 +555,21 @@ $('#reloadApp').onclick = async () => {
 })();
 window.addEventListener('hashchange', () => { if (me && me.isAdmin && !me.mustChange) route(); });
 
+let lineNotBound = '';
 async function start() {
   closeDrawer();
   if (!isLoggedIn()) return staffLoginPage();
+  if (!MOCK && liffReady && liff.isLoggedIn()) {
+    const ss = k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
+    if (ss('bindLine') && auth.session) { // 員工按了「綁定我的 LINE」，LINE 登入回來後完成綁定
+      try { sessionStorage.removeItem('bindLine'); } catch (e) {}
+      try { const r = await api('staffBindLine', { lineToken: liff.getAccessToken() }); toast('已綁定 LINE：' + r.lineName + '，之後可以直接用 LINE 登入'); meSave(null); location.hash = '#account'; }
+      catch (e) { toast(e.message); }
+    } else if (!auth.session && ss('lineOwner') !== '1') { // 用 LINE 登入：已綁定的員工換成員工帳號登入
+      try { const r = await api('lineStaffLogin', { lineToken: liff.getAccessToken() }); if (r.session) auth.save(r); else if (r.owner) { try { sessionStorage.setItem('lineOwner', '1'); } catch (e) {} } }
+      catch (e) { if (e.auth) return staffLoginPage(); lineNotBound = e.message; }
+    }
+  }
   const cached = meCached();
   if (cached) { // 先用上次的權限進畫面，背景確認；權限有變再重新整理畫面
     me = cached; showWho(); route(); prefetch();
@@ -635,7 +647,7 @@ function staffLoginPage(denied) {
   app.innerHTML = `<div class="card staff-login rise">
     <h2 class="card-title" style="font-size:22px">${SHOP ? '門市工作台登入' : '佛斯特ERP 登入'}</h2>
     <p class="muted" style="margin:6px 0 20px">請輸入帳號與密碼（員工帳號，或老闆自己設定的帳密）</p>
-    ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
+    ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」${denied.via === 'LINE' && lineNotBound ? '還沒綁定員工帳號。<br><b>員工：</b>請先在下面用帳號密碼登入，再到「我的帳號」按「綁定我的 LINE」，之後就能直接用 LINE 登入。' : '沒有後台權限，請改用員工帳號登入。'}
       ${denied.via === 'LINE' ? `<details style="margin-top:6px"><summary>我是老闆，要開通這個 LINE 帳號</summary>
       把下面這串加到 Apps Script「指令碼屬性」的 <b>ADMIN_LINE_IDS</b>（多個用逗號）：<div class="uid">${esc(denied.userId)}</div></details>` : ''}</div>` : ''}
     <form id="slForm" autocomplete="on">
@@ -644,8 +656,9 @@ function staffLoginPage(denied) {
       <div class="err" id="slErr"></div>
       <button class="btn btn-dark btn-block" id="slBtn">登入</button>
     </form>
-    <div class="divider"><span>老闆</span></div>
-    <button class="btn btn-line btn-block" id="ownerBtn">${LINE_ICON}老闆用 LINE 登入</button>
+    <div class="divider"><span>或</span></div>
+    <button class="btn btn-line btn-block" id="ownerBtn">${LINE_ICON}用 LINE 登入</button>
+    <p class="small muted" style="margin:8px 0 0;text-align:center">老闆，或已經綁定 LINE 的員工</p>
     ${MOCK ? '<p class="small muted" style="margin:14px 0 0">預覽帳號：tech1（檢測）、ship1（物流）、acct1（會計，首次登入要改密碼），密碼都是 password123</p>' : ''}
   </div>`;
   const f = $('#slForm');
@@ -661,6 +674,7 @@ function staffLoginPage(denied) {
   };
   $('#ownerBtn').onclick = () => {
     auth.clear(); // 清掉舊的員工／其他登入，只用 LINE
+    try { sessionStorage.removeItem('lineOwner'); } catch (e) {}
     if (MOCK) { mockLoggedIn = true; try { localStorage.setItem('mockMe', ''); } catch (e) {} mockMe = ''; return start(); }
     if (!liffReady) { $('#slErr').textContent = 'LINE 登入載入失敗，請重新整理再試'; return; }
     if (denied && liff.isLoggedIn() && !liff.isInClient()) liff.logout(); // 換一個 LINE 帳號
@@ -683,6 +697,9 @@ function accountPage() {
         <small class="muted">會顯示在右上角，以及之後建立的收購單、維修單「經手人／收件人員」</small></label>
       ${isStaff ? `<p class="small muted" style="margin:4px 0 0">登入帳號：<b class="num">${esc(me.userId)}</b>。要調整自己的權限，請到 <a href="#users">員工帳號</a>。</p>` : ''}</div>`
       : isStaff ? '<div class="card" style="max-width:560px"><p class="small muted" style="margin:0">顯示名稱與權限請找老闆或管理者修改。</p></div>' : ''}
+    ${isStaff ? `<div class="card" style="max-width:560px"><h3>💬 LINE 登入</h3>
+      ${me.lineName ? `<p style="margin:0 0 10px">已綁定 LINE：<b>${esc(me.lineName)}</b></p><p class="small muted" style="margin:0 0 12px">在登入畫面按「用 LINE 登入」就會直接進入您的帳號，不用輸入密碼。</p><button class="btn btn-ghost btn-sm" id="lineUnbind">解除綁定</button>`
+        : `<p class="small muted" style="margin:0 0 12px">綁定後，在登入畫面按「用 LINE 登入」就能直接進入您的帳號，不用每次輸入密碼。在 LINE 裡打開後台也會自動登入。</p><button class="btn btn-line" id="lineBind">${LINE_ICON}綁定我的 LINE</button>`}</div>` : ''}
     ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}
     ${isBoss() && me.ownerLogin !== undefined ? `<div class="card" style="max-width:560px" id="ownBox"><h3>🔑 帳號密碼登入</h3>
       <p class="small muted" style="margin:-4px 0 12px">設定後，除了 LINE，也可以在登入畫面輸入帳號密碼登入（一樣是老闆、全部權限）。${me.ownerLogin ? `<br>目前帳號：<b class="num">${esc(me.ownerLogin)}</b>` : '<br>目前<b>尚未設定</b>。'}</p>
@@ -696,6 +713,23 @@ function accountPage() {
       <p class="small muted" style="margin:10px 0 0">改密碼後，其他裝置用舊密碼登入的會被登出。帳密登入 7 天後要重新登入。</p></div>` : ''}
     <p class="small muted" style="max-width:560px;margin:8px auto 0;text-align:center">系統版本 ${esc(appVer() || '—')}・<a href="#" onclick="location.reload();return false">重新整理</a></p>`;
   if (isStaff) mountPassword($('#pwBox'), false);
+  if ($('#lineBind')) $('#lineBind').onclick = async e => {
+    const b = e.currentTarget;
+    if (MOCK) { const r = await api('staffBindLine', {}); me.lineName = r.lineName; toast('已綁定 LINE：' + r.lineName); return accountPage(); }
+    if (!liffReady) return toast('LINE 載入失敗，請重新整理再試');
+    if (liff.isLoggedIn()) { // 已經登入 LINE（例如在 LINE 裡打開）：直接綁定
+      b.disabled = true;
+      try { const r = await api('staffBindLine', { lineToken: liff.getAccessToken() }); me.lineName = r.lineName; meSave(null); toast('已綁定 LINE：' + r.lineName); accountPage(); }
+      catch (x) { if (x.auth) return start(); toast(x.message); b.disabled = false; }
+      return;
+    }
+    try { sessionStorage.setItem('bindLine', '1'); } catch (x) {}
+    login({}); // 先登入 LINE，回來後自動完成綁定
+  };
+  if ($('#lineUnbind')) $('#lineUnbind').onclick = async () => {
+    if (!(await ask('解除 LINE 綁定？\n解除後要用帳號密碼登入。', '解除綁定'))) return;
+    try { await api('staffUnbindLine', {}); me.lineName = ''; meSave(null); toast('已解除 LINE 綁定'); accountPage(); } catch (x) { if (x.auth) return start(); toast(x.message); }
+  };
   if ($('#ownSave')) $('#ownSave').onclick = async e => {
     const f = $('#ownForm'), username = f.elements.username.value.trim().toLowerCase(), password = f.elements.password.value;
     if (password !== f.elements.password2.value) return ($('#ownErr').textContent = '兩次輸入的密碼不一樣');
@@ -766,7 +800,7 @@ async function usersPage() {
         <td><b class="num">${esc(u.username)}</b></td>
         <td>${esc(u.name)}<div class="sub">${esc(u.role)}</div></td>
         <td class="hide-m"><div class="mini-perms">${u.perms.map(p => `<span>${esc((me.permDefs[p] || p).split('（')[0])}</span>`).join('') || '<span>只能看列表</span>'}</div></td>
-        <td>${st(u)}</td>
+        <td>${st(u)}${u.lineName ? ' <span class="pill ok" title="已綁定 LINE：' + esc(u.lineName) + '">LINE</span>' : ''}</td>
         <td class="sub num hide-m">${esc(u.lastLogin || '—')}</td></tr>`).join('')}
       </tbody></table>` : '<div class="card empty">還沒有員工帳號，按右上「新增員工」建立第一個</div>'}`;
   $('#addU').onclick = () => userDrawer(null);
@@ -791,6 +825,7 @@ function userDrawer(u, after) {
           <div style="display:flex;gap:8px"><input class="input num" name="password" value="${isNew ? genPw() : ''}" placeholder="${isNew ? '' : '輸入新密碼才會重設'}" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" id="gen">隨機產生</button></div>
           <small class="muted">員工第一次登入（或被重設後）會被要求改成自己的密碼</small></label>
         <label class="check"><input type="checkbox" name="enabled" ${u.enabled ? 'checked' : ''}> 啟用帳號 <span class="small muted">（取消勾選＝立刻無法使用）</span></label>
+        ${isNew ? '' : `<p class="small" style="margin:10px 0 0">LINE 登入：${u.lineName ? `已綁定「${esc(u.lineName)}」 <button type="button" class="link" id="uUnbind">解除綁定</button>` : '<span class="muted">尚未綁定（員工可自己到「我的帳號」綁定）</span>'}</p>`}
       </div>
       <div class="card">
         <h3>角色與權限</h3>
@@ -825,6 +860,10 @@ function userDrawer(u, after) {
     const hit = Object.keys(presets).find(r => [...presets[r]].sort().join() === sel) || '自訂';
     f.querySelector(`input[name=role][value="${hit}"]`).checked = true;
   });
+  if ($('#uUnbind')) $('#uUnbind').onclick = async () => {
+    if (!(await ask(`解除 ${u.name} 的 LINE 綁定？\n解除後他要用帳號密碼登入（例如換了手機或 LINE 帳號）。`, '解除綁定'))) return;
+    try { await api('staffUnbindLine', { username: u.username }); closeDrawer(); toast('已解除 LINE 綁定'); after(); } catch (e) { if (e.auth) return start(); $('#uErr').textContent = e.message; }
+  };
   if ($('#uDel')) $('#uDel').onclick = async () => {
     const reason = await askReason(`確定要刪除 ${u.name}（${u.username}）的帳號嗎？\n刪除後這個帳號立刻不能登入，也不會再出現在員工列表；過去的打卡、請假、薪資單與經手紀錄會保留。\n\n只是暫時不用的話，建議改成取消勾選「啟用帳號」就好。`, '刪除帳號');
     if (!reason) return;

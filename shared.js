@@ -462,7 +462,7 @@ function logout() {
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'priceTable', 'clientLog'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'lineStaffLogin', 'priceTable', 'clientLog'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };
@@ -720,8 +720,10 @@ async function mockApiInner(action, d) {
     case 'adminWhoami': {
       const s = me();
       return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, canEditSelf: s.role === '老闆' || s.perms.includes('manage_users'), role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS,
-        loginVia: s.via, ownerLogin: s.role === '老闆' ? (mockOwnerLogin || {}).username || '' : undefined };
+        loginVia: s.via, lineName: s.via === 'Staff' ? s.lineName || '' : undefined, ownerLogin: s.role === '老闆' ? (mockOwnerLogin || {}).username || '' : undefined };
     }
+    case 'staffBindLine': { const s = need(); const u = mockUsers.find(x => x.username === s.username); u.lineName = u.name + ' 的 LINE'; return { ok: true, lineName: u.lineName }; }
+    case 'staffUnbindLine': { const s = need(), u = mockUsers.find(x => x.username === (d.username || s.username)); u.lineName = ''; return { ok: true, username: u.username, name: u.name }; }
     case 'ownerSetLogin': {
       if (need().role !== '老闆') throw new Error('只有老闆可以設定');
       if (d.disable) { mockOwnerLogin = null; return { ok: true, username: '' }; }
