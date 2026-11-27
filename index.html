@@ -297,7 +297,7 @@ function drawEstimate(box = app, book = false) {
       : res.inspect ? `<div class="est-label">預估收購價</div><div class="est-price small-price">需實際檢測後報價</div>
           <p class="est-warn">⚠ 您選的「${esc(res.issues.filter(i => i.inspect).map(i => i.label).join('、'))}」需要我們收到後實際檢測，才能報價。</p>`
         : `<div class="est-label">${esc(estSel.model)} ${esc(estSel.capacity)}　預估收購價</div>
-          <div class="est-price">NT$ ${money(res.high)} <span>–</span> ${money(res.low)}</div>
+          <div class="est-price">NT$ ${money(res.low)} <span>–</span> ${money(res.high)}</div>
           ${res.accOff ? `<p class="small muted" style="margin:6px 0 0">已扣缺少盒子／配件 NT$ ${money(res.accOff)}</p>` : ''}
           ${res.deducted ? `<p class="est-warn">⚠ 已依「${esc(res.issues.map(i => i.label).join('、'))}」預估扣款，故障程度不同價格會有差異，請以實際檢測為準。</p>` : ''}`}
       <p class="small muted" style="margin:10px 0 16px">${esc(rules.note)}</p>
@@ -332,7 +332,7 @@ function drawEstimate(box = app, book = false) {
 function estItem(res, isNew, detail) {
   const cat = FIELDS[estSel.category] ? estSel.category : '其他';
   const it = newItem(cat);
-  const priceText = res.fixed != null ? `NT$ ${money(res.fixed)}` : res.inspect ? '需檢測' : `NT$ ${money(res.high)}–${money(res.low)}`;
+  const priceText = res.fixed != null ? `NT$ ${money(res.fixed)}` : res.inspect ? '需檢測' : `NT$ ${money(res.low)}–${money(res.high)}`;
   const note = (detail ? `電池健康度 ${estSel.battery}；${estSel.missing.length ? estSel.missing.join('、') + '；' : ''}` : '') + `線上估價${isNew ? '（全新）' : ''} ${priceText}`;
   if (cat === '其他') {
     it.name = `${estSel.category}：${estSel.model} ${estSel.capacity}${isNew ? '（全新未拆封）' : ''}${detail ? `，外觀：${estSel.appearance}` : ''}；${note}`;
@@ -463,6 +463,9 @@ function syncItems() {
   $$('.item-card').forEach(card => {
     const i = +card.dataset.i, it = draft.items[i];
     FIELDS[it.category].forEach(f => {
+      // 畫面上沒顯示的欄位（估價帶入、已經填好的）保留原值，不要被當成空白清掉
+      const shown = f.type === 'chips' || f.type === 'multi' ? $(`input[name="${f.k}-${i}"]`, card) : f.type === 'color' ? $('[data-color]', card) : $(`[data-k="${f.k}"]`, card);
+      if (!shown) return;
       if (f.type === 'chips') it[f.k] = ($(`input[name="${f.k}-${i}"]:checked`, card) || {}).value || '';
       else if (f.type === 'multi') it[f.k] = $$(`input[name="${f.k}-${i}"]:checked`, card).map(x => x.value);
       else if (f.type === 'color') {
@@ -620,7 +623,10 @@ function renderBook() {
   $('#next').onclick = async () => {
     syncAll();
     const msg = validateStep(s);
-    if (msg) { $('#err').textContent = msg; return; }
+    if (msg) {
+      if (s === 0) { saveDraft(draft); renderBook(); } // 重畫：缺的欄位一定會出現在畫面上
+      $('#err').textContent = msg; return;
+    }
     if (s < 3) { draft.step++; saveDraft(draft); renderBook(); window.scrollTo(0, 0); return; }
     if (!$('#agree').checked) { $('#err').textContent = '請勾選同意使用者條款'; return; }
     const btn = $('#next'); btn.disabled = true; btn.textContent = '送出中…';
