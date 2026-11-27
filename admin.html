@@ -490,7 +490,7 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127c"></script>
+<script src="shared.js?v=20261127d"></script>
 <script src="store.js?v=20261126d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
@@ -634,7 +634,7 @@ function staffLoginPage(denied) {
   $('#who').textContent = ''; $('#logout').hidden = true; $('#refresh').hidden = true;
   app.innerHTML = `<div class="card staff-login rise">
     <h2 class="card-title" style="font-size:22px">${SHOP ? '門市工作台登入' : '佛斯特ERP 登入'}</h2>
-    <p class="muted" style="margin:6px 0 20px">請輸入老闆給您的員工帳號與密碼</p>
+    <p class="muted" style="margin:6px 0 20px">請輸入帳號與密碼（員工帳號，或老闆自己設定的帳密）</p>
     ${denied ? `<div class="alert">目前登入的${denied.via === 'LINE' ? ' LINE ' : ' '}帳號「${esc(denied.name)}」沒有後台權限，請改用員工帳號登入。
       ${denied.via === 'LINE' ? `<details style="margin-top:6px"><summary>我是老闆，要開通這個 LINE 帳號</summary>
       把下面這串加到 Apps Script「指令碼屬性」的 <b>ADMIN_LINE_IDS</b>（多個用逗號）：<div class="uid">${esc(denied.userId)}</div></details>` : ''}</div>` : ''}
@@ -675,7 +675,7 @@ function accountPage() {
   app.innerHTML = `${pagesNav('account')}
     <div class="card" style="max-width:560px">
       <h3>${esc(me.name)} <span class="role ${isBoss() ? 'boss' : ''}">${esc(me.role)}</span></h3>
-      <p class="small muted" style="margin:0 0 12px">${isBoss() ? `老闆帳號（${esc(me.via)} 登入），擁有全部權限。` : '您目前可以：'}</p>
+      <p class="small muted" style="margin:0 0 12px">${isBoss() ? `老闆帳號（${esc(me.loginVia || me.via)} 登入），擁有全部權限。` : '您目前可以：'}</p>
       ${isBoss() ? '' : `<ul style="margin:0;padding-left:20px;line-height:1.9">${me.perms.map(p => `<li>${esc(me.permDefs[p] || p)}</li>`).join('')}<li>查看訂單列表、商品與狀態、寫內部備註</li></ul>`}
     </div>
     ${me.canEditSelf ? `<div class="card" style="max-width:560px"><h3>我的資料</h3>
@@ -683,9 +683,30 @@ function accountPage() {
         <small class="muted">會顯示在右上角，以及之後建立的收購單、維修單「經手人／收件人員」</small></label>
       ${isStaff ? `<p class="small muted" style="margin:4px 0 0">登入帳號：<b class="num">${esc(me.userId)}</b>。要調整自己的權限，請到 <a href="#users">員工帳號</a>。</p>` : ''}</div>`
       : isStaff ? '<div class="card" style="max-width:560px"><p class="small muted" style="margin:0">顯示名稱與權限請找老闆或管理者修改。</p></div>' : ''}
-    <p class="small muted" style="max-width:560px;margin:8px auto 0;text-align:center">系統版本 ${esc(appVer() || '—')}・<a href="#" onclick="location.reload();return false">重新整理</a></p>
-    ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}`;
+    ${isStaff ? '<div class="card" style="max-width:560px" id="pwBox"></div>' : ''}
+    ${isBoss() && me.ownerLogin !== undefined ? `<div class="card" style="max-width:560px" id="ownBox"><h3>🔑 帳號密碼登入</h3>
+      <p class="small muted" style="margin:-4px 0 12px">設定後，除了 LINE，也可以在登入畫面輸入帳號密碼登入（一樣是老闆、全部權限）。${me.ownerLogin ? `<br>目前帳號：<b class="num">${esc(me.ownerLogin)}</b>` : '<br>目前<b>尚未設定</b>。'}</p>
+      <form id="ownForm" autocomplete="off" onsubmit="return false">
+        <label class="field"><span>登入帳號</span><input class="input num" name="username" value="${esc(me.ownerLogin || '')}" placeholder="例：boss" autocapitalize="off" spellcheck="false" autocomplete="username"></label>
+        <label class="field"><span>${me.ownerLogin ? '新密碼（只改帳號可留空）' : '密碼（至少 6 個字）'}</span><input class="input" type="password" name="password" autocomplete="new-password"></label>
+        <label class="field"><span>再輸入一次密碼</span><input class="input" type="password" name="password2" autocomplete="new-password"></label>
+        <p class="err" id="ownErr" style="margin:0 0 8px"></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" id="ownSave">${me.ownerLogin ? '儲存變更' : '設定帳號密碼'}</button>${me.ownerLogin ? '<button type="button" class="btn btn-ghost" id="ownOff">停用帳密登入</button>' : ''}</div>
+      </form>
+      <p class="small muted" style="margin:10px 0 0">改密碼後，其他裝置用舊密碼登入的會被登出。帳密登入 7 天後要重新登入。</p></div>` : ''}
+    <p class="small muted" style="max-width:560px;margin:8px auto 0;text-align:center">系統版本 ${esc(appVer() || '—')}・<a href="#" onclick="location.reload();return false">重新整理</a></p>`;
   if (isStaff) mountPassword($('#pwBox'), false);
+  if ($('#ownSave')) $('#ownSave').onclick = async e => {
+    const f = $('#ownForm'), username = f.elements.username.value.trim().toLowerCase(), password = f.elements.password.value;
+    if (password !== f.elements.password2.value) return ($('#ownErr').textContent = '兩次輸入的密碼不一樣');
+    const b = e.currentTarget; b.disabled = true; $('#ownErr').textContent = '';
+    try { const r = await api('ownerSetLogin', { username, password }); me.ownerLogin = r.username; meSave(me); toast('已設定，之後可以用帳號密碼登入'); accountPage(); }
+    catch (x) { if (x.auth) return start(); $('#ownErr').textContent = x.message; b.disabled = false; }
+  };
+  if ($('#ownOff')) $('#ownOff').onclick = async () => {
+    if (!(await ask('停用帳號密碼登入？\n停用後只能用 LINE 登入，用帳密登入的裝置會被登出。', '停用'))) return;
+    try { await api('ownerSetLogin', { disable: true }); me.ownerLogin = ''; meSave(me); toast('已停用帳密登入'); accountPage(); } catch (x) { if (x.auth) return start(); toast(x.message); }
+  };
   if ($('#myNameSave')) $('#myNameSave').onclick = async e => {
     const name = $('#myName').value.trim();
     if (!name) return toast('請填寫顯示名稱');

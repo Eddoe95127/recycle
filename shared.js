@@ -621,7 +621,7 @@ let mockPrices = [['iPhone 11', '64GB', 2000, 0, 300, '沒有原廠盒子'], ['i
   ]);
 const mockRepairs = [], mockAudit = [];
 const mockHr = { profiles: {}, roster: {}, clocks: [], reqs: [], slips: [], seq: 0, S: { shifts: [{ name: '早班', start: '10:00', end: '19:00', brk: 60 }, { name: '晚班', start: '13:00', end: '22:00', brk: 60 }],  lat: 25.0339, lng: 121.5645, radius: 200, grace: 5, lateDeduct: false, dayHours: 8, since: '2026-11-01', workdays: [1, 2, 3, 4, 5, 6], shiftStart: '10:00', shiftEnd: '19:00', breakMin: 60 } };
-let mockOwnerName = '老闆', mockPriceLog = [], mockRepairPrices = [], mockFee = 3, mockSale = [];
+let mockOwnerLogin = null, mockOwnerName = '老闆', mockPriceLog = [], mockRepairPrices = [], mockFee = 3, mockSale = [];
 const mkKey = (m, c) => (String(m || '') + '|' + String(c || '')).toLowerCase().replace(/\s+/g, '');
 const mkCard = c => c ? Math.ceil(c * (1 + mockFee / 100) / 10) * 10 : 0;
 const mkSaleFor = r => { const t = mockSale.find(x => mkKey(x.model, x.capacity) === mkKey(r.model, r.capacity)); return t ? { cash: t.cash, card: t.card || mkCard(t.cash) } : null; };
@@ -711,6 +711,7 @@ async function mockApiInner(action, d) {
     case 'respondQuote': { const o = find(d.id); if (d.accept) { if (!d.idNo || !d.idPhoto) throw new Error('請填寫身分證字號並上傳照片'); const pid = 'id' + Date.now(); mockPhotos[pid] = d.idPhoto; o.idNo = d.idNo; o.idPhoto = pid; } if (d.bank) Object.assign(o, d.bank); o.replyAt = now(); setStatus(o, d.accept ? '客戶同意' : '客戶不同意'); return { ok: true, order: pub(o) }; }
     case 'cancelOrder': { const o = find(d.id); setStatus(o, '已取消'); return { ok: true, order: pub(o) }; }
     case 'staffLogin': {
+      if (mockOwnerLogin && mockOwnerLogin.username === String(d.username || '').trim().toLowerCase() && mockOwnerLogin.pw === d.password) { mockMe = ''; mockLoggedIn = true; return { ok: true, session: 'mock', user: { name: mockOwnerName, via: 'Owner' } }; }
       const u = mockUsers.find(x => x.username === String(d.username || '').trim().toLowerCase());
       if (!u || !u.enabled || u.pw !== d.password) throw new Error('帳號或密碼錯誤（預覽：tech1 / ship1 / acct1，密碼 password123）');
       u.lastLogin = now(); mockMe = u.username; mockLoggedIn = true;
@@ -718,7 +719,18 @@ async function mockApiInner(action, d) {
     }
     case 'adminWhoami': {
       const s = me();
-      return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, canEditSelf: s.role === '老闆' || s.perms.includes('manage_users'), role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS };
+      return { ok: true, isAdmin: true, userId: s.username || 'Umock', via: s.via, name: s.name, canEditSelf: s.role === '老闆' || s.perms.includes('manage_users'), role: s.role, perms: s.perms, mustChange: s.mustChange, permDefs: MOCK_PERMS, rolePresets: MOCK_PRESETS,
+        loginVia: s.via, ownerLogin: s.role === '老闆' ? (mockOwnerLogin || {}).username || '' : undefined };
+    }
+    case 'ownerSetLogin': {
+      if (need().role !== '老闆') throw new Error('只有老闆可以設定');
+      if (d.disable) { mockOwnerLogin = null; return { ok: true, username: '' }; }
+      const username = String(d.username || '').trim().toLowerCase();
+      if (!/^[a-z0-9_.-]{3,30}$/.test(username)) throw new Error('帳號只能用英文小寫、數字、. _ -，長度 3–30');
+      if (mockUsers.some(x => x.username === username)) throw new Error('這個帳號已經有員工在用，請換一個');
+      if (!mockOwnerLogin && !d.password) throw new Error('請設定密碼');
+      if (d.password && d.password.length < 6) throw new Error('密碼至少 6 個字');
+      mockOwnerLogin = { username, pw: d.password || mockOwnerLogin.pw }; return { ok: true, username };
     }
     case 'staffChangePassword': {
       const u = mockUsers.find(x => x.username === mockMe);
