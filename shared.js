@@ -303,7 +303,7 @@ function ask(message, okText = '確定', cancelText = '取消') {
     const d = document.createElement('div');
     d.className = 'ask-wrap';
     d.innerHTML = `<div class="ask-box" role="dialog" aria-modal="true"><p>${esc(message).replace(/\n/g, '<br>')}</p>
-      <div class="ask-btns"><button type="button" class="btn btn-ghost" data-v="0">${esc(cancelText)}</button><button type="button" class="btn btn-dark" data-v="1">${esc(okText)}</button></div></div>`;
+      <div class="ask-btns">${cancelText ? `<button type="button" class="btn btn-ghost" data-v="0">${esc(cancelText)}</button>` : ''}<button type="button" class="btn btn-dark" data-v="1">${esc(okText)}</button></div></div>`;
     const done = v => { d.remove(); document.removeEventListener('keydown', key); res(v); };
     const key = e => { if (e.key === 'Escape') done(false); if (e.key === 'Enter') done(true); };
     d.onclick = e => { const v = e.target.dataset && e.target.dataset.v; if (e.target === d) done(false); else if (v !== undefined) done(v === '1'); };
@@ -462,7 +462,7 @@ function logout() {
   if (liffReady && liff.isLoggedIn() && !liff.isInClient()) liff.logout();
   location.reload();
 }
-const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'lineStaffLogin', 'priceTable', 'clientLog'];
+const NO_AUTH = ['loginGoogle', 'emailStart', 'emailVerify', 'staffLogin', 'lineStaffLogin', 'staffBindFinish', 'priceTable', 'clientLog'];
 async function api(action, data = {}) {
   if (MOCK) return mockApi(action, data);
   const body = { action, ...data };

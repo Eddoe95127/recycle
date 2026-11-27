@@ -490,7 +490,7 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127e"></script>
+<script src="shared.js?v=20261127f"></script>
 <script src="store.js?v=20261126d"></script>
 <script src="repair-prices.js?v=20261122a"></script>
 <script src="pricing.js?v=20261123d"></script>
@@ -559,13 +559,17 @@ let lineNotBound = '';
 async function start() {
   closeDrawer();
   if (!isLoggedIn()) return staffLoginPage();
+  const bindCode = new URLSearchParams(location.search).get('bind');
+  if (bindCode) { // 員工按了「綁定我的 LINE」，LINE 登入回來（可能回到不同瀏覽器）：用綁定碼完成綁定並登入
+    const u = new URL(location.href); u.searchParams.delete('bind'); history.replaceState(null, '', u.pathname + u.search + '#account');
+    if (!MOCK && liffReady && liff.isLoggedIn()) {
+      try { const r = await api('staffBindFinish', { code: bindCode, lineToken: liff.getAccessToken() }); auth.save(r); meSave(null); toast('✅ 已綁定 LINE：' + r.lineName + '，之後可以直接用 LINE 登入'); }
+      catch (e) { await ask('LINE 綁定沒有成功：\n' + e.message, '知道了', ''); }
+    }
+  }
   if (!MOCK && liffReady && liff.isLoggedIn()) {
     const ss = k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
-    if (ss('bindLine') && auth.session) { // 員工按了「綁定我的 LINE」，LINE 登入回來後完成綁定
-      try { sessionStorage.removeItem('bindLine'); } catch (e) {}
-      try { const r = await api('staffBindLine', { lineToken: liff.getAccessToken() }); toast('已綁定 LINE：' + r.lineName + '，之後可以直接用 LINE 登入'); meSave(null); location.hash = '#account'; }
-      catch (e) { toast(e.message); }
-    } else if (!auth.session && ss('lineOwner') !== '1') { // 用 LINE 登入：已綁定的員工換成員工帳號登入
+    if (!auth.session && ss('lineOwner') !== '1') { // 用 LINE 登入：已綁定的員工換成員工帳號登入
       try { const r = await api('lineStaffLogin', { lineToken: liff.getAccessToken() }); if (r.session) auth.save(r); else if (r.owner) { try { sessionStorage.setItem('lineOwner', '1'); } catch (e) {} } }
       catch (e) { if (e.auth) return staffLoginPage(); lineNotBound = e.message; }
     }
@@ -723,8 +727,9 @@ function accountPage() {
       catch (x) { if (x.auth) return start(); toast(x.message); b.disabled = false; }
       return;
     }
-    try { sessionStorage.setItem('bindLine', '1'); } catch (x) {}
-    login({}); // 先登入 LINE，回來後自動完成綁定
+    b.disabled = true;
+    try { const r = await api('staffBindStart'); login({ bind: r.code }); } // 先登入 LINE，回來後用綁定碼自動完成綁定
+    catch (x) { if (x.auth) return start(); toast(x.message); b.disabled = false; }
   };
   if ($('#lineUnbind')) $('#lineUnbind').onclick = async () => {
     if (!(await ask('解除 LINE 綁定？\n解除後要用帳號密碼登入。', '解除綁定'))) return;
