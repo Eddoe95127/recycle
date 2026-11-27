@@ -359,8 +359,10 @@ function estItem(res, isNew, detail) {
       if (!it.issues.length) it.issues = ['功能都完全正常'];
       it._unmapped = unmapped;
     }
-    const extra = (cat === 'iPad' && !it.model ? `型號：${estSel.model} ${estSel.capacity}；` : '') + (detail && !IPHONE_APPEARANCE.includes(estSel.appearance) ? `外觀：${estSel.appearance}；` : '')
-      + (it._unmapped && it._unmapped.length ? `功能：${it._unmapped.join('、')}；` : '');
+    // iPhone 以外（iPad 等）預約表單沒有外觀、功能欄位：估價選的外觀與功能狀況寫進描述，不要漏掉
+    const other = cat !== 'iPhone';
+    const extra = (cat === 'iPad' && !it.model ? `型號：${estSel.model} ${estSel.capacity}；` : '') + (detail && (other || !IPHONE_APPEARANCE.includes(estSel.appearance)) ? `外觀：${estSel.appearance}；` : '')
+      + (detail && other ? `功能：${estSel.issues.length ? estSel.issues.join('、') : '都正常'}；` : it._unmapped && it._unmapped.length ? `功能：${it._unmapped.join('、')}；` : '');
     delete it._unmapped;
     it.issueNote = extra + note;
   }
