@@ -636,7 +636,7 @@ function renderBook() {
     const msg = validateStep(s);
     if (msg) {
       if (s === 0) { saveDraft(draft); renderBook(); } // 重畫：缺的欄位一定會出現在畫面上
-      if (justAdded) { toast('已帶入商品，請補上 ' + msg.replace(/^商品 \d+：請填寫\s*/, '').replace(/（.*）$/, '')); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); return; }
+      if (justAdded) { toast(('已帶入商品，請補上 ' + msg.replace(/^商品 \d+：請填寫\s*/, '').replace(/（.*）$/, '')).replace(' 「', '「')); setTimeout(() => $('.item-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); return; }
       $('#err').textContent = msg; return;
     }
     if (s < 3) { draft.step++; saveDraft(draft); renderBook(); window.scrollTo(0, 0); return; }
