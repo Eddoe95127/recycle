@@ -332,8 +332,37 @@ async function pzHistory(type, model) {
   let logs;
   try { logs = (await api('priceLog', { type, q: model })).logs; } catch (e) { if (e.auth) return start(); $('.d-body', d).innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
   logs = logs.filter(x => x.key.split('｜')[1] === model || x.key.split('｜')[1]?.startsWith(model + ' ') || x.key === model);
-  $('.d-body', d).innerHTML = logs.length ? `${pzTrends(logs)}<div class="card"><h3>變動明細（${logs.length}）</h3>${pzLogRows(logs)}</div>`
-    : '<div class="card empty">這個型號還沒有價格變動紀錄<br><span class="small">之後每次修改價格都會記錄在這裡</span></div>';
+  const ref = type === '建議售價表' ? pzSaleRef(model, logs) : '';
+  $('.d-body', d).innerHTML = ref + (logs.length ? `${pzTrends(logs)}<div class="card"><h3>變動明細（${logs.length}）</h3>${pzLogRows(logs)}</div>`
+    : '<div class="card empty">這個型號還沒有價格變動紀錄<br><span class="small">之後每次修改價格都會記錄在這裡</span></div>');
+}
+/** 定價參考：每個容量的歷屆建議售價區間＋實際成交價（從庫存已售出） */
+function pzSaleRef(model, logs) {
+  const caps = {}, cap = k => (caps[k] = caps[k] || { vals: [], first: '', n: 0, sold: [] });
+  const capOf = key => { const t = (key.split('｜')[1] || '').trim(); return t === model ? '' : t.startsWith(model + ' ') ? t.slice(model.length + 1).trim() : null; };
+  [...logs].reverse().forEach(x => {
+    const c = capOf(x.key); if (c == null) return;
+    const add = v => { const n = Number(String(v).replace(/[^\d]/g, '')); if (n) cap(c).vals.push(n); };
+    if (x.field === '新增') { const m = /現金價 (\d+)/.exec(x.after) || /^(\d+)$/.exec(x.after); if (m) { add(m[1]); cap(c).first = cap(c).first || x.at; cap(c).n++; } }
+    else if (x.field === '現金價') { if (x.before) add(x.before); if (x.after) add(x.after); cap(c).first = cap(c).first || x.at; cap(c).n++; }
+  });
+  (pz.sale || []).filter(r => r.model === model && numv(r.cash)).forEach(r => { const c = cap(r.capacity || ''); c.now = numv(r.cash); c.vals.push(c.now); });
+  (stockCache || []).filter(r => r.model === model && r.status === '已售出' && Number(r.salePrice)).forEach(r => cap(r.capacity || '').sold.push(r));
+  const keys = Object.keys(caps).sort(byName);
+  if (!keys.length) return '';
+  const rng = a => a.length ? (Math.min(...a) === Math.max(...a) ? `NT$ ${money(a[0])}` : `NT$ ${money(Math.min(...a))}–${money(Math.max(...a))}`) : '—';
+  const avg = a => a.length ? Math.round(a.reduce((t, v) => t + v, 0) / a.length) : 0;
+  const cost = showCost();
+  return `<div class="card"><h3>定價參考 <span class="small muted" style="font-weight:500">歷屆建議售價＋實際成交</span></h3>
+    <div class="table-wrap"><table class="table"><thead><tr><th>容量</th><th>目前建議</th><th>歷屆建議區間</th><th>實際成交</th>${cost ? '<th class="hide-m">平均毛利</th>' : ''}</tr></thead><tbody>
+    ${keys.map(k => { const c = caps[k], sp = c.sold.map(r => Number(r.salePrice)), last = c.sold.slice().sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))[0];
+      const prof = cost && c.sold.length ? avg(c.sold.map(r => Number(r.salePrice) - costOf(r))) : null;
+      return `<tr><td><b>${esc(k || '—')}</b></td>
+        <td class="num"><span class="sub show-m">目前建議</span>${c.now ? 'NT$ ' + money(c.now) : '<span class="sub">未設定</span>'}</td>
+        <td class="num"><span class="sub show-m">歷屆建議區間</span>${rng(c.vals)}<div class="sub">${c.n ? `設定 ${c.n} 次${c.first ? '・' + esc(String(c.first).slice(0, 10)) + ' 起' : ''}` : ''}</div></td>
+        <td class="num"><span class="sub show-m">實際成交</span>${sp.length ? `${rng(sp)}<div class="sub">${sp.length} 台・平均 NT$ ${money(avg(sp))}${last ? `・最近 ${esc(last.saleDate)} NT$ ${money(last.salePrice)}` : ''}</div>` : '<span class="sub">還沒有賣出</span>'}</td>
+        ${cost ? `<td class="num hide-m">${prof == null ? '—' : `<b style="color:${prof < 0 ? 'var(--red,#e5484d)' : 'inherit'}">NT$ ${money(prof)}</b>`}</td>` : ''}</tr>`; }).join('')}
+    </tbody></table></div></div>`;
 }
 /** 走勢：同一個項目＋欄位，依時間串成一條線（至少 2 個點才畫） */
 function pzTrends(logs) {

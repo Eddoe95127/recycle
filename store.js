@@ -1226,7 +1226,8 @@ function stockDrawer(r) {
               ${SALE_CHANNELS.map(c => `<option ${r.channel === c ? 'selected' : ''}>${c}</option>`).join('')}
               <option value="${IN_OTHER}" ${manual ? 'selected' : ''}>其他（自行填寫）</option></select>
             <input class="input" id="sCh" value="${esc(manual ? r.channel : '')}" placeholder="例：露天、Facebook、同業批發" style="margin-top:6px" ${manual ? '' : 'hidden'}></label>`; })()}
-          <label class="field"><span>銷售價格（NT$）</span><input class="input num" id="sPrice" inputmode="numeric" value="${esc(r.salePrice ?? '')}"></label></div></div></div>` : ''}
+          <label class="field"><span>銷售價格（NT$）</span><input class="input num" id="sPrice" inputmode="numeric" value="${esc(r.salePrice || r.suggestCash || '')}">
+            ${r.suggestCash ? `<span class="small muted" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">帶入建議售價：<button type="button" class="btn btn-ghost btn-sm" data-sp="${r.suggestCash}">現金 ${nt(r.suggestCash)}</button>${r.suggestCard ? `<button type="button" class="btn btn-ghost btn-sm" data-sp="${r.suggestCard}">刷卡 ${nt(r.suggestCard)}</button>` : ''}</span>` : '<span class="small muted" style="display:block;margin-top:6px">這台還沒有建議售價，可到「價格管理 → 建議售價」設定</span>'}</label></div></div></div>` : ''}
     </div>
     ${can ? '<div class="d-foot"><span class="err" id="sErr" style="flex:1;margin:0"></span><button class="btn btn-dark" id="sSave">儲存</button></div>' : ''}`;
   d.classList.add('show'); $('#scrim').classList.add('show');
@@ -1243,6 +1244,7 @@ function stockDrawer(r) {
   };
   if (!can) return;
   $$('input[name=sst]', d).forEach(x => x.onchange = () => { $('#saleBox').hidden = x.value !== '已售出'; });
+  $$('[data-sp]', d).forEach(b => b.onclick = () => { $('#sPrice').value = b.dataset.sp; });
   $('#sChSel').onchange = e => { const inp = $('#sCh'); inp.hidden = e.target.value !== IN_OTHER; if (!inp.hidden) inp.focus(); };
   $('#sSave').onclick = async () => {
     const status = $('input[name=sst]:checked', d).value;
