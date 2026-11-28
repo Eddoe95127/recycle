@@ -137,7 +137,7 @@ function intakeDrawer(o) {
         <dt>電子信箱</dt><dd>${esc(o.email || '未填')}${o.masked.email ? ' <span class="no-perm">🔒</span>' : ''}</dd>
         <dt>付款</dt><dd>${esc(o.payment)}</dd>
         ${o.payment === '轉帳' ? `<dt>收款帳戶</dt><dd class="num">${esc(o.bank)}<br>${esc(o.account)}${o.masked.account ? ' <span class="no-perm">🔒</span>' : ''}</dd><dt>匯款期限</dt><dd>${esc(o.period)}${o.payDate ? ' ' + esc(o.payDate) : ''}</dd>` : ''}
-        ${o.remitAt ? `<dt>已匯款</dt><dd>${esc(o.remitAt)}・${esc(o.remitBy)}</dd>` : ''}
+        ${o.remitAt ? `<dt>已匯款</dt><dd>${esc(o.remitAt)}・${esc(o.remitBy)}${o.remitTail ? `<br><span class="small muted">匯出帳號末五碼 ${esc(o.remitTail)}</span>` : ''}</dd>` : ''}
         <dt>合計</dt><dd class="num"><b>${nt(o.total)}</b></dd></dl></div>
       <div class="card"><h3>商品（${o.items.length}）</h3>
         ${o.items.map((it, i) => `<div style="padding:10px 0;border-top:${i ? '1px solid var(--line)' : '0'}">
@@ -307,6 +307,7 @@ function remitBox(o) {
     ${o.account && !o.masked.account ? `<div class="uid" style="margin-top:0">${esc(o.bank)}　${esc(o.account)}　戶名：${esc(o.seller)}　<button class="copy" data-copy="${esc(o.account)}">複製帳號</button></div>` : ''}
     <div class="ph-grid">${o.proofs.map(p => `<div class="ph"><img data-photo="${esc(p)}" alt="匯款截圖"></div>`).join('')}
       ${o.proofs.length < 4 ? '<label class="ph-add">＋ 匯款截圖<input type="file" accept="image/*" hidden data-proof></label>' : ''}</div>
+    ${o.remit === '已匯款' ? `<dl class="kv" style="margin-top:12px"><dt>匯款時間</dt><dd>${esc(o.remitAt)}</dd><dt>帳號末五碼</dt><dd class="num">${esc(o.remitTail || '—')}</dd></dl>` : `<div style="margin-top:12px">${payFieldsHTML('', '', 'rmAt', 'rmTail')}</div>`}
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
       ${o.remit === '已匯款' ? '<button class="btn btn-ghost btn-sm" data-remit="待匯款">改回待匯款</button>' : `<button class="btn btn-dark" data-remit="已匯款">標記已匯款 ${nt(o.total)}</button>`}
       <span class="err" id="rmErr" style="margin:0"></span></div></div>`;
@@ -323,8 +324,13 @@ function bindRemit(root, o, redraw) {
     } catch (e) { if (e.auth) return start(); $('#rmErr', root).textContent = e.message; }
   };
   $$('[data-remit]', root).forEach(b => b.onclick = async () => {
-    if (b.dataset.remit === '已匯款' && !(await ask(`確定已匯款 ${nt(o.total)} 給 ${o.seller}？`, '已匯款'))) return;
-    run({ status: b.dataset.remit }, b.dataset.remit === '已匯款' ? '已標記為已匯款' : '已改回待匯款');
+    if (b.dataset.remit !== '已匯款') return run({ status: b.dataset.remit }, '已改回待匯款');
+    const at = $('#rmAt', root).value.replace('T', ' '), tail = $('#rmTail', root).value.replace(/\s/g, '');
+    if (!at) { $('#rmErr', root).textContent = '請填寫匯款時間'; return; }
+    if (!/^\d{5}$/.test(tail)) { $('#rmErr', root).textContent = '匯出帳號末五碼請填 5 位數字'; $('#rmTail', root).focus(); return; }
+    if (!(await ask(`確定已匯款 ${nt(o.total)} 給 ${o.seller}？\n\n匯款時間：${at}\n匯出帳號末五碼：${tail}`, '已匯款'))) return;
+    lastPayTail(tail);
+    run({ status: '已匯款', remitAt: at, remitTail: tail }, '已標記為已匯款');
   });
   const f = $('[data-proof]', root);
   if (f) f.onchange = async () => { if (!f.files[0]) return; try { run({ proof: await resizeImage(f.files[0], 1600, 0.8) }, '已上傳匯款截圖'); } catch (e) { toast(e.message); } };

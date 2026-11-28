@@ -490,8 +490,8 @@
 <script>window.AUTH_NS = 'admin_';</script>
 <script src="device-ocr.js?v=20261122b" defer></script>
 <script src="config.js?v=20261122a"></script>
-<script src="shared.js?v=20261127h"></script>
-<script src="store.js?v=20261127a"></script>
+<script src="shared.js?v=20261128p"></script>
+<script src="store.js?v=20261128p"></script>
 <script src="repair-prices.js?v=20261128d"></script>
 <script src="pricing.js?v=20261123d"></script>
 <script src="hr-calc.js?v=20261127b"></script>
@@ -1010,6 +1010,8 @@ function openDrawer(id) {
       </div>
 
       ${o.status === '客戶同意' && P('edit_payment') ? `<div class="alert">💰 客戶已同意 NT$ ${money(o.quote)}，請先核對下方「身分證照片」與「匯款戶名」，匯款後按「改為已付款」。</div>` : ''}
+      ${(o.status === '客戶同意' || o.status === '已付款') && (P('edit_payment') || P('edit_any')) ? `<div class="card"><h3>匯款資料${o.status === '客戶同意' ? ' <span class="small muted" style="font-weight:500">匯款後填寫，再按「改為已付款」</span>' : ''}</h3>${payFieldsHTML(o.payAt, o.payTail, 'fPayAt', 'fPayTail')}</div>`
+        : o.payAt || o.payTail ? `<div class="card"><h3>匯款資料</h3><dl class="kv"><dt>匯款時間</dt><dd>${esc(o.payAt || '—')}</dd><dt>帳號末五碼</dt><dd class="num">${esc(o.payTail || '—')}</dd></dl></div>` : ''}
       ${o.status === '客戶不同意' && canShip ? '<div class="alert">↩️ 客戶不同意報價，請安排寄回，填寫單號後改為「退回寄送中」。</div>' : ''}
 
       <div class="card">
@@ -1279,13 +1281,21 @@ async function save(o, status) {
   const fields = {}; // 只送出有改的欄位（沒有權限的欄位不會被動到）
   Object.keys(all).forEach(k => { if (all[k] !== String(o[k] || '')) fields[k] = all[k]; });
   if (status && status !== o.status) fields.status = status;
+  if ($('#fPayAt') && (fields.status === '已付款' || (o.status === '已付款' && !fields.status))) {
+    const at = $('#fPayAt').value.replace('T', ' '), tail = $('#fPayTail').value.replace(/\s/g, '');
+    if (fields.status === '已付款' && !at) { $('#dErr').textContent = '請填寫匯款時間'; $('#fPayAt').focus(); return; }
+    if ((fields.status === '已付款' || tail) && !/^\d{5}$/.test(tail)) { $('#dErr').textContent = '匯出帳號末五碼請填 5 位數字'; $('#fPayTail').focus(); return; }
+    if (at !== String(o.payAt || '')) fields.payAt = at;
+    if (tail !== String(o.payTail || '')) fields.payTail = tail;
+  }
   if (!Object.keys(fields).length) { toast('沒有變更'); return; }
   if (fields.status === '已報價' && !(fields.quote ?? o.quote)) { $('#dErr').textContent = '請先填寫報價金額'; $('#fQuote').focus(); return; }
   const notify = $('#notify') ? $('#notify').checked : true;
-  if (fields.status && !(await ask(`將 ${o.id} 改為「${fields.status}」${notify ? '並通知客戶' : '（不通知客戶）'}？`))) return;
+  if (fields.status && !(await ask(`將 ${o.id} 改為「${fields.status}」${notify ? '並通知客戶' : '（不通知客戶）'}？${fields.status === '已付款' ? `\n\n匯款時間：${fields.payAt || o.payAt}\n匯出帳號末五碼：${fields.payTail || o.payTail}` : ''}`))) return;
   const btns = $$('#save, #nextBtn'); btns.forEach(b => b.disabled = true);
   try {
     const r = await api('adminUpdate', { id: o.id, fields, notify });
+    if (fields.payTail) lastPayTail(fields.payTail);
     const i = orders.findIndex(x => x.id === o.id);
     orders[i] = r.order;
     toast(fields.status ? `已改為「${fields.status}」${r.order.notified ? '（' + r.order.notified.split('｜')[1] + '）' : ''}` : '已儲存');

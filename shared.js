@@ -292,6 +292,13 @@ const TERMS = `1. 特別說明
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/** 匯款時間欄位：datetime-local 的值（預設現在） */
+const payLocal = v => v ? String(v).replace(' ', 'T').slice(0, 16) : (d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16))(new Date());
+const lastPayTail = v => { try { if (v) localStorage.setItem('ff_payTail', v); return localStorage.getItem('ff_payTail') || ''; } catch (e) { return v || ''; } };
+/** 匯款時間＋匯出帳號末五碼的輸入欄（宅配與門市共用） */
+const payFieldsHTML = (at, tail, idAt, idTail) => `<div class="grid2">
+  <label class="field" style="margin-bottom:0"><span>匯款時間</span><input class="input" type="datetime-local" id="${idAt}" value="${payLocal(at)}"></label>
+  <label class="field" style="margin-bottom:0"><span>匯出帳號末五碼</span><input class="input num" id="${idTail}" value="${tail || lastPayTail()}" inputmode="numeric" maxlength="5" placeholder="例：12345"></label></div>`;
 const money = v => { const n = Number(String(v || '').replace(/[^\d.]/g, '')); return isNaN(n) || !String(v || '').trim() ? '-' : n.toLocaleString('en-US'); };
 const opts = (list, val, placeholder) => (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') + list.map(v => `<option ${v === val ? 'selected' : ''}>${esc(v)}</option>`).join('');
 const chips = (name, list, val, multi) => `<div class="chips">${list.map(v => `<label class="chip"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(v)}" ${(multi ? (val || []).includes(v) : v === val) ? 'checked' : ''}><span>${esc(v)}</span></label>`).join('')}</div>`;
@@ -805,10 +812,14 @@ async function mockApiInner(action, d) {
       const s = need();
       const o = find(d.id), f = d.fields || {};
       const has = p => s.perms.includes(p) || s.perms.includes('edit_any');
-      const labels = { carrier: ['物流公司', 'edit_shipping'], tracking: ['託運單號', 'edit_shipping'], quote: ['報價金額', 'edit_report'], quoteNote: ['報價說明', 'edit_report'], internal: ['內部備註', ''] };
+      const labels = { carrier: ['物流公司', 'edit_shipping'], tracking: ['託運單號', 'edit_shipping'], quote: ['報價金額', 'edit_report'], quoteNote: ['報價說明', 'edit_report'], internal: ['內部備註', ''], payAt: ['匯款時間', 'edit_payment'], payTail: ['匯出帳號末五碼', 'edit_payment'] };
       Object.keys(labels).forEach(k => { if (k in f && f[k] !== o[k] && labels[k][1] && !has(labels[k][1])) throw new Error(`您沒有修改「${labels[k][0]}」的權限`); });
       if (f.status && f.status !== o.status && !canTransition(s.perms, o.status, f.status)) throw new Error(`您沒有把狀態改成「${f.status}」的權限`);
       if (f.status === '已報價' && !(f.quote ?? o.quote)) throw new Error('請先填寫報價金額');
+      if ('payAt' in f) f.payAt = String(f.payAt || '').replace('T', ' ').slice(0, 16);
+      if ('payTail' in f && f.payTail && !/^\d{5}$/.test(f.payTail)) throw new Error('匯出帳號末五碼請填 5 位數字');
+      if (f.status === '已付款' && !(f.payAt ?? o.payAt)) throw new Error('請填寫匯款時間');
+      if (f.status === '已付款' && !(f.payTail ?? o.payTail)) throw new Error('請填寫匯出帳號末五碼');
       Object.keys(labels).forEach(k => { if (k in f) o[k] = f[k]; });
       const was = o.status;
       setStatus(o, f.status, s.name);
@@ -986,7 +997,11 @@ async function mockApiInner(action, d) {
     case 'intakeRemit': {
       const s = need('edit_payment'), o = mockIntakes.find(x => x.id === d.id);
       if (d.proof) { const k = 'pf' + Date.now(); mockPhotos[k] = d.proof; o.proofs.push(k); }
-      if (d.status) { o.remit = d.status; o.remitAt = d.status === '已匯款' ? now() : ''; o.remitBy = d.status === '已匯款' ? s.name : ''; }
+      if (d.status) {
+        if (d.status === '已匯款' && !d.remitAt) throw new Error('請填寫匯款時間');
+        if (d.status === '已匯款' && !/^\d{5}$/.test(d.remitTail || '')) throw new Error('匯出帳號末五碼請填 5 位數字');
+        o.remit = d.status; o.remitAt = d.status === '已匯款' ? String(d.remitAt).replace('T', ' ').slice(0, 16) : ''; o.remitTail = d.status === '已匯款' ? d.remitTail : ''; o.remitBy = d.status === '已匯款' ? s.name : '';
+      }
       return { ok: true, intake: inOut(o, s) };
     }
 
