@@ -841,7 +841,7 @@ function drawDetail(o) {
       <p class="small muted center" style="margin:12px 0 0">依使用者條款 6.3，不同意報價的退回運費由使用者負擔</p>
     </div>` : ''}
 
-    ${['客戶同意', '已付款'].includes(o.status) && o.quote ? `<div class="card"><div class="muted small" style="font-weight:600">回收金額</div><div class="price" style="font-size:34px"><small>NT$</small>${money(o.quote)}</div>${o.bank ? `<div class="small muted">匯入 ${esc(o.bank.bankName)}　${esc(o.bank.bankAccount)}</div>` : ''}${o.payAt || o.payTail ? `<div class="small muted">${o.payAt ? '匯款時間 ' + esc(o.payAt) : ''}${o.payAt && o.payTail ? '　' : ''}${o.payTail ? '匯出帳號末五碼 ' + esc(o.payTail) : ''}</div>` : ''}</div>` : ''}
+    ${['客戶同意', '已付款'].includes(o.status) && o.quote ? `<div class="card"><div class="muted small" style="font-weight:600">回收金額</div><div class="price" style="font-size:34px"><small>NT$</small>${money(o.quote)}</div>${o.bank ? `<div class="small muted">匯入 ${esc(o.bank.bankName)}　${esc(o.bank.bankAccount)}</div>` : ''}${o.payAt ? `<div class="small muted">匯款時間 ${esc(o.payAt)}</div>` : ''}${o.payTail ? `<div class="small muted">匯出帳號末五碼 ${esc(o.payTail)}</div>` : ''}</div>` : ''}
 
     ${reportHTML(o.report)}
 
